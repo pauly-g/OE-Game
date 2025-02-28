@@ -184,48 +184,77 @@ export class Level1Scene extends Phaser.Scene {
       this.anims.getAnimationNames().forEach(key => {
         if (key.startsWith('idle') || key.startsWith('walk')) {
           this.anims.remove(key);
+          console.log(`Removed existing animation: ${key}`);
         }
       });
+      
+      // Log all available texture keys
+      const textureKeys = this.textures.getTextureKeys();
+      console.log(`Available textures before creating animations (${textureKeys.length}):`, textureKeys);
       
       directions.forEach(direction => {
         // Create idle animation
         const idleKey = `idle-${direction}`;
-        this.anims.create({
-          key: idleKey,
-          frames: [
-            { key: `idle ${direction} 1` },
-            { key: `idle ${direction} 2` },
-            { key: `idle ${direction} 3` },
-            { key: `idle ${direction} 4` },
-            { key: `idle ${direction} 5` },
-            { key: `idle ${direction} 6` }
-          ],
-          frameRate: 8,
-          repeat: -1
-        });
+        
+        // Check if all frames exist before creating animation
+        const idleFrameNames = [];
+        let allIdleFramesExist = true;
+        
+        for (let i = 1; i <= 6; i++) {
+          const frameName = `idle ${direction} ${i}`;
+          if (this.textures.exists(frameName)) {
+            idleFrameNames.push({ key: frameName });
+          } else {
+            console.error(`Missing texture: ${frameName}`);
+            allIdleFramesExist = false;
+          }
+        }
+        
+        if (allIdleFramesExist) {
+          this.anims.create({
+            key: idleKey,
+            frames: idleFrameNames,
+            frameRate: 8,
+            repeat: -1
+          });
+          console.log(`Created idle animation: ${idleKey} with ${idleFrameNames.length} frames`);
+        } else {
+          console.error(`Could not create ${idleKey} animation - some frames are missing`);
+        }
 
         // Create walk animation
         const walkKey = `walk-${direction}`;
-        this.anims.create({
-          key: walkKey,
-          frames: [
-            { key: `walk ${direction} 1` },
-            { key: `walk ${direction} 2` },
-            { key: `walk ${direction} 3` },
-            { key: `walk ${direction} 4` },
-            { key: `walk ${direction} 5` },
-            { key: `walk ${direction} 6` }
-          ],
-          frameRate: 8,
-          repeat: -1
-        });
+        
+        // Check if all frames exist before creating animation
+        const walkFrameNames = [];
+        let allWalkFramesExist = true;
+        
+        for (let i = 1; i <= 6; i++) {
+          const frameName = `walk ${direction} ${i}`;
+          if (this.textures.exists(frameName)) {
+            walkFrameNames.push({ key: frameName });
+          } else {
+            console.error(`Missing texture: ${frameName}`);
+            allWalkFramesExist = false;
+          }
+        }
+        
+        if (allWalkFramesExist) {
+          this.anims.create({
+            key: walkKey,
+            frames: walkFrameNames,
+            frameRate: 8,
+            repeat: -1
+          });
+          console.log(`Created walk animation: ${walkKey} with ${walkFrameNames.length} frames`);
+        } else {
+          console.error(`Could not create ${walkKey} animation - some frames are missing`);
+        }
       });
-      
-      console.log('Player animations created successfully');
       
       // Log all available animations for debugging
       const animationKeys = this.anims.getAnimationNames();
-      console.log('Available animations:', animationKeys);
+      console.log('Available animations after creation:', animationKeys);
       
     } catch (error) {
       console.error('Error creating player animations:', error);
@@ -634,16 +663,36 @@ export class Level1Scene extends Phaser.Scene {
           const prefix = isMoving ? 'walk' : 'idle';
           const animKey = `${prefix}-${direction}`;
           
+          console.log(`Attempting to play animation: ${animKey}, isMoving: ${isMoving}, direction: ${direction}`);
+          
           // Check if animation exists before playing
           if (this.anims.exists(animKey)) {
             console.log(`Playing animation: ${animKey}`);
             this.player.anims.play(animKey, true);
           } else {
-            console.error(`Animation not found: ${animKey}`);
+            console.warn(`Animation not found: ${animKey}, falling back to texture`);
             // Use fallback texture
             const textureKey = `${prefix} ${direction} 1`;
             if (this.textures.exists(textureKey)) {
+              console.log(`Setting static texture: ${textureKey}`);
               this.player.setTexture(textureKey);
+            } else {
+              console.error(`Texture not found: ${textureKey}`);
+              // Ultimate fallback - use any available sprite for this direction
+              const fallbackIdle = `idle ${direction} 1`;
+              const fallbackWalk = `walk ${direction} 1`;
+              
+              if (this.textures.exists(fallbackIdle)) {
+                this.player.setTexture(fallbackIdle);
+                console.log(`Using fallback texture: ${fallbackIdle}`);
+              } else if (this.textures.exists(fallbackWalk)) {
+                this.player.setTexture(fallbackWalk);
+                console.log(`Using fallback texture: ${fallbackWalk}`);
+              } else {
+                // Last resort - use fallback texture
+                this.player.setTexture('game/Sprite Images/fallback.png');
+                console.log(`Using generic fallback texture`);
+              }
             }
           }
         }
