@@ -70,7 +70,7 @@ export class Level1Scene extends Phaser.Scene {
   private ordersCompleted: number = 0;
   private totalEditsApplied: number = 0;
   private lastUnlockedAtEditCount: number = 0;
-  private lives: number = 1;
+  private lives: number = 3;
   private livesContainer!: Phaser.GameObjects.Container;
   private failedOrders: number = 0;
   private lastSpaceState: boolean = false;
@@ -83,7 +83,7 @@ export class Level1Scene extends Phaser.Scene {
   private debug: boolean = false;
   private powerUpActive: boolean = false;
   private powerUpTimer: number = 0;
-  private powerUpDuration: number = 30000;
+  private powerUpDuration: number = 30000; // 30 seconds of power-up time
   private powerUpText!: Phaser.GameObjects.Text;
   private stationUnlockText!: Phaser.GameObjects.Text;
   private powerUpSwitch!: Phaser.GameObjects.Container;
@@ -101,6 +101,8 @@ export class Level1Scene extends Phaser.Scene {
   constructor() {
     super({ key: 'Level1Scene' });
     console.log('Level1Scene constructor called');
+    this.powerUpDuration = 30000; // 30 seconds of power-up time
+    this.lives = 3;
   }
 
   init(data?: { reset: boolean }) {
@@ -493,12 +495,7 @@ export class Level1Scene extends Phaser.Scene {
 
       // Process power-up status
       if (this.powerUpActive) {
-        this.powerUpTimer -= delta;
-        if (this.powerUpTimer <= 0) {
-          this.deactivatePowerUp();
-        } else {
-          this.powerUpCountdownText.setText(`${Math.ceil(this.powerUpTimer / 1000)}s`);
-        }
+        this.updatePowerUp(delta);
       }
 
       // Activate power-up after 10 edits
@@ -973,9 +970,22 @@ export class Level1Scene extends Phaser.Scene {
     this.scene.start('GameOverScene', { score: this.score });
   }
 
-  private updatePowerUp() {
-    // If power up is active, auto-complete any orders
+  private updatePowerUp(delta: number) {
+    // If power up is active, update timer and auto-complete orders
     if (this.powerUpActive) {
+      // Decrement timer
+      this.powerUpTimer -= delta;
+      
+      // Update countdown text
+      const secondsLeft = Math.ceil(this.powerUpTimer / 1000);
+      this.powerUpCountdownText.setText(`${secondsLeft}s`);
+      
+      // Check if power-up has expired
+      if (this.powerUpTimer <= 0) {
+        this.deactivatePowerUp();
+      }
+      
+      // Auto-complete any orders
       for (const order of this.orders) {
         if (!order.isComplete) {
           // Get all edit types that haven't been completed yet
@@ -1242,7 +1252,7 @@ export class Level1Scene extends Phaser.Scene {
     // Reset game state
     this.orders = [];
     this.score = 0;
-    this.lives = 1;
+    this.lives = 3;
     this.ordersCompleted = 0;
     this.totalEditsApplied = 0;
     this.failedOrders = 0;
@@ -1319,6 +1329,88 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   // Update the order positions function to handle completed orders
+
+  // Power-up methods
+
+  private activatePowerUpSwitch() {
+    if (!this.powerUpAvailable || this.powerUpActive) return;
+    
+    console.log('Activating Power-Up!');
+    
+    // Set button state
+    this.powerUpActive = true;
+    this.powerUpAvailable = false;
+    this.powerUpTimer = this.powerUpDuration; // 30 seconds of power-up time
+    
+    // Visual feedback
+    this.setButtonColor(0x0000ff); // Blue for active
+    
+    // Show countdown
+    this.powerUpCountdownText.setText('30s');
+    
+    // Apply power-up effects
+    this.conveyorSpeed = 0.1; // Slow down the conveyor belt dramatically
+    
+    // Play activation sound
+    if (this.sound && this.sound.add) {
+      try {
+        const activateSound = this.sound.add('powerup', { volume: 0.7 });
+        activateSound.play();
+      } catch (error) {
+        console.error('Could not play power-up sound:', error);
+      }
+    }
+    
+    // Animate the lever being pulled
+    this.tweens.add({
+      targets: this.powerUpLever,
+      y: 10, // Move lever down
+      angle: 45, // Rotate lever
+      duration: 300,
+      ease: 'Bounce.Out'
+    });
+  }
+  
+  private deactivatePowerUp() {
+    if (!this.powerUpActive) return;
+    
+    console.log('Power-Up expired!');
+    
+    // Reset button state
+    this.powerUpActive = false;
+    this.powerUpTimer = 0;
+    this.powerUpCountdownText.setText('');
+    
+    // Visual feedback
+    this.setButtonColor(0xff0000); // Red for inactive
+    
+    // Reset conveyor speed to normal (with current difficulty)
+    this.conveyorSpeed = Math.min(
+      this.maxConveyorSpeed,
+      0.5 + (this.totalEditsApplied / 20) * 0.1
+    );
+    
+    // Play deactivation sound
+    if (this.sound && this.sound.add) {
+      try {
+        const deactivateSound = this.sound.add('powerdown', { volume: 0.5 });
+        deactivateSound.play();
+      } catch (error) {
+        console.error('Could not play power-down sound:', error);
+      }
+    }
+    
+    // Animate the lever returning
+    this.tweens.add({
+      targets: this.powerUpLever,
+      y: 0, // Return to original position
+      angle: 0, // Reset rotation
+      duration: 300,
+      ease: 'Sine.InOut'
+    });
+  }
+
+
   private updateOrderPositions(delta: number) {
     // Move orders along conveyor belt
     for (let i = this.orders.length - 1; i >= 0; i--) {
