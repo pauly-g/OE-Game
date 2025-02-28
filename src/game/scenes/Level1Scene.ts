@@ -29,7 +29,7 @@
  * - IMPORTANT: Player must always be able to move when carrying an edit and near stations
  * - IMPORTANT: Character animations depend on tracking the lastDirection and lastMoving properties
  * - IMPORTANT: Proper collision detection with stations prevents walking through and sliding issues
- * - Fixed station unlocking to only reveal one station at a time, every 5 completed orders
+ * - Fixed station unlocking to only reveal one station at a time, every 5 completed edits
  * - Added tracking of previous player position to properly handle collisions
  * - Fixed collision handling to prevent both sliding and walking through stations
  */
@@ -46,6 +46,7 @@ interface Order {
   isComplete: boolean;
   width: number;
   height: number;
+  icons?: Phaser.GameObjects.Text[]; // Add icons property
 }
 
 interface Station {
@@ -68,19 +69,17 @@ export class Level1Scene extends Phaser.Scene {
   private carriedEdit: { type: string, icon: Phaser.GameObjects.Text } | null = null;
   private ordersCompleted: number = 0;
   private totalEditsApplied: number = 0;
-  private freeLifeEditsThresholds: number[] = [15, 65, 165];
-  private freeLifeCollected: boolean[] = [false, false, false];
-  private freeLifeSprite: Phaser.GameObjects.Sprite | null = null;
-  private lives: number = 3;
+  private lastUnlockedAtEditCount: number = 0;
+  private lives: number = 1;
   private livesContainer!: Phaser.GameObjects.Container;
   private failedOrders: number = 0;
   private lastSpaceState: boolean = false;
   private orderGenerationTimer: Phaser.Time.TimerEvent | null = null;
-  private nextOrderDelay: number = 3000;
+  private nextOrderDelay: number = 5000; // Longer initial delay (was 3000)
   private orderSpeedMultiplier: number = 1.0;
   private maxOrderSpeedMultiplier: number = 2.0;
-  private conveyorSpeed: number = 2;
-  private maxConveyorSpeed: number = 4;
+  private conveyorSpeed: number = 0.5; // Much slower initial speed (was 2)
+  private maxConveyorSpeed: number = 3; // Lower max speed (was 4)
   private debug: boolean = false;
   private powerUpActive: boolean = false;
   private powerUpTimer: number = 0;
@@ -98,7 +97,6 @@ export class Level1Scene extends Phaser.Scene {
   private lastMoving: boolean = false;
   private currentFrame = 1;
   private lastFrameTime = 0;
-  private lastUnlockedAtOrderCount: number = 0;
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -128,7 +126,7 @@ export class Level1Scene extends Phaser.Scene {
               gameDebugger.info(`Loaded ${idleKey}`);
             })
             .on('loaderror', (key: string, _file: string, error: Error) => {
-              gameDebugger.error(`Failed to load ${key}: ${error.message}`);
+              console.error(`Failed to load ${key}: ${error.message}`);
               // Load fallback sprite if main sprite fails
               this.load.image(idleKey, 'game/Sprite Images/fallback.png');
             });
@@ -140,7 +138,7 @@ export class Level1Scene extends Phaser.Scene {
               gameDebugger.info(`Loaded ${walkKey}`);
             })
             .on('loaderror', (key: string, _file: string, error: Error) => {
-              gameDebugger.error(`Failed to load ${key}: ${error.message}`);
+              console.error(`Failed to load ${key}: ${error.message}`);
               // Load fallback sprite if main sprite fails
               this.load.image(walkKey, 'game/Sprite Images/fallback.png');
             });
@@ -153,21 +151,12 @@ export class Level1Scene extends Phaser.Scene {
           gameDebugger.info('Background loaded');
         })
         .on('loaderror', (_key: string, _file: string, error: Error) => {
-          gameDebugger.error(`Failed to load background: ${error.message}`);
-        });
-        
-      // Load free life sprite
-      this.load.image('freelife', 'game/misc-assets/freelife.png')
-        .on('filecomplete', () => {
-          gameDebugger.info('Free life sprite loaded');
-        })
-        .on('loaderror', (_key: string, _file: string, error: Error) => {
-          gameDebugger.error(`Failed to load free life sprite: ${error.message}`);
+          console.error(`Failed to load background: ${error.message}`);
         });
 
       gameDebugger.info('Level1Scene preload completed');
     } catch (error) {
-      gameDebugger.error('Error in preload:', error);
+      console.error('Error in preload:', error);
     }
   }
 
@@ -230,7 +219,12 @@ export class Level1Scene extends Phaser.Scene {
 
   create() {
     console.log('Level1Scene create started');
+    gameDebugger.info('Starting create method in Level1Scene');
+    
     try {
+      // Set up some game variables
+      gameDebugger.info('Setting up game variables');
+      
       const width = this.cameras.main.width;
       const height = this.cameras.main.height;
       
@@ -252,6 +246,9 @@ export class Level1Scene extends Phaser.Scene {
         .setStrokeStyle(2, 0x666666);
       this.createConveyorArrows(conveyorWidth, conveyorX, conveyorY);
 
+      // Create player animations first
+      this.createPlayerAnimations();
+
       // Create player sprite after ensuring textures exist
       if (this.textures.exists('idle down 1')) {
         this.player = this.add.sprite(width * 0.5, height * 0.5, 'idle down 1');
@@ -263,9 +260,12 @@ export class Level1Scene extends Phaser.Scene {
         
         // Log available textures for debugging
         const textureKeys = this.textures.getTextureKeys();
-        gameDebugger.info(`Available textures: ${textureKeys.length} textures loaded`);
+        console.log(`Available textures: ${textureKeys.length} textures loaded`);
         
-        gameDebugger.info(`Initial sprite texture set to: idle down 1`);
+        console.log(`Initial sprite texture set to: idle down 1`);
+        
+        // Play idle animation
+        this.player.anims.play(`idle-${this.lastDirection}`);
       } else {
         console.error('Player sprite texture "idle down 1" not loaded');
         // Create a fallback rectangle for the player
@@ -308,12 +308,7 @@ export class Level1Scene extends Phaser.Scene {
 
     // Create heart icons for lives instead of text
     this.livesContainer = this.add.container(25, 16);
-    for (let i = 0; i < this.lives; i++) {
-      const heartIcon = this.add.text(0, 0, '❤️', {
-        fontSize: '28px'
-      }).setOrigin(0.5, 0);
-      this.livesContainer.add(heartIcon);
-    }
+    this.updateLivesDisplay();
 
     this.powerUpText = this.add.text(width * 0.5, 50, '', {
       fontSize: '24px',
@@ -486,13 +481,13 @@ export class Level1Scene extends Phaser.Scene {
 
       // Add check for cursors
       if (!this.cursors) {
-        gameDebugger.error('Cursors not initialized in update method');
+        console.error('Cursors not initialized in update method');
         return;
       }
 
       // Check for 'd' key to activate powerup (cheat)
       if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
-        gameDebugger.info('Power-up cheat activated with D key');
+        console.log('Power-up cheat activated with D key');
         this.activatePowerUpSwitch();
       }
 
@@ -537,193 +532,187 @@ export class Level1Scene extends Phaser.Scene {
       }
 
       // Always allow movement regardless of whether near a station or carrying an edit
-      if (this.cursors.left.isDown) {
+      if (this.cursors.left?.isDown) {
         this.player.x -= this.playerSpeed;
         direction = 'left';
         isMoving = true;
-      } else if (this.cursors.right.isDown) {
+      } else if (this.cursors.right?.isDown) {
         this.player.x += this.playerSpeed;
         direction = 'right';
         isMoving = true;
       }
-
+      
       if (this.cursors.up.isDown) {
         this.player.y -= this.playerSpeed;
         direction = 'up';
         isMoving = true;
       } else if (this.cursors.down.isDown) {
-        this.player.y += this.playerSpeed;
+        this.player.y += this.playerSpeed; 
         direction = 'down';
         isMoving = true;
       }
 
-      // Keep player within screen bounds
-      if (this.player.x < 16) this.player.x = 16;
-      if (this.player.x > this.cameras.main.width - 16) this.player.x = this.cameras.main.width - 16;
-      if (this.player.y < 16) this.player.y = 16;
-      if (this.player.y > this.cameras.main.height - 16) this.player.y = this.cameras.main.height - 16;
+      // Keep player within bounds
+      if (this.player.x < 30) this.player.x = 30;
+      if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
+      if (this.player.y < 30) this.player.y = 30;
+      if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
 
-      // Only update direction if it changed or movement state changed
+      // Check collisions with stations
+      this.stations.forEach(station => {
+        if (station.isUnlocked) {
+          const stationBounds = new Phaser.Geom.Rectangle(
+            station.container.x - 50,
+            station.container.y - 50,
+            100, 
+            100
+          );
+          
+          const playerBounds = new Phaser.Geom.Rectangle(
+            this.player!.x - 20,
+            this.player!.y - 30,
+            40, 
+            60
+          );
+          
+          if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+            // Determine which side of the station the player is coming from
+            const dx = this.player!.x - station.container.x;
+            const dy = this.player!.y - station.container.y;
+            
+            // Calculate distances to each edge of the station
+            const distToLeft = Math.abs(dx + 50);
+            const distToRight = Math.abs(dx - 50);
+            const distToTop = Math.abs(dy + 50);
+            const distToBottom = Math.abs(dy - 50);
+            
+            // Find the minimum distance to determine which side the player is on
+            const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+            
+            // Add a small buffer to prevent sticking/sliding
+            const buffer = 5;
+            
+            // Apply appropriate displacement with increased push distance
+            if (minDist === distToLeft) {
+              this.player!.x = station.container.x - 75; // Push player further left
+            } else if (minDist === distToRight) {
+              this.player!.x = station.container.x + 75; // Push player further right
+            } else if (minDist === distToTop) {
+              this.player!.y = station.container.y - 75; // Push player further up
+            } else if (minDist === distToBottom) {
+              this.player!.y = station.container.y + 75; // Push player further down
+              
+              // Add additional check for bottom collision to prevent sliding
+              if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
+                // If player is trying to move horizontally while colliding with bottom,
+                // push them slightly further down to avoid the collision zone
+                this.player!.y += buffer;
+              }
+            }
+          }
+        }
+      });
+      
+      // Update animation based on direction and movement
       if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
         this.lastDirection = direction;
         this.lastMoving = isMoving;
         
-        // Immediately update the player texture for responsive movement
+        // Play animation based on direction and movement state
         if (this.player) {
           const prefix = isMoving ? 'walk' : 'idle';
-          const textureKey = `${prefix} ${direction} ${this.currentFrame || 1}`;
+          const animKey = `${prefix}-${direction}`;
           
-          if (this.textures.exists(textureKey)) {
-            this.player.setTexture(textureKey);
-            console.log(`Immediately setting player texture to: ${textureKey}`);
-          }
-        }
-      }
-
-      // Update the animation regardless of movement changes
-      this.updatePlayerAnimation(time);
-
-      // Update orders
-      this.updateOrders();
-
-      // Update power-up state
-      this.updatePowerUp();
-      
-      // Check for station unlock - only unlock new stations every 5 completed orders
-      if (this.ordersCompleted > 0 && this.ordersCompleted % 5 === 0) {
-        // Get the highest unlocked station index
-        const highestUnlockedIndex = this.stations.reduce((highest, station, index) => {
-          return station.isUnlocked ? index : highest;
-        }, -1);
-        
-        // Only unlock if there are more stations to unlock and we haven't already unlocked for this milestone
-        const nextToUnlock = highestUnlockedIndex + 1;
-        if (
-          nextToUnlock < this.stations.length && 
-          !this.stations[nextToUnlock].isUnlocked &&
-          this.lastUnlockedAtOrderCount !== this.ordersCompleted
-        ) {
-          this.unlockNextStation();
-          this.lastUnlockedAtOrderCount = this.ordersCompleted;
-        }
-      }
-
-      let collision = false;
-      
-      // Check for station collisions - create a more precise player bounds
-      const playerBounds = new Phaser.Geom.Rectangle(
-        this.player.x - 14,  // Made collision box slightly smaller (from 16 to 14)
-        this.player.y - 14,  // to make collisions more accurate
-        28,                  // Width (was 32)
-        28                   // Height (was 32)
-      );
-
-      // Check for station collisions
-      if (this.stations && this.stations.length > 0) {
-        for (const station of this.stations) {
-          if (station && station.isUnlocked && station.bounds) {
-            // Use a tighter collision box for stations to prevent walking through them
-            const stationBounds = new Phaser.Geom.Rectangle(
-              station.bounds.x,
-              station.bounds.y,
-              station.bounds.width,
-              station.bounds.height
-            );
-            
-            // Expand the station bounds slightly to ensure we catch all collisions
-            stationBounds.width += 4;
-            stationBounds.height += 4;
-            stationBounds.x -= 2;
-            stationBounds.y -= 2;
-            
-            if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
-              // Calculate which side of the station the player is coming from
-              const dx = this.player.x - (stationBounds.x + stationBounds.width / 2);
-              const dy = this.player.y - (stationBounds.y + stationBounds.height / 2);
-              
-              // Calculate normalized direction factors (between -1 and 1)
-              const normDx = dx / Math.max(Math.abs(dx), 0.1);
-              const normDy = dy / Math.max(Math.abs(dy), 0.1);
-              
-              // Add a small buffer to prevent getting stuck against walls
-              const bufferDistance = 2;
-              
-              // Always push out based on the closest edge and never slide
-              if (Math.abs(dx) > Math.abs(dy)) {
-                // Horizontal collision is dominant
-                this.player.x = prevX + normDx * bufferDistance;
-              } else {
-                // Vertical collision is dominant
-                this.player.y = prevY + normDy * bufferDistance;
-              }
-              
-              collision = true;
-              
-              // Add debug information to help diagnose collision issues
-              gameDebugger.debug(`Collision with ${station.type} station`);
-              
-              break;
+          // Check if animation exists before playing
+          if (this.anims.exists(animKey)) {
+            console.log(`Playing animation: ${animKey}`);
+            this.player.anims.play(animKey, true);
+          } else {
+            console.error(`Animation not found: ${animKey}`);
+            // Use fallback texture
+            const textureKey = `${prefix} ${direction} 1`;
+            if (this.textures.exists(textureKey)) {
+              this.player.setTexture(textureKey);
             }
           }
         }
       }
 
-      // Check for free life collection
-      this.checkFreeLifeCollection(playerBounds);
-
-      // Check for powerUpSwitchBounds
-      if (this.powerUpSwitchBounds && Phaser.Geom.Rectangle.Overlaps(playerBounds, this.powerUpSwitchBounds)) {
-        collision = true;
+      // Update current carrying edit position
+      if (this.carriedEdit) {
+        this.updateCarriedEditPosition();
       }
 
-      // Check for conveyorBelt
-      if (!this.conveyorBelt) {
-        gameDebugger.error('Conveyor belt not initialized in update method');
-      } else {
-        const conveyorBounds = new Phaser.Geom.Rectangle(
-          this.conveyorBelt.x - this.conveyorBelt.width / 2,
-          this.conveyorBelt.y - this.conveyorBelt.height / 2,
-          this.conveyorBelt.width,
-          this.conveyorBelt.height
-        );
+      // Handle conveyor belt movement for orders
+      this.updateOrderPositions(delta);
 
-        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, conveyorBounds)) {
-          collision = true;
-        }
-      }
-
-      if (collision) {
-        // Fully restore previous position - this prevents walking through stations
-        this.player.x = prevX;
-        this.player.y = prevY;
-      }
-
-      // Check for spaceKey
-      if (!this.spaceKey) {
-        gameDebugger.error('Space key not initialized in update method');
-        return;
-      }
-
-      // Handle spacebar press for edit pickup/drop and free life collection
-      const spacePressed = Phaser.Input.Keyboard.JustDown(this.spaceKey);
-      if (spacePressed) {
-        // Check if player is near free life
-        if (this.freeLifeSprite && this.isNearFreeLife()) {
-          this.collectFreeLife();
-        } else if (this.carriedEdit && nearStation) {
-          // Handle station interaction if carrying an edit
-          this.tryApplyEditToOrder();
-        } else if (this.carriedEdit) {
-          // Drop edit if carrying one
-          this.discardEdit();
+      // Handle space bar for edit actions
+      if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+        if (this.carriedEdit) {
+          // Try to apply edit to order first if carrying one
+          if (this.tryApplyEditToOrder()) {
+            // Successfully applied, do nothing else
+          } else if (nearStation) {
+            // Near a station but edit not applied, try to interact with station
+            this.discardEdit();
+          } else if (this.isNearPowerUpSwitch()) {
+            // Near power-up switch, activate it
+            this.activatePowerUpSwitch();
+          } else {
+            // Not near a station and edit not applied, just drop it
+            this.discardEdit();
+          }
         } else if (nearStation) {
-          // Pickup edit if near a station
-          this.pickupEdit(nearStation.type);
+          // Pickup edit if near a station and not carrying anything
+          this.pickupEdit(nearStation);
+        } else if (this.isNearPowerUpSwitch()) {
+          // Near power-up switch, activate it
+          this.activatePowerUpSwitch();
         }
       }
     } catch (error) {
       console.error('Error in update:', error);
     }
+  }
+
+  private isNearStation(): Station | null {
+    if (!this.player) return null;
+    
+    const playerBounds = new Phaser.Geom.Rectangle(
+      this.player.x - 40, 
+      this.player.y - 40,
+      80, 80
+    );
+    
+    // Check each unlocked station
+    for (const station of this.stations) {
+      if (station.isUnlocked) {
+        const stationBounds = new Phaser.Geom.Rectangle(
+          station.container.x - 60,  // Slightly larger detection area than the collision box
+          station.container.y - 60,
+          120, 120
+        );
+        
+        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+          return station;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  private isNearPowerUpSwitch(): boolean {
+    if (!this.player || !this.powerUpSwitchBounds) return false;
+    
+    const playerBounds = new Phaser.Geom.Rectangle(
+      this.player.x - 20,
+      this.player.y - 30,
+      40, 
+      60
+    );
+    
+    return Phaser.Geom.Rectangle.Overlaps(playerBounds, this.powerUpSwitchBounds);
   }
 
   // Add missing methods for player animation and free life handling
@@ -737,168 +726,19 @@ export class Level1Scene extends Phaser.Scene {
       // Advance to next frame (looping from 6 back to 1)
       this.currentFrame = this.currentFrame >= 6 ? 1 : this.currentFrame + 1;
       this.lastFrameTime = time;
-      
-      // Set the texture directly based on direction, movement state, and current frame
-      const prefix = this.lastMoving ? 'walk' : 'idle';
-      const textureKey = `${prefix} ${this.lastDirection} ${this.currentFrame}`;
-      
-      if (this.textures.exists(textureKey)) {
-        this.player.setTexture(textureKey);
-        console.log(`Setting player texture to: ${textureKey}`); // Use console.log for visibility
-      } else {
-        // Try to use a fallback texture
-        console.warn(`Texture not found: ${textureKey}, trying fallback`);
-        
-        // Try first frame as fallback
-        const fallbackKey = `${prefix} ${this.lastDirection} 1`;
-        if (this.textures.exists(fallbackKey)) {
-          this.player.setTexture(fallbackKey);
-          console.log(`Using fallback texture: ${fallbackKey}`);
-        } else {
-          console.error(`No textures found for ${prefix} ${this.lastDirection}`);
-          // Force-set to a known texture we loaded in preload as absolute fallback
-          this.player.setTexture('idle down 1');
-        }
-      }
     }
   }
 
-  private checkFreeLifeCollection(playerBounds: Phaser.Geom.Rectangle) {
-    // Check if we should spawn a free life based on total edits applied
-    for (let i = 0; i < this.freeLifeEditsThresholds.length; i++) {
-      if (this.totalEditsApplied >= this.freeLifeEditsThresholds[i] && !this.freeLifeCollected[i]) {
-        // If we don't have a free life sprite yet, create one
-        if (!this.freeLifeSprite) {
-          this.spawnFreeLife();
-        }
-        break;
-      }
-    }
-
-    // If there's a free life on screen, check if player is near it
-    if (this.freeLifeSprite) {
-      // Create bounds for the free life sprite
-      const freeLifeBounds = new Phaser.Geom.Rectangle(
-        this.freeLifeSprite.x - 15,
-        this.freeLifeSprite.y - 15,
-        30,
-        30
-      );
-
-      // Animate the free life (hover effect)
-      this.freeLifeSprite.y += Math.sin(this.time.now / 300) * 0.5;
-      
-      // Move free life along conveyor belt
-      if (this.freeLifeSprite.x > this.cameras.main.width + 20) {
-        // If it goes offscreen, remove it and mark as collected
-        this.freeLifeSprite.destroy();
-        this.freeLifeSprite = null;
-        
-        // Find which threshold this was for
-        for (let i = 0; i < this.freeLifeEditsThresholds.length; i++) {
-          if (!this.freeLifeCollected[i]) {
-            this.freeLifeCollected[i] = true;
-            break;
-          }
-        }
-      } else {
-        // Move the free life along the conveyor belt
-        this.freeLifeSprite.x += this.conveyorSpeed / 2;
-      }
-    }
-  }
-
-  private isNearFreeLife(): boolean {
-    if (!this.player || !this.freeLifeSprite) return false;
-    
-    const playerBounds = new Phaser.Geom.Rectangle(
-      this.player.x - 40,
-      this.player.y - 40,
-      80, 80
-    );
-    
-    const freeLifeBounds = new Phaser.Geom.Rectangle(
-      this.freeLifeSprite.x - 25,
-      this.freeLifeSprite.y - 25,
-      50, 50
-    );
-    
-    return Phaser.Geom.Rectangle.Overlaps(playerBounds, freeLifeBounds);
-  }
-
-  private collectFreeLife() {
-    if (!this.freeLifeSprite) return;
-    
-    // Find which milestone this corresponds to
-    const milestone = this.getFreeLifeMilestone();
-    if (milestone === -1) return;
-    
-    // Mark it as collected
-    this.freeLifeCollected[milestone] = true;
-    
-    // Add a life if not at max
-    if (this.lives < 3) {
-      this.lives++;
-      this.updateLivesDisplay();
-    }
-    
-    // Add score
-    this.score += 50;
-    this.scoreText.setText(`Score: ${this.score}`);
-    
-    // Create particle effect
-    const particles = this.add.particles(this.freeLifeSprite.x, this.freeLifeSprite.y);
-    const emitter = particles.createEmitter({
-      speed: { min: 50, max: 150 },
-      scale: { start: 1, end: 0 },
-      alpha: { start: 1, end: 0 },
-      lifespan: 800,
-      blendMode: 'ADD'
-    });
-    
-    // Emit particles
-    emitter.explode(15, this.freeLifeSprite.x, this.freeLifeSprite.y);
-    
-    // Create celebratory hearts and sparkles
-    for (let i = 0; i < 5; i++) {
-      const x = this.freeLifeSprite.x + Math.random() * 60 - 30;
-      const y = this.freeLifeSprite.y + Math.random() * 60 - 30;
-      
-      const symbol = Math.random() > 0.5 ? '❤️' : '✨';
-      
-      const text = this.add.text(x, y, symbol, {
-        fontSize: '24px'
-      });
-      
-      this.tweens.add({
-        targets: text,
-        y: y - 80,
-        alpha: 0,
-        duration: 1000,
-        onComplete: () => text.destroy()
-      });
-    }
-    
-    // Remove free life sprite
-    this.freeLifeSprite.destroy();
-    this.freeLifeSprite = null;
-    
-    gameDebugger.info(`Collected free life at milestone ${milestone}`);
-    
-    // Check if we can spawn the next free life
-    this.time.delayedCall(1000, () => this.checkFreeLifeSpawn());
-  }
-
-  private pickupEdit(type: string) {
+  private pickupEdit(station: Station) {
     if (this.carriedEdit) {
-      gameDebugger.debug('Already carrying an edit, cannot pick up another');
+      console.log('Already carrying an edit, cannot pick up another');
       return;
     }
     
-    gameDebugger.info(`Picking up ${type} edit`);
+    console.log(`Picking up ${station.type} edit`);
     
     // Create edit icon and attach to player
-    const editIcon = this.add.text(0, 0, this.getStationIcon(type), {
+    const editIcon = this.add.text(0, 0, this.getStationIcon(station.type), {
       fontSize: '24px',
       stroke: '#000000',
       strokeThickness: 2
@@ -906,7 +746,7 @@ export class Level1Scene extends Phaser.Scene {
     
     // Store reference to edit
     this.carriedEdit = {
-      type,
+      type: station.type,
       icon: editIcon
     };
     
@@ -935,26 +775,29 @@ export class Level1Scene extends Phaser.Scene {
   private updateCarriedEditPosition() {
     if (!this.carriedEdit) return;
     
-    // Position the edit based on direction
+    // Position the edit closer to the player based on direction
     let offsetX = 0;
-    let offsetY = -40; // Default above player
+    let offsetY = -25; // Default, shorter distance above player
     
     if (this.lastDirection === 'left') {
-      offsetX = -30;
-      offsetY = 0;
+      offsetX = -20; // Closer to the player (was -30)
+      offsetY = -5;  // Slightly above to avoid collision with objects
     } else if (this.lastDirection === 'right') {
-      offsetX = 30;
-      offsetY = 0;
+      offsetX = 20;  // Closer to the player (was 30)
+      offsetY = -5;  // Slightly above to avoid collision with objects
     } else if (this.lastDirection === 'up') {
       offsetX = 0;
-      offsetY = -30;
+      offsetY = -20; // Closer to the player (was -30)
     } else if (this.lastDirection === 'down') {
       offsetX = 0;
-      offsetY = 30;
+      offsetY = 20;  // Closer to the player (was 30)
     }
     
     this.carriedEdit.icon.x = this.player.x + offsetX;
     this.carriedEdit.icon.y = this.player.y + offsetY;
+    
+    // Make sure the edit is always on top
+    this.carriedEdit.icon.setDepth(100);
   }
 
   private discardEdit() {
@@ -972,34 +815,38 @@ export class Level1Scene extends Phaser.Scene {
     });
   }
 
-  private tryApplyEditToOrder() {
-    if (!this.carriedEdit) return;
+  private tryApplyEditToOrder(): boolean {
+    if (!this.carriedEdit) return false;
     
+    console.log('Trying to apply edit to order');
+    
+    // Increase detection range for player-order overlap
     const playerBounds = new Phaser.Geom.Rectangle(
-      this.player.x - 40,
-      this.player.y - 40,
-      80, 80
+      this.player.x - 60, // Increased from 40
+      this.player.y - 60, // Increased from 40
+      120, 120           // Increased from 80, 80
     );
     
     let applied = false;
     
+    // Loop through all orders to check for overlap
     for (const order of this.orders) {
+      // Also increase order bounds
       const orderBounds = new Phaser.Geom.Rectangle(
-        order.x - 50,
-        order.y - 50,
-        100, 100
+        order.x - 60,    // Increased from 50
+        order.y - 60,    // Increased from 50
+        120, 120        // Increased from 100, 100
       );
       
       if (Phaser.Geom.Rectangle.Overlaps(playerBounds, orderBounds)) {
+        console.log('Found overlapping order, applying edit');
         this.applyEditToOrder(order);
         applied = true;
         break;
       }
     }
     
-    if (!applied) {
-      this.discardEdit();
-    }
+    return applied;
   }
 
   private applyEditToOrder(order: Order) {
@@ -1018,6 +865,12 @@ export class Level1Scene extends Phaser.Scene {
       
       // Increment total edits applied (for free life spawning)
       this.totalEditsApplied++;
+      
+      // Check if we should unlock a new station (every 5 edits)
+      if (this.totalEditsApplied >= 5 && (this.totalEditsApplied - this.lastUnlockedAtEditCount) >= 5) {
+        this.unlockNextStation();
+        this.lastUnlockedAtEditCount = this.totalEditsApplied;
+      }
       
       // Increase score
       this.score += 10;
@@ -1067,8 +920,21 @@ export class Level1Scene extends Phaser.Scene {
       const col = index % 3;
       const spacing = 30;
       
-      checkmark.x = (col + 1) * spacing - order.width / 2;
-      checkmark.y = row * spacing - order.height / 2 - 10;
+      // Calculate positions to center the grid
+      // For first row (0, 1, 2)
+      if (row === 0) {
+        checkmark.x = (col - 1) * spacing; // -spacing, 0, +spacing
+      } else {
+        // For second row (centers 1 or 2 items)
+        const itemsInLastRow = order.types.length - 3;
+        if (itemsInLastRow === 1) {
+          checkmark.x = 0; // Center the single item
+        } else {
+          checkmark.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
+        }
+      }
+      
+      checkmark.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
     }
     
     // Add to container
@@ -1083,112 +949,14 @@ export class Level1Scene extends Phaser.Scene {
     });
   }
 
-  private completeOrder(order: Order) {
-    if (!order) return;
-    
-    gameDebugger.info(`Completed order ${order.id}`);
-    
-    // Update counters
-    this.ordersCompleted++;
-    
-    // Add completion bonus
-    const bonus = 25 * order.types.length; // More edits = bigger bonus
-    this.score += bonus;
-    this.scoreText.setText(`Score: ${this.score}`);
-    
-    // Visual feedback for order completion
-    const completionText = this.add.text(
-      order.x,
-      order.y,
-      '✨ COMPLETE! ✨',
-      { fontSize: '28px', color: '#ffff00', stroke: '#000000', strokeThickness: 4 }
-    ).setOrigin(0.5);
-    
-    // Animate the completion text
-    this.add.tween({
-      targets: completionText,
-      scale: { from: 0.5, to: 1.5 },
-      alpha: { from: 1, to: 0 },
-      y: '-=50',
-      duration: 1000,
-      onComplete: () => completionText.destroy()
-    });
-    
-    // Mark order as complete and schedule removal
-    order.isComplete = true;
-    
-    // Remove the order after a short delay
-    this.time.delayedCall(1000, () => {
-      // Find the index of this order
-      const index = this.orders.findIndex(o => o.id === order.id);
-      if (index !== -1) {
-        this.removeOrder(index);
-      }
-    });
-  }
-
-  private updateOrders() {
-    // Move orders along conveyor belt
-    for (let i = 0; i < this.orders.length; i++) {
-      const order = this.orders[i];
-      if (!order.isComplete) {
-        // Move to the right
-        order.x += this.conveyorSpeed;
-        
-        // Update container position
-        if (order.container) {
-          order.container.x = order.x;
-        }
-        
-        // Check if order went off screen
-        if (order.x > this.cameras.main.width + 50) {
-          // Order failed - remove a life if we have any
-          if (this.lives > 0) {
-            this.lives--;
-            this.failedOrders++;
-            
-            // Update life indicators
-            this.updateLivesDisplay();
-            
-            // Visual feedback for failed order
-            const failText = this.add.text(
-              order.x - 100, // Position it a bit to the left so it's visible
-              order.y,
-              'ORDER FAILED!',
-              { fontSize: '28px', color: '#ff0000', stroke: '#000000', strokeThickness: 4 }
-            ).setOrigin(0.5);
-            
-            // Animate the fail text
-            this.add.tween({
-              targets: failText,
-              scale: { from: 0.5, to: 1.5 },
-              alpha: { from: 1, to: 0 },
-              duration: 1000,
-              onComplete: () => failText.destroy()
-            });
-            
-            // Game over check
-            if (this.lives <= 0) {
-              this.gameOver();
-            }
-          }
-          
-          // Remove the order
-          this.removeOrder(i);
-          i--; // Adjust index since we removed an item
-        }
-      }
-    }
-  }
-
   private updateLivesDisplay() {
     // Clear existing hearts
     this.livesContainer.removeAll();
     
-    // Add hearts or X based on current lives
-    for (let i = 0; i < 3; i++) {
-      const x = i * 30;
-      const heart = this.add.text(x, 0, i < this.lives ? '❤️' : '❌', {
+    // Only show the actual number of hearts (not X's)
+    for (let i = 0; i < this.lives; i++) {
+      const x = i * 35; // Increased spacing to avoid overlap
+      const heart = this.add.text(x, 0, '❤️', {
         fontSize: '24px'
       });
       this.livesContainer.add(heart);
@@ -1196,40 +964,13 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private gameOver() {
-    gameDebugger.info('Game over!');
+    console.log('Game over!');
     
-    // Create game over text
-    const gameOverText = this.add.text(
-      this.cameras.main.width / 2,
-      this.cameras.main.height / 2,
-      'GAME OVER',
-      { fontSize: '64px', color: '#ff0000', stroke: '#000000', strokeThickness: 6 }
-    ).setOrigin(0.5);
-    
-    // Add final score
-    const finalScoreText = this.add.text(
-      this.cameras.main.width / 2,
-      this.cameras.main.height / 2 + 80,
-      `Final Score: ${this.score}`,
-      { fontSize: '32px', color: '#ffffff', stroke: '#000000', strokeThickness: 4 }
-    ).setOrigin(0.5);
-    
-    // Add restart instructions
-    const restartText = this.add.text(
-      this.cameras.main.width / 2,
-      this.cameras.main.height / 2 + 140,
-      'Press R to Restart',
-      { fontSize: '24px', color: '#ffff00', stroke: '#000000', strokeThickness: 3 }
-    ).setOrigin(0.5);
-    
-    // Add restart key
-    const rKey = this.input.keyboard.addKey('R');
-    rKey.on('down', () => {
-      this.scene.restart({ reset: true });
-    });
-    
-    // Pause game logic
+    // Clean up any active timers
     this.orderGenerationTimer?.remove();
+    
+    // Transition to the GameOverScene with the final score
+    this.scene.start('GameOverScene', { score: this.score });
   }
 
   private updatePowerUp() {
@@ -1260,12 +1001,12 @@ export class Level1Scene extends Phaser.Scene {
 
   private generateOrder = () => {
     try {
-      gameDebugger.info('Generating new order');
+      console.log('Generating new order');
       
       // Count how many stations are unlocked
       const unlockedStations = this.stations.filter(station => station.isUnlocked);
       if (unlockedStations.length === 0) {
-        gameDebugger.warn('No unlocked stations available, cannot generate order');
+        console.log('No unlocked stations available, cannot generate order');
         return;
       }
       
@@ -1327,7 +1068,7 @@ export class Level1Scene extends Phaser.Scene {
         selectedTypes.push(shuffledTypes[i % shuffledTypes.length]);
       }
       
-      gameDebugger.info(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
+      console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
       
       // Create container for the order
       const container = this.add.container(orderX, orderY);
@@ -1337,16 +1078,16 @@ export class Level1Scene extends Phaser.Scene {
       const bgHeight = numEdits <= 3 ? 70 : 100;
       
       // Create cardboard box
-      const boxColor = 0xc19a6b; // Cardboard brown color
+      const boxColor = 0xd9c0a3; // Lighter cardboard brown color
       const background = this.add.rectangle(0, 0, bgWidth, bgHeight, boxColor, 1)
-        .setStrokeStyle(3, 0x8b5a2b); // Darker brown for the edges
+        .setStrokeStyle(2, 0xa0816c); // Softer brown for the edges
       
-      // Add cardboard box flap at the top
-      const topFlap = this.add.rectangle(0, -bgHeight/2 + 8, bgWidth * 0.8, 14, boxColor)
-        .setStrokeStyle(2, 0x8b5a2b);
+      // Add cardboard box flap at the top - more subtle
+      const topFlap = this.add.rectangle(0, -bgHeight/2 + 6, bgWidth * 0.7, 10, boxColor)
+        .setStrokeStyle(1, 0xa0816c);
         
-      // Add box tape
-      const tape = this.add.rectangle(0, 0, bgWidth * 0.5, 8, 0xf5f5dc);
+      // Add box tape - smaller and less visible
+      const tape = this.add.rectangle(0, 0, bgWidth * 0.3, 4, 0xefefef);
       
       container.add([background, topFlap, tape]);
       
@@ -1360,7 +1101,7 @@ export class Level1Scene extends Phaser.Scene {
         
         // Position based on layout (horizontal or grid)
         if (numEdits <= 3) {
-          // Horizontal layout - evenly space icons
+          // Horizontal layout
           if (numEdits === 1) {
             // Single icon centered
             icon.x = 0;
@@ -1372,10 +1113,10 @@ export class Level1Scene extends Phaser.Scene {
           }
           icon.y = 0; // Centered vertically
         } else {
-          // Grid layout (3 in first row, rest in second row)
-          const spacing = 40;
+          // Grid layout
           const row = Math.floor(index / 3);
           const col = index % 3;
+          const spacing = 30;
           
           // Calculate positions to center the grid
           // For first row (0, 1, 2)
@@ -1410,15 +1151,244 @@ export class Level1Scene extends Phaser.Scene {
         container,
         isComplete: false,
         width: bgWidth,
-        height: bgHeight
+        height: bgHeight,
+        icons // Add icons to the order object
       };
       
       // Add to orders array
       this.orders.push(order);
       
-      gameDebugger.info(`Order created: ${order.id}`);
+      console.log(`Order created: ${order.id}`);
     } catch (error) {
       console.error('Error generating order:', error);
+    }
+  }
+
+  private unlockNextStation() {
+    // Find the first locked station
+    const nextLockedStation = this.stations.find(station => !station.isUnlocked);
+    
+    if (nextLockedStation) {
+      console.log(`Unlocking station: ${nextLockedStation.type}`);
+      
+      // Unlock the station
+      nextLockedStation.isUnlocked = true;
+      
+      // Make it visible with animation
+      nextLockedStation.container.setAlpha(0);
+      this.tweens.add({
+        targets: nextLockedStation.container,
+        alpha: 1,
+        duration: 1000,
+        ease: 'Power2'
+      });
+      
+      // Show announcement
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      const announcement = this.add.text(
+        width * 0.5,
+        height * 0.3,
+        `New Station Unlocked: ${this.getStationIcon(nextLockedStation.type)} ${nextLockedStation.type}!`,
+        {
+          fontSize: '28px',
+          color: '#ffff00',
+          stroke: '#000000',
+          strokeThickness: 3
+        }
+      ).setOrigin(0.5);
+      
+      // Animate announcement
+      this.tweens.add({
+        targets: announcement,
+        scale: { from: 0.5, to: 1.5 },
+        alpha: { from: 1, to: 0 },
+        y: '-=50',
+        duration: 2000,
+        onComplete: () => announcement.destroy()
+      });
+      
+      // Update the last unlocked order count
+      this.lastUnlockedAtEditCount = this.totalEditsApplied;
+      
+      // Increase game difficulty slightly
+      this.orderSpeedMultiplier = Math.min(
+        this.maxOrderSpeedMultiplier,
+        this.orderSpeedMultiplier + 0.15
+      );
+      this.conveyorSpeed = Math.min(
+        this.maxConveyorSpeed,
+        this.conveyorSpeed + 0.25
+      );
+      this.nextOrderDelay = Math.max(1500, this.nextOrderDelay - 250);
+      
+      // Update order generation timer with new delay
+      if (this.orderGenerationTimer) {
+        this.orderGenerationTimer.reset({
+          delay: this.nextOrderDelay,
+          callback: this.generateOrder,
+          callbackScope: this,
+          loop: true
+        });
+      }
+    } else {
+      console.log('All stations are already unlocked');
+    }
+  }
+
+  private reset() {
+    console.log('Resetting Level1Scene');
+    
+    // Reset game state
+    this.orders = [];
+    this.score = 0;
+    this.lives = 1;
+    this.ordersCompleted = 0;
+    this.totalEditsApplied = 0;
+    this.failedOrders = 0;
+    this.carriedEdit = null;
+    
+    // Reset difficulty settings
+    this.orderSpeedMultiplier = 1.0;
+    this.conveyorSpeed = 0.5;
+    this.nextOrderDelay = 5000;
+    
+    // Reset powerups
+    this.powerUpActive = false;
+    this.powerUpTimer = 0;
+    this.powerUpAvailable = false;
+    
+    // Reset station unlocking
+    this.lastUnlockedAtEditCount = 0;
+    
+    // Reset stations (except the first one)
+    if (this.stations && this.stations.length > 0) {
+      this.stations.forEach((station, index) => {
+        station.isUnlocked = index === 0; // Only first station starts unlocked
+        station.container.setAlpha(index === 0 ? 1 : 0);
+      });
+    }
+    
+    // Clean up any existing orders
+    this.children.getAll().forEach(child => {
+      if (child instanceof Phaser.GameObjects.Container && child !== this.livesContainer) {
+        child.destroy();
+      }
+    });
+    
+    console.log('Level1Scene reset completed');
+  }
+
+  private completeOrder(order: Order) {
+    if (!order) return;
+    
+    console.log(`Completed order ${order.id}`);
+    
+    // Update counters
+    this.ordersCompleted++;
+    
+    // Add completion bonus
+    const bonus = 25 * order.types.length; // More edits = bigger bonus
+    this.score += bonus;
+    this.scoreText.setText(`Score: ${this.score}`);
+    
+    // Mark order as complete but don't remove it
+    order.isComplete = true;
+    
+    // Show completion indicator above the order
+    const completionEmoji = this.add.text(
+      order.container.x,
+      order.container.y - 40,
+      '❤️',
+      { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+    ).setOrigin(0.5);
+    
+    // Add it to the container so it moves with the order
+    order.container.add(completionEmoji);
+    
+    // Add a little animation to the emoji
+    this.tweens.add({
+      targets: completionEmoji,
+      y: '-=20',
+      alpha: { from: 1, to: 0.8 },
+      scale: { from: 1, to: 1.3 },
+      duration: 1000,
+      yoyo: true,
+      repeat: -1
+    });
+  }
+
+  // Update the order positions function to handle completed orders
+  private updateOrderPositions(delta: number) {
+    // Move orders along conveyor belt
+    for (let i = this.orders.length - 1; i >= 0; i--) {
+      const order = this.orders[i];
+      
+      // Move all orders to the right (including completed ones)
+      order.x += this.conveyorSpeed;
+      
+      // Update container position
+      if (order.container) {
+        order.container.x = order.x;
+      }
+      
+      // Check if order went off screen
+      if (order.x > this.cameras.main.width + 50) {
+        if (!order.isComplete && this.lives > 0) {
+          // Incomplete order - remove a life
+          this.lives--;
+          this.failedOrders++;
+          
+          // Update life indicators
+          this.updateLivesDisplay();
+          
+          // Visual feedback for failed order - angry emoji floating up
+          const failEmoji = this.add.text(
+            order.x - 100,
+            order.y,
+            '��',
+            { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+          ).setOrigin(0.5);
+          
+          // Animate the angry emoji floating up
+          this.tweens.add({
+            targets: failEmoji,
+            y: '-=150',
+            alpha: { from: 1, to: 0 },
+            scale: { from: 1, to: 1.5 },
+            duration: 1500,
+            ease: 'Sine.Out',
+            onComplete: () => failEmoji.destroy()
+          });
+          
+          // If all lives are gone, it's game over
+          if (this.lives <= 0) {
+            this.gameOver();
+          }
+        } else if (order.isComplete) {
+          // Completed order - just animate a heart emoji floating away
+          const heartEmoji = this.add.text(
+            order.x - 100,
+            order.y,
+            '❤️',
+            { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+          ).setOrigin(0.5);
+          
+          // Animate the heart emoji floating up
+          this.tweens.add({
+            targets: heartEmoji,
+            y: '-=150',
+            alpha: { from: 1, to: 0 },
+            scale: { from: 1, to: 1.5 },
+            duration: 1500,
+            ease: 'Sine.Out',
+            onComplete: () => heartEmoji.destroy()
+          });
+        }
+        
+        // Remove the order in both cases
+        this.removeOrder(i);
+      }
     }
   }
 }

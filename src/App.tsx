@@ -53,13 +53,22 @@ function App() {
     if (game) return;
 
     try {
+      // Make sure the game container exists
+      const gameContainer = document.getElementById('game-container');
+      if (!gameContainer) {
+        gameDebugger.error('Game container not found!');
+        return;
+      }
+
+      gameDebugger.info('Game container found, initializing game...');
+
       // Update asset paths to be relative to public directory
       const config = {
         ...gameConfig,
         parent: 'game-container',
         loader: {
           ...gameConfig.loader,
-          path: '/'
+          path: ''  // Use empty string instead of '/'
         }
       };
 
@@ -81,6 +90,7 @@ function App() {
       };
     } catch (error) {
       gameDebugger.error('Failed to initialize game:', error);
+      console.error('Failed to initialize game:', error);
     }
   }, []); // Remove game from dependencies
 
