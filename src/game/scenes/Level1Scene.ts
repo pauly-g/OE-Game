@@ -67,7 +67,8 @@ export class Level1Scene extends Phaser.Scene {
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private dKey!: Phaser.Input.Keyboard.Key;
   private playerSpeed: number = 8;
-  private carriedEdit: { type: string, icon: Phaser.GameObjects.Text } | null = null;
+  private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
+  private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
   private ordersCompleted: number = 0;
   private totalEditsApplied: number = 0;
   private lastUnlockedAtEditCount: number = 0;
@@ -609,8 +610,8 @@ export class Level1Scene extends Phaser.Scene {
       this.updatePlayerAnimation(time, delta);
 
       // Update current carrying edit position
-      if (this.carriedEdit) {
-        this.updateCarriedEditPosition();
+      if (this.carriedEdits.length > 0) {
+        this.updateCarriedEditsPosition();
       }
 
       // Handle conveyor belt movement for orders
@@ -618,26 +619,31 @@ export class Level1Scene extends Phaser.Scene {
 
       // Handle space bar for edit actions
       if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-        if (this.carriedEdit) {
-          // Try to apply edit to order first if carrying one
-          if (this.tryApplyEditToOrder()) {
-            // Successfully applied, do nothing else
-          } else if (nearStation) {
-            // Near a station but edit not applied, try to interact with station
-            this.discardEdit();
-          } else if (this.isNearPowerUpSwitch()) {
-            // Near power-up switch, activate it
-            this.activatePowerUpSwitch();
-          } else {
-            // Not near a station and edit not applied, just drop it
-            this.discardEdit();
-          }
-        } else if (nearStation) {
-          // Pickup edit if near a station and not carrying anything
+        console.log("Spacebar pressed. Near station:", nearStation?.type);
+        console.log("Current carried edits:", this.carriedEdits.length);
+        
+        // First check if we're trying to apply an edit to an order
+        if (this.carriedEdits.length > 0 && this.tryApplyEditsToOrder()) {
+          // Successfully applied, do nothing else
+          console.log("Applied edit to order");
+        }
+        // Then check if we're near a station to collect an edit
+        else if (nearStation) {
+          console.log("Near station and spacebar pressed");
+          // Always try to pick up an edit when near a station
           this.pickupEdit(nearStation);
-        } else if (this.isNearPowerUpSwitch()) {
+        }
+        // Then check if we're near the power-up switch
+        else if (this.isNearPowerUpSwitch()) {
+          console.log("Near power switch");
           // Near power-up switch, activate it
           this.activatePowerUpSwitch();
+        }
+        // Otherwise, if we have edits, discard the first one
+        else if (this.carriedEdits.length > 0) {
+          console.log("Discarding first edit");
+          // Not near a station or order, discard the first edit
+          this.removeFirstEdit();
         }
       }
     } catch (error) {
@@ -648,22 +654,25 @@ export class Level1Scene extends Phaser.Scene {
   private isNearStation(): Station | null {
     if (!this.player) return null;
     
+    // Create a larger detection area around the player for easier interaction
     const playerBounds = new Phaser.Geom.Rectangle(
-      this.player.x - 40, 
-      this.player.y - 40,
-      80, 80
+      this.player.x - 50, // Larger detection area
+      this.player.y - 50, // Larger detection area
+      100, 100           // Increased from 60, 60
     );
     
     // Check each unlocked station
     for (const station of this.stations) {
       if (station.isUnlocked) {
         const stationBounds = new Phaser.Geom.Rectangle(
-          station.container.x - 60,  // Slightly larger detection area than the collision box
+          station.container.x - 60,
           station.container.y - 60,
           120, 120
         );
         
         if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+          // Log that we're near a station for debugging
+          console.log(`Near station: ${station.type}`);
           return station;
         }
       }
@@ -723,31 +732,88 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private pickupEdit(station: Station) {
-    if (this.carriedEdit) {
-      console.log('Already carrying an edit, cannot pick up another');
+    console.log(`Picking up edit from station: ${station.type}`);
+    console.log(`Current carried edits: ${this.carriedEdits.length}`);
+    
+    // Check if we're already carrying this type of edit
+    if (this.carriedEdits.some(edit => edit.type === station.type)) {
+      // Show message that duplicate edits aren't allowed
+      const duplicateEditMessage = this.add.text(
+        this.player.x, 
+        this.player.y - 40, 
+        `Already have ${station.type}!`, 
+        {
+          fontSize: '16px',
+          color: '#FF0000',
+          stroke: '#000000',
+          strokeThickness: 2
+        }
+      ).setOrigin(0.5).setDepth(110);
+      
+      // Fade out and remove the message
+      this.tweens.add({
+        targets: duplicateEditMessage,
+        alpha: 0,
+        y: duplicateEditMessage.y - 20,
+        duration: 1000,
+        onComplete: () => duplicateEditMessage.destroy()
+      });
+      
       return;
     }
     
-    console.log(`Picking up ${station.type} edit`);
+    // Check if we're already at max capacity
+    if (this.carriedEdits.length >= this.maxCarriedEdits) {
+      // Show message to user that they can't pick up more edits
+      const maxEditMessage = this.add.text(
+        this.player.x, 
+        this.player.y - 40, 
+        `Max ${this.maxCarriedEdits} edits!`, 
+        {
+          fontSize: '16px',
+          color: '#FF0000',
+          stroke: '#000000',
+          strokeThickness: 2
+        }
+      ).setOrigin(0.5).setDepth(110);
+      
+      // Fade out and remove the message
+      this.tweens.add({
+        targets: maxEditMessage,
+        alpha: 0,
+        y: maxEditMessage.y - 20,
+        duration: 1000,
+        onComplete: () => maxEditMessage.destroy()
+      });
+      
+      return;
+    }
     
-    // Create edit icon and attach to player
-    const editIcon = this.add.text(0, 0, this.getStationIcon(station.type), {
-      fontSize: '24px',
-      stroke: '#000000',
-      strokeThickness: 2
-    }).setOrigin(0.5);
+    // Create an icon representing the edit type
+    const editIcon = this.add.text(
+      this.player.x,
+      this.player.y - 30,
+      this.getStationIcon(station.type),
+      {
+        fontSize: '24px',
+        stroke: '#000000',
+        strokeThickness: 2
+      }
+    ).setOrigin(0.5).setDepth(100);
     
-    // Store reference to edit
-    this.carriedEdit = {
+    // Save the carried edit
+    this.carriedEdits.push({
       type: station.type,
       icon: editIcon
-    };
+    });
     
-    // Position edit icon above player's head
-    this.updateCarriedEditPosition();
+    console.log(`After pickup, carried edits: ${this.carriedEdits.length}`);
     
-    // Add pickup feedback
-    this.add.tween({
+    // Position the edit icons correctly
+    this.updateCarriedEditsPosition();
+    
+    // Add an animation for the pickup
+    this.tweens.add({
       targets: editIcon,
       scale: { from: 0, to: 1 },
       duration: 200,
@@ -765,51 +831,23 @@ export class Level1Scene extends Phaser.Scene {
     }
   }
 
-  private updateCarriedEditPosition() {
-    if (!this.carriedEdit) return;
-    
-    // Position the edit closer to the player based on direction
-    let offsetX = 0;
-    let offsetY = -25; // Default, shorter distance above player
-    
-    if (this.lastDirection === 'left') {
-      offsetX = -20; // Closer to the player (was -30)
-      offsetY = -5;  // Slightly above to avoid collision with objects
-    } else if (this.lastDirection === 'right') {
-      offsetX = 20;  // Closer to the player (was 30)
-      offsetY = -5;  // Slightly above to avoid collision with objects
-    } else if (this.lastDirection === 'up') {
-      offsetX = 0;
-      offsetY = -20; // Closer to the player (was -30)
-    } else if (this.lastDirection === 'down') {
-      offsetX = 0;
-      offsetY = 20;  // Closer to the player (was 30)
-    }
-    
-    this.carriedEdit.icon.x = this.player.x + offsetX;
-    this.carriedEdit.icon.y = this.player.y + offsetY;
-    
-    // Make sure the edit is always on top
-    this.carriedEdit.icon.setDepth(100);
-  }
-
-  private discardEdit() {
-    if (!this.carriedEdit) return;
+  private discardEdits() {
+    if (this.carriedEdits.length === 0) return;
     
     // Create a quick fade-out effect
     this.tweens.add({
-      targets: this.carriedEdit.icon,
+      targets: this.carriedEdits.map(edit => edit.icon),
       alpha: 0,
       duration: 300,
       onComplete: () => {
-        this.carriedEdit.icon.destroy();
-        this.carriedEdit = null;
+        this.carriedEdits.forEach(edit => edit.icon.destroy());
+        this.carriedEdits = [];
       }
     });
   }
 
-  private tryApplyEditToOrder(): boolean {
-    if (!this.carriedEdit) return false;
+  private tryApplyEditsToOrder(): boolean {
+    if (this.carriedEdits.length === 0) return false;
     
     console.log('Trying to apply edit to order');
     
@@ -843,20 +881,20 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private applyEditToOrder(order: Order) {
-    if (!this.carriedEdit) return;
+    if (this.carriedEdits.length === 0) return;
+    
+    // Get the first edit (FIFO - first in, first out)
+    const edit = this.carriedEdits[0];
     
     // Check if the order requires this edit type and it hasn't been applied yet
-    if (
-      order.types.includes(this.carriedEdit.type) && 
-      !order.completedEdits.includes(this.carriedEdit.type)
-    ) {
+    if (order.types.includes(edit.type) && !order.completedEdits.includes(edit.type)) {
       // Success! Apply the edit
-      order.completedEdits.push(this.carriedEdit.type);
+      order.completedEdits.push(edit.type);
       
       // Create a checkmark or visual indicator on the order
-      this.markEditAsApplied(order, this.carriedEdit.type);
+      this.markEditAsApplied(order, edit.type);
       
-      // Increment total edits applied (for free life spawning)
+      // Increment total edits applied (for unlocking stations)
       this.totalEditsApplied++;
       
       // Check if we should unlock a new station (every 5 edits)
@@ -876,14 +914,55 @@ export class Level1Scene extends Phaser.Scene {
       
       // Play success sound
       // this.sound.play('success');
+      
+      // Remove just this edit
+      this.removeFirstEdit();
+      
     } else {
-      // Wrong edit or already applied - just discard it
+      // Wrong edit type - show feedback but don't remove the edit
+      const errorMessage = this.add.text(
+        order.x, 
+        order.y - 40, 
+        'Wrong edit!', 
+        {
+          fontSize: '16px',
+          color: '#FF0000',
+          stroke: '#000000',
+          strokeThickness: 2
+        }
+      ).setOrigin(0.5).setDepth(110);
+      
+      // Fade out error message
+      this.tweens.add({
+        targets: errorMessage,
+        alpha: 0,
+        y: errorMessage.y - 20,
+        duration: 1000,
+        onComplete: () => errorMessage.destroy()
+      });
+      
       // Play failure sound
       // this.sound.play('failure');
     }
+  }
+  
+  // New method to remove just the first edit
+  private removeFirstEdit() {
+    if (this.carriedEdits.length === 0) return;
     
-    // Discard the edit regardless
-    this.discardEdit();
+    const editToRemove = this.carriedEdits.shift();
+    
+    // Create a quick fade-out effect
+    this.tweens.add({
+      targets: editToRemove.icon,
+      alpha: 0,
+      duration: 300,
+      onComplete: () => {
+        editToRemove.icon.destroy();
+        // Update positions of remaining edits
+        this.updateCarriedEditsPosition();
+      }
+    });
   }
 
   private markEditAsApplied(order: Order, editType: string) {
@@ -1071,9 +1150,16 @@ export class Level1Scene extends Phaser.Scene {
       // Shuffle the types to ensure randomness
       const shuffledTypes = [...stationTypes].sort(() => Math.random() - 0.5);
       
-      // Take the first numEdits types
-      for (let i = 0; i < numEdits; i++) {
-        selectedTypes.push(shuffledTypes[i % shuffledTypes.length]);
+      // Take the first numEdits types, without duplicates
+      for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
+        // Only add this type (no need to check as shuffle ensures uniqueness)
+        selectedTypes.push(shuffledTypes[i]);
+      }
+      
+      // If we couldn't get enough types (not enough unique stations), 
+      // reduce the number of edits to match available types
+      if (selectedTypes.length < numEdits) {
+        numEdits = selectedTypes.length;
       }
       
       console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
@@ -1271,7 +1357,7 @@ export class Level1Scene extends Phaser.Scene {
     this.ordersCompleted = 0;
     this.totalEditsApplied = 0;
     this.failedOrders = 0;
-    this.carriedEdit = null;
+    this.carriedEdits = [];
     
     // Reset difficulty settings
     this.orderSpeedMultiplier = 1.0;
@@ -1656,6 +1742,75 @@ export class Level1Scene extends Phaser.Scene {
         }
       }
     });
+  }
+
+  private updateCarriedEditsPosition() {
+    if (this.carriedEdits.length === 0) return;
+    
+    // Base position offset depending on direction
+    let baseOffsetX = 0;
+    let baseOffsetY = -25; 
+    
+    // Adjust based on player direction
+    if (this.lastDirection === 'left') {
+      baseOffsetX = -20;
+      baseOffsetY = -5;
+    } else if (this.lastDirection === 'right') {
+      baseOffsetX = 20;
+      baseOffsetY = -5;
+    } else if (this.lastDirection === 'up') {
+      baseOffsetX = 0;
+      baseOffsetY = -20;
+    } else if (this.lastDirection === 'down') {
+      baseOffsetX = 0;
+      baseOffsetY = 20;
+    }
+    
+    // Arrange edits in a small arc above the player
+    for (let i = 0; i < this.carriedEdits.length; i++) {
+      const edit = this.carriedEdits[i];
+      
+      // Horizontal spread based on how many edits we have
+      let offsetX = 0;
+      
+      // If multiple edits, spread them out
+      if (this.carriedEdits.length > 1) {
+        // Calculate spacing based on number of edits
+        const spacing = 20; // Space between each edit
+        const totalWidth = (this.carriedEdits.length - 1) * spacing;
+        offsetX = -totalWidth / 2 + i * spacing;
+      }
+      
+      // Set position
+      edit.icon.x = this.player.x + baseOffsetX + offsetX;
+      edit.icon.y = this.player.y + baseOffsetY;
+      
+      // First edit in the array (oldest) is slightly bigger and has a highlight to indicate it's next to be used
+      if (i === 0) {
+        edit.icon.setScale(1.2);
+        
+        // Add a subtle pulsing effect to the next-to-use edit
+        if (!this.tweens.isTweening(edit.icon)) {
+          this.tweens.add({
+            targets: edit.icon,
+            scale: { from: 1.2, to: 1.3 },
+            alpha: { from: 1, to: 0.8 },
+            ease: 'Sine.InOut',
+            duration: 500,
+            yoyo: true,
+            repeat: -1
+          });
+        }
+      } else {
+        edit.icon.setScale(1.0);
+        // Remove any existing tweens on non-first edits
+        this.tweens.killTweensOf(edit.icon);
+        edit.icon.setAlpha(1.0);
+      }
+    }
+    
+    // Make sure the edits are always on top
+    this.carriedEdits.forEach(edit => edit.icon.setDepth(100));
   }
 
   private updateOrderPositions(delta: number) {
