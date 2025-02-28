@@ -47,6 +47,7 @@ interface Order {
   width: number;
   height: number;
   icons?: Phaser.GameObjects.Text[]; // Add icons property
+  createdDuringPowerUp?: boolean; // Add createdDuringPowerUp property
 }
 
 interface Station {
@@ -992,9 +993,9 @@ export class Level1Scene extends Phaser.Scene {
         this.deactivatePowerUp();
       }
       
-      // Auto-complete any orders
+      // Auto-complete any existing orders that were created before power-up
       for (const order of this.orders) {
-        if (!order.isComplete) {
+        if (!order.isComplete && !order.createdDuringPowerUp) {
           // Get all edit types that haven't been completed yet
           const remainingEdits = order.types.filter(
             type => !order.completedEdits.includes(type)
@@ -1174,6 +1175,23 @@ export class Level1Scene extends Phaser.Scene {
       
       // Add to orders array
       this.orders.push(order);
+      
+      // If power up is active, auto-complete this order immediately
+      if (this.powerUpActive) {
+        order.createdDuringPowerUp = true;
+        // Get all edit types that need to be completed
+        const editsToApply = [...order.types];
+        
+        // Apply all edits at once
+        for (const editType of editsToApply) {
+          order.completedEdits.push(editType);
+          this.markEditAsApplied(order, editType);
+          this.totalEditsApplied++;
+        }
+        
+        // Complete the order
+        this.completeOrder(order);
+      }
       
       console.log(`Order created: ${order.id}`);
     } catch (error) {
@@ -1355,9 +1373,6 @@ export class Level1Scene extends Phaser.Scene {
     // Show countdown
     this.powerUpCountdownText.setText('30s');
     
-    // Apply power-up effects
-    this.conveyorSpeed = 0.1; // Slow down the conveyor belt
-    
     // Play activation sound
     if (this.sound && this.sound.add) {
       try {
@@ -1390,12 +1405,6 @@ export class Level1Scene extends Phaser.Scene {
     
     // Visual feedback
     this.setButtonColor(0xff0000); // Red for inactive
-    
-    // Reset conveyor speed to normal (with current difficulty)
-    this.conveyorSpeed = Math.min(
-      this.maxConveyorSpeed,
-      0.5 + (this.totalEditsApplied / 20) * 0.1
-    );
     
     // Play deactivation sound
     if (this.sound && this.sound.add) {
