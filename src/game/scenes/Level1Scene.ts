@@ -96,10 +96,12 @@ export class Level1Scene extends Phaser.Scene {
   private powerUpAvailable: boolean = false;
   private powerUpCountdownText!: Phaser.GameObjects.Text;
   private conveyorBelt!: Phaser.GameObjects.Rectangle;
-  private lastDirection: 'up' | 'down' | 'left' | 'right' = 'down';
-  private powerUpSwitchBounds!: Phaser.Geom.Rectangle;
+  private lastDirection: string = 'down';
   private lastMoving: boolean = false;
-  private currentFrame = 1;
+  private animationTime: number = 0;
+  private currentAnimationFrame: number = 0;
+  private animationFrameDuration: number = 125; // 8 frames per second = 125ms per frame
+  private powerUpSwitchBounds!: Phaser.Geom.Rectangle;
   private lastFrameTime = 0;
 
   constructor() {
@@ -188,76 +190,20 @@ export class Level1Scene extends Phaser.Scene {
         }
       });
       
-      // Log all available texture keys
+      // Log all available texture keys to verify they're loaded properly
       const textureKeys = this.textures.getTextureKeys();
-      console.log(`Available textures before creating animations (${textureKeys.length}):`, textureKeys);
+      console.log(`Available textures (${textureKeys.length} total)`);
       
-      directions.forEach(direction => {
-        // Create idle animation
-        const idleKey = `idle-${direction}`;
-        
-        // Check if all frames exist before creating animation
-        const idleFrameNames = [];
-        let allIdleFramesExist = true;
-        
-        for (let i = 1; i <= 6; i++) {
-          const frameName = `idle ${direction} ${i}`;
-          if (this.textures.exists(frameName)) {
-            idleFrameNames.push({ key: frameName });
-          } else {
-            console.error(`Missing texture: ${frameName}`);
-            allIdleFramesExist = false;
-          }
-        }
-        
-        if (allIdleFramesExist) {
-          this.anims.create({
-            key: idleKey,
-            frames: idleFrameNames,
-            frameRate: 8,
-            repeat: -1
-          });
-          console.log(`Created idle animation: ${idleKey} with ${idleFrameNames.length} frames`);
-        } else {
-          console.error(`Could not create ${idleKey} animation - some frames are missing`);
-        }
-
-        // Create walk animation
-        const walkKey = `walk-${direction}`;
-        
-        // Check if all frames exist before creating animation
-        const walkFrameNames = [];
-        let allWalkFramesExist = true;
-        
-        for (let i = 1; i <= 6; i++) {
-          const frameName = `walk ${direction} ${i}`;
-          if (this.textures.exists(frameName)) {
-            walkFrameNames.push({ key: frameName });
-          } else {
-            console.error(`Missing texture: ${frameName}`);
-            allWalkFramesExist = false;
-          }
-        }
-        
-        if (allWalkFramesExist) {
-          this.anims.create({
-            key: walkKey,
-            frames: walkFrameNames,
-            frameRate: 8,
-            repeat: -1
-          });
-          console.log(`Created walk animation: ${walkKey} with ${walkFrameNames.length} frames`);
-        } else {
-          console.error(`Could not create ${walkKey} animation - some frames are missing`);
-        }
+      // Log the first few textures to confirm they're named correctly
+      textureKeys.slice(0, 20).forEach(key => {
+        console.log(`- Texture: ${key}`);
       });
       
-      // Log all available animations for debugging
-      const animationKeys = this.anims.getAnimationNames();
-      console.log('Available animations after creation:', animationKeys);
+      // We're no longer creating animations since we're manually cycling through textures
+      console.log('Using manual texture animation instead of Phaser animations');
       
     } catch (error) {
-      console.error('Error creating player animations:', error);
+      console.error('Error in animation setup:', error);
     }
   }
 
@@ -299,8 +245,8 @@ export class Level1Scene extends Phaser.Scene {
         this.player.setScale(2.7);
         this.lastDirection = 'down'; // Set initial direction
         this.lastMoving = false;
-        this.currentFrame = 1;
-        this.lastFrameTime = 0;
+        this.currentAnimationFrame = 1;
+        this.animationTime = 0;
         
         // Log available textures for debugging
         const textureKeys = this.textures.getTextureKeys();
@@ -657,46 +603,10 @@ export class Level1Scene extends Phaser.Scene {
       if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
         this.lastDirection = direction;
         this.lastMoving = isMoving;
-        
-        // Play animation based on direction and movement state
-        if (this.player) {
-          const prefix = isMoving ? 'walk' : 'idle';
-          const animKey = `${prefix}-${direction}`;
-          
-          console.log(`Attempting to play animation: ${animKey}, isMoving: ${isMoving}, direction: ${direction}`);
-          
-          // Check if animation exists before playing
-          if (this.anims.exists(animKey)) {
-            console.log(`Playing animation: ${animKey}`);
-            this.player.anims.play(animKey, true);
-          } else {
-            console.warn(`Animation not found: ${animKey}, falling back to texture`);
-            // Use fallback texture
-            const textureKey = `${prefix} ${direction} 1`;
-            if (this.textures.exists(textureKey)) {
-              console.log(`Setting static texture: ${textureKey}`);
-              this.player.setTexture(textureKey);
-            } else {
-              console.error(`Texture not found: ${textureKey}`);
-              // Ultimate fallback - use any available sprite for this direction
-              const fallbackIdle = `idle ${direction} 1`;
-              const fallbackWalk = `walk ${direction} 1`;
-              
-              if (this.textures.exists(fallbackIdle)) {
-                this.player.setTexture(fallbackIdle);
-                console.log(`Using fallback texture: ${fallbackIdle}`);
-              } else if (this.textures.exists(fallbackWalk)) {
-                this.player.setTexture(fallbackWalk);
-                console.log(`Using fallback texture: ${fallbackWalk}`);
-              } else {
-                // Last resort - use fallback texture
-                this.player.setTexture('game/Sprite Images/fallback.png');
-                console.log(`Using generic fallback texture`);
-              }
-            }
-          }
-        }
       }
+
+      // Update player animation manually
+      this.updatePlayerAnimation(time, delta);
 
       // Update current carrying edit position
       if (this.carriedEdit) {
@@ -775,17 +685,40 @@ export class Level1Scene extends Phaser.Scene {
     return Phaser.Geom.Rectangle.Overlaps(playerBounds, this.powerUpSwitchBounds);
   }
 
-  // Add missing methods for player animation and free life handling
-  private updatePlayerAnimation(time: number) {
+  private updatePlayerAnimation(time: number, delta: number) {
     if (!this.player) return;
     
-    // Animation rate: 8 frames per second = 125ms per frame
-    const frameDelay = 125; 
+    // Add time to the animation timer
+    this.animationTime += delta;
     
-    if (time - this.lastFrameTime > frameDelay) {
-      // Advance to next frame (looping from 6 back to 1)
-      this.currentFrame = this.currentFrame >= 6 ? 1 : this.currentFrame + 1;
-      this.lastFrameTime = time;
+    // When we reach the frame duration, advance to the next frame
+    if (this.animationTime >= this.animationFrameDuration) {
+      // Reset the timer
+      this.animationTime = 0;
+      
+      // Advance to the next frame
+      this.currentAnimationFrame++;
+      if (this.currentAnimationFrame > 6) {
+        this.currentAnimationFrame = 1;
+      }
+      
+      // Get the current animation prefix (idle or walk)
+      const prefix = this.lastMoving ? 'walk' : 'idle';
+      
+      // Set the texture based on the current frame
+      const textureKey = `${prefix} ${this.lastDirection} ${this.currentAnimationFrame}`;
+      
+      if (this.textures.exists(textureKey)) {
+        this.player.setTexture(textureKey);
+        console.log(`Manual animation: ${textureKey}`);
+      } else {
+        console.warn(`Texture not found: ${textureKey}, using fallback`);
+        // Fall back to frame 1
+        const fallbackKey = `${prefix} ${this.lastDirection} 1`;
+        if (this.textures.exists(fallbackKey)) {
+          this.player.setTexture(fallbackKey);
+        }
+      }
     }
   }
 
