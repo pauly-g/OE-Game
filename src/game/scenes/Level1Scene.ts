@@ -567,6 +567,17 @@ export class Level1Scene extends Phaser.Scene {
       if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
         this.lastDirection = direction;
         this.lastMoving = isMoving;
+        
+        // Immediately update the player texture for responsive movement
+        if (this.player) {
+          const prefix = isMoving ? 'walk' : 'idle';
+          const textureKey = `${prefix} ${direction} ${this.currentFrame || 1}`;
+          
+          if (this.textures.exists(textureKey)) {
+            this.player.setTexture(textureKey);
+            console.log(`Immediately setting player texture to: ${textureKey}`);
+          }
+        }
       }
 
       // Update the animation regardless of movement changes
