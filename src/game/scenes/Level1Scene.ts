@@ -156,6 +156,10 @@ export class Level1Scene extends Phaser.Scene {
           console.error(`Failed to load background: ${error.message}`);
         });
 
+      // Load power-up and cheat sounds
+      this.sound.add('powerup');
+      this.sound.add('powerdown');
+      
       gameDebugger.info('Level1Scene preload completed');
     } catch (error) {
       console.error('Error in preload:', error);
@@ -282,7 +286,8 @@ export class Level1Scene extends Phaser.Scene {
       this.cursors = this.input.keyboard.createCursorKeys();
       this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-
+      this.lastSpaceState = false;
+      
       // Create UI elements
       this.createUI(width, height);
 
@@ -489,7 +494,7 @@ export class Level1Scene extends Phaser.Scene {
 
       // Check for 'd' key to activate powerup (cheat)
       if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
-        console.log('Power-up cheat activated with D key');
+        console.log('Cheat code activated: Power-Up!');
         this.activatePowerUpSwitch();
       }
 
@@ -947,15 +952,17 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private updateLivesDisplay() {
-    // Clear existing hearts
-    this.livesContainer.removeAll();
+    // Clear any existing heart icons
+    this.livesContainer.removeAll(true);
     
-    // Only show the actual number of hearts (not X's)
+    // Add heart icons based on current lives
     for (let i = 0; i < this.lives; i++) {
-      const x = i * 35; // Increased spacing to avoid overlap
-      const heart = this.add.text(x, 0, '❤️', {
-        fontSize: '24px'
-      });
+      const heart = this.add.text(
+        i * 30, // Space hearts horizontally
+        0,
+        '❤️',
+        { fontSize: '24px' }
+      );
       this.livesContainer.add(heart);
     }
   }
@@ -1309,7 +1316,7 @@ export class Level1Scene extends Phaser.Scene {
     const completionEmoji = this.add.text(
       order.container.x,
       order.container.y - 40,
-      '❤️',
+      '✅',
       { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
     ).setOrigin(0.5);
     
@@ -1349,7 +1356,7 @@ export class Level1Scene extends Phaser.Scene {
     this.powerUpCountdownText.setText('30s');
     
     // Apply power-up effects
-    this.conveyorSpeed = 0.1; // Slow down the conveyor belt dramatically
+    this.conveyorSpeed = 0.1; // Slow down the conveyor belt
     
     // Play activation sound
     if (this.sound && this.sound.add) {
