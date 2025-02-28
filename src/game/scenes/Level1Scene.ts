@@ -77,6 +77,9 @@ export class Level1Scene extends Phaser.Scene {
   private lastSpaceState: boolean = false;
   private orderGenerationTimer: Phaser.Time.TimerEvent | null = null;
   private nextOrderDelay: number = 5000; // Longer initial delay (was 3000)
+  private hamishSprite: Phaser.GameObjects.Sprite;
+  private kirilSprite: Phaser.GameObjects.Sprite;
+  private oeLogoSprite: Phaser.GameObjects.Sprite; // Add oeLogoSprite property
   private orderSpeedMultiplier: number = 1.0;
   private maxOrderSpeedMultiplier: number = 2.0;
   private conveyorSpeed: number = 0.5; // Much slower initial speed (was 2)
@@ -160,6 +163,11 @@ export class Level1Scene extends Phaser.Scene {
       // Load power-up and cheat sounds
       this.sound.add('powerup');
       this.sound.add('powerdown');
+      
+      // Load Hamish and Kiril images
+      this.load.image('hamish', 'game/Hamish and Kiril/Hamish.png');
+      this.load.image('kiril', 'game/Hamish and Kiril/Kiril.png');
+      this.load.image('oelogo', 'game/Hamish and Kiril/OELogoHiRes.png');
       
       gameDebugger.info('Level1Scene preload completed');
     } catch (error) {
@@ -496,7 +504,7 @@ export class Level1Scene extends Phaser.Scene {
       // Check for 'd' key to activate powerup (cheat)
       if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
         console.log('Cheat code activated: Power-Up!');
-        this.activatePowerUpSwitch();
+        this.activatePowerUpCheat();
       }
 
       // Process power-up status
@@ -1362,35 +1370,95 @@ export class Level1Scene extends Phaser.Scene {
     
     console.log('Activating Power-Up!');
     
-    // Set button state
-    this.powerUpActive = true;
-    this.powerUpAvailable = false;
-    this.powerUpTimer = this.powerUpDuration; // 30 seconds of power-up time
-    
-    // Visual feedback
-    this.setButtonColor(0x0000ff); // Blue for active
-    
-    // Show countdown
-    this.powerUpCountdownText.setText('30s');
-    
-    // Play activation sound
-    if (this.sound && this.sound.add) {
-      try {
-        const activateSound = this.sound.add('powerup', { volume: 0.7 });
-        activateSound.play();
-      } catch (error) {
-        console.error('Could not play power-up sound:', error);
+    try {
+      // Set button state
+      this.powerUpActive = true;
+      this.powerUpAvailable = false;
+      this.powerUpTimer = this.powerUpDuration; // 30 seconds of power-up time
+      
+      // Visual feedback
+      this.setButtonColor(0x0000ff); // Blue for active
+      
+      // Show countdown
+      this.powerUpCountdownText.setText('30s');
+      
+      // Show Hamish and Kiril images
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      
+      // Create Hamish sprite at bottom right (off-screen)
+      this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
+      this.hamishSprite.setScale(0.25); // Make it smaller
+      this.hamishSprite.setOrigin(1, 1); // Bottom right corner
+      this.hamishSprite.setDepth(10);
+      
+      // Create Kiril sprite at bottom left (off-screen)
+      this.kirilSprite = this.add.sprite(-100, height, 'kiril');
+      this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
+      this.kirilSprite.setOrigin(0, 1); // Bottom left corner
+      this.kirilSprite.setDepth(10);
+      
+      // Add OELogo in the middle
+      const centerX = width / 2;
+      const centerY = height;
+      
+      // Create the logo sprite (starts below the screen)
+      this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
+      this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
+      this.oeLogoSprite.setOrigin(0.5, 0.5);
+      this.oeLogoSprite.setDepth(5); // Below Hamish and Kiril but above other elements
+      
+      // First tween: Slide up from below
+      this.tweens.add({
+        targets: this.oeLogoSprite,
+        y: height - 200, // Position it higher to be clearly visible
+        duration: 800,
+        ease: 'Back.out',
+        onComplete: () => {
+          // Start bouncing animation after sliding up
+          this.startLogoBouncingAnimation();
+        }
+      });
+      
+      // Play activation sound
+      if (this.sound && this.sound.add) {
+        try {
+          const activateSound = this.sound.add('powerup', { volume: 0.7 });
+          activateSound.play();
+        } catch (error) {
+          console.error('Could not play power-up sound:', error);
+        }
       }
+      
+      // Animate the lever being pulled
+      this.tweens.add({
+        targets: this.powerUpLever,
+        y: 10, // Move lever down
+        angle: 45, // Rotate lever
+        duration: 300,
+        ease: 'Bounce.Out'
+      });
+      
+      // Animate Hamish and Kiril sliding in
+      this.tweens.add({
+        targets: this.hamishSprite,
+        x: width,
+        duration: 500,
+        ease: 'Back.out'
+      });
+      
+      this.tweens.add({
+        targets: this.kirilSprite,
+        x: 0,
+        duration: 500,
+        ease: 'Back.out'
+      });
+    } catch (error) {
+      console.error('Error in activatePowerUpSwitch:', error);
+      // Reset state in case of error
+      this.powerUpActive = false;
+      this.powerUpAvailable = true;
     }
-    
-    // Animate the lever being pulled
-    this.tweens.add({
-      targets: this.powerUpLever,
-      y: 10, // Move lever down
-      angle: 45, // Rotate lever
-      duration: 300,
-      ease: 'Bounce.Out'
-    });
   }
   
   private deactivatePowerUp() {
@@ -1405,6 +1473,44 @@ export class Level1Scene extends Phaser.Scene {
     
     // Visual feedback
     this.setButtonColor(0xff0000); // Red for inactive
+    
+    // Animate Hamish and Kiril sliding out
+    if (this.hamishSprite && this.hamishSprite.active) {
+      this.tweens.add({
+        targets: this.hamishSprite,
+        x: this.cameras.main.width + 100,
+        duration: 500,
+        ease: 'Sine.Out',
+        onComplete: () => {
+          if (this.hamishSprite) this.hamishSprite.destroy();
+        }
+      });
+    }
+    
+    if (this.kirilSprite && this.kirilSprite.active) {
+      this.tweens.add({
+        targets: this.kirilSprite,
+        x: -100,
+        duration: 500,
+        ease: 'Sine.Out',
+        onComplete: () => {
+          if (this.kirilSprite) this.kirilSprite.destroy();
+        }
+      });
+    }
+    
+    // Animate the OELogo sliding out
+    if (this.oeLogoSprite && this.oeLogoSprite.active) {
+      this.tweens.add({
+        targets: this.oeLogoSprite,
+        y: this.cameras.main.height + 100,
+        duration: 500,
+        ease: 'Sine.Out',
+        onComplete: () => {
+          if (this.oeLogoSprite) this.oeLogoSprite.destroy();
+        }
+      });
+    }
     
     // Play deactivation sound
     if (this.sound && this.sound.add) {
@@ -1426,6 +1532,149 @@ export class Level1Scene extends Phaser.Scene {
     });
   }
 
+  private activatePowerUpCheat() {
+    console.log('Activating Power-Up Cheat!');
+    
+    // Set button state
+    this.powerUpActive = true;
+    this.powerUpAvailable = false;
+    this.powerUpTimer = this.powerUpDuration; // 30 seconds of power-up time
+    
+    // Visual feedback
+    this.setButtonColor(0x0000ff); // Blue for active
+    
+    // Show countdown
+    this.powerUpCountdownText.setText('30s');
+    
+    // Show Hamish and Kiril images
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    // Create Hamish sprite at bottom right (off-screen)
+    this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
+    this.hamishSprite.setScale(0.25); // Make it smaller
+    this.hamishSprite.setOrigin(1, 1); // Bottom right corner
+    this.hamishSprite.setDepth(10);
+    
+    // Create Kiril sprite at bottom left (off-screen)
+    this.kirilSprite = this.add.sprite(-100, height, 'kiril');
+    this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
+    this.kirilSprite.setOrigin(0, 1); // Bottom left corner
+    this.kirilSprite.setDepth(10);
+    
+    // Animate them sliding in
+    this.tweens.add({
+      targets: this.hamishSprite,
+      x: width,
+      duration: 500,
+      ease: 'Back.out'
+    });
+    
+    this.tweens.add({
+      targets: this.kirilSprite,
+      x: 0,
+      duration: 500,
+      ease: 'Back.out'
+    });
+    
+    // Add OELogo in the middle
+    const centerX = width / 2;
+    const centerY = height;
+    
+    // Create the logo sprite (starts below the screen)
+    this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
+    this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
+    this.oeLogoSprite.setOrigin(0.5, 0.5);
+    this.oeLogoSprite.setDepth(5); // Below Hamish and Kiril but above other elements
+    
+    // First tween: Slide up from below
+    this.tweens.add({
+      targets: this.oeLogoSprite,
+      y: height - 200, // Position it higher to be clearly visible
+      duration: 800,
+      ease: 'Back.out',
+      onComplete: () => {
+        // Start bouncing animation after sliding up
+        this.startLogoBouncingAnimation();
+      }
+    });
+    
+    // Play activation sound
+    if (this.sound && this.sound.add) {
+      try {
+        const activateSound = this.sound.add('powerup', { volume: 0.7 });
+        activateSound.play();
+      } catch (error) {
+        console.error('Could not play power-up sound:', error);
+      }
+    }
+    
+    // Animate the lever being pulled
+    this.tweens.add({
+      targets: this.powerUpLever,
+      y: 10, // Move lever down
+      angle: 45, // Rotate lever
+      duration: 300,
+      ease: 'Bounce.Out'
+    });
+  }
+
+  private startLogoBouncingAnimation() {
+    console.log('Starting logo wiggle animation');
+    
+    // Safety check
+    if (!this.oeLogoSprite || !this.oeLogoSprite.active) {
+      console.error('OE Logo sprite not found or not active');
+      return;
+    }
+    
+    try {
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      
+      console.log(`Screen dimensions: ${width}x${height}`);
+      console.log(`Logo current position: ${this.oeLogoSprite.x}, ${this.oeLogoSprite.y}`);
+      
+      // Set up a timer to wiggle every 5 seconds
+      this.time.addEvent({
+        delay: 10000, // 10 seconds
+        loop: true,
+        callback: () => {
+          // Only wiggle if the power-up is still active
+          if (this.powerUpActive && this.oeLogoSprite && this.oeLogoSprite.active) {
+            this.wiggleLogo();
+          }
+        }
+      });
+      
+      // Do an initial wiggle right away
+      this.wiggleLogo();
+      
+      console.log('Wiggle timer started successfully');
+    } catch (error) {
+      console.error('Error in startLogoBouncingAnimation:', error);
+    }
+  }
+  
+  private wiggleLogo() {
+    if (!this.oeLogoSprite || !this.oeLogoSprite.active) return;
+    
+    // Create a short wiggle animation
+    this.tweens.add({
+      targets: this.oeLogoSprite,
+      angle: { from: -2, to: 2 },
+      duration: 100,
+      yoyo: true,
+      repeat: 3,
+      ease: 'Sine.InOut',
+      onComplete: () => {
+        // Reset rotation at the end
+        if (this.oeLogoSprite && this.oeLogoSprite.active) {
+          this.oeLogoSprite.setAngle(0);
+        }
+      }
+    });
+  }
 
   private updateOrderPositions(delta: number) {
     // Move orders along conveyor belt
