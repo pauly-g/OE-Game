@@ -61,48 +61,45 @@ export class GameOverScene extends Phaser.Scene {
 
       // Create game over text
       this.add.text(width * 0.5, height * 0.3, 'Game Over', {
-        fontSize: '64px',
+        fontSize: '72px',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 6,
+        fontStyle: 'bold',
+        shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 8 }
+      }).setOrigin(0.5).setDepth(1);
+
+      // Display score with enhanced styling
+      this.add.text(width * 0.5, height * 0.45, `Score: ${this.score}`, {
+        fontSize: '48px',
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 4,
-        fontStyle: 'bold'
+        shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 8 }
       }).setOrigin(0.5).setDepth(1);
 
-      // Display score
-      this.add.text(width * 0.5, height * 0.45, `Score: ${this.score}`, {
-        fontSize: '32px',
+      // Add spacebar restart prompt with enhanced styling and visual cue
+      const restartText = this.add.text(width * 0.5, height * 0.65, 'Press SPACE to Restart', {
+        fontSize: '36px',
         color: '#ffffff',
         stroke: '#000000',
-        strokeThickness: 3
-      }).setOrigin(0.5).setDepth(1);
-
-      // Create restart button
-      const restartButton = this.add.text(width * 0.5, height * 0.6, 'Click to Restart', {
-        fontSize: '32px',
-        color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 3,
+        strokeThickness: 4,
         fontStyle: 'bold',
         backgroundColor: '#00000080',
-        padding: { x: 20, y: 10 }
-      })
-        .setOrigin(0.5)
-        .setDepth(1)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerover', () => restartButton.setColor('#ffff00'))
-        .on('pointerout', () => restartButton.setColor('#ffffff'))
-        .on('pointerdown', () => {
-          gameDebugger.info('Restart button clicked');
-          this.scene.start('Level1Scene', { reset: true });
-        });
-
-      // Add text prompt for spacebar restart
-      this.add.text(width * 0.5, height * 0.7, 'Press SPACE to Restart', {
-        fontSize: '24px',
-        color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 2
+        padding: { x: 25, y: 15 },
+        shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 8 }
       }).setOrigin(0.5).setDepth(1);
+      
+      // Add a pulsing animation to the spacebar text to draw attention
+      this.tweens.add({
+        targets: restartText,
+        scale: { from: 1.0, to: 1.1 },
+        alpha: { from: 1, to: 0.8 },
+        duration: 800,
+        ease: 'Sine.InOut',
+        yoyo: true,
+        repeat: -1
+      });
 
       gameDebugger.info('GameOverScene create completed');
     } catch (error) {
