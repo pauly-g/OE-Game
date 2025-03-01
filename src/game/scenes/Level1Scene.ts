@@ -613,13 +613,13 @@ export class Level1Scene extends Phaser.Scene {
             
             // Apply appropriate displacement with increased push distance
             if (minDist === distToLeft) {
-              this.player!.x = station.container.x - 75; // Push player further left
+              this.player!.x = station.container.x - 80; // Increased push distance to 80
             } else if (minDist === distToRight) {
-              this.player!.x = station.container.x + 75; // Push player further right
+              this.player!.x = station.container.x + 80; // Increased push distance to 80
             } else if (minDist === distToTop) {
-              this.player!.y = station.container.y - 75; // Push player further up
+              this.player!.y = station.container.y - 80; // Increased push distance to 80
             } else if (minDist === distToBottom) {
-              this.player!.y = station.container.y + 75; // Push player further down
+              this.player!.y = station.container.y + 80; // Increased push distance to 80
               
               // Add additional check for bottom collision to prevent sliding
               if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
@@ -627,6 +627,17 @@ export class Level1Scene extends Phaser.Scene {
                 // push them slightly further down to avoid the collision zone
                 this.player!.y += buffer;
               }
+            }
+            
+            // Add extra push when trying to move directly into a station
+            if (minDist === distToLeft && this.cursors.right.isDown) {
+              this.player!.x -= buffer; // Push little extra left when trying to move right
+            } else if (minDist === distToRight && this.cursors.left.isDown) {
+              this.player!.x += buffer; // Push little extra right when trying to move left
+            } else if (minDist === distToTop && this.cursors.down.isDown) {
+              this.player!.y -= buffer; // Push little extra up when trying to move down
+            } else if (minDist === distToBottom && this.cursors.up.isDown) {
+              this.player!.y += buffer; // Push little extra down when trying to move up
             }
           }
         }
@@ -1823,6 +1834,7 @@ export class Level1Scene extends Phaser.Scene {
       targets: notification,
       y: notification.y - 50, // Float upward
       alpha: { from: 1, to: 0 },
+      scale: { from: 1, to: 1.2 },
       duration: 1500,
       ease: 'Sine.Out',
       onComplete: () => notification.destroy()
@@ -1964,13 +1976,13 @@ export class Level1Scene extends Phaser.Scene {
           
           // Apply appropriate displacement with increased push distance
           if (minDist === distToLeft) {
-            this.player!.x = station.container.x - 75; // Push player further left
+            this.player!.x = station.container.x - 80; // Increased push distance to 80
           } else if (minDist === distToRight) {
-            this.player!.x = station.container.x + 75; // Push player further right
+            this.player!.x = station.container.x + 80; // Increased push distance to 80
           } else if (minDist === distToTop) {
-            this.player!.y = station.container.y - 75; // Push player further up
+            this.player!.y = station.container.y - 80; // Increased push distance to 80
           } else if (minDist === distToBottom) {
-            this.player!.y = station.container.y + 75; // Push player further down
+            this.player!.y = station.container.y + 80; // Increased push distance to 80
             
             // Add additional check for bottom collision to prevent sliding
             if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
@@ -1978,6 +1990,17 @@ export class Level1Scene extends Phaser.Scene {
               // push them slightly further down to avoid the collision zone
               this.player!.y += buffer;
             }
+          }
+          
+          // Add extra push when trying to move directly into a station
+          if (minDist === distToLeft && this.cursors.right.isDown) {
+            this.player!.x -= buffer; // Push little extra left when trying to move right
+          } else if (minDist === distToRight && this.cursors.left.isDown) {
+            this.player!.x += buffer; // Push little extra right when trying to move left
+          } else if (minDist === distToTop && this.cursors.down.isDown) {
+            this.player!.y -= buffer; // Push little extra up when trying to move down
+          } else if (minDist === distToBottom && this.cursors.up.isDown) {
+            this.player!.y += buffer; // Push little extra down when trying to move up
           }
         }
       }
