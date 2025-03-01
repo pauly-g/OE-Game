@@ -1369,8 +1369,8 @@ export class Level1Scene extends Phaser.Scene {
       this.tweens.add({
         targets: this.oeLogoSprite,
         y: this.cameras.main.height + 100,
-        duration: 500,
-        ease: 'Sine.Out',
+        duration: 800,
+        ease: 'Back.in',
         onComplete: () => {
           if (this.oeLogoSprite) this.oeLogoSprite.destroy();
         }
