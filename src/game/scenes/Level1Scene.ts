@@ -109,6 +109,8 @@ export class Level1Scene extends Phaser.Scene {
   private buttonFlashTimer: number = 0;
   private buttonFlashInterval: number = 1000; // 1 second interval
   private buttonFlashState: boolean = false;
+  private playerOnButton: boolean = false;
+  private warningShowing: boolean = false;
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -1706,19 +1708,45 @@ export class Level1Scene extends Phaser.Scene {
       playerBounds.height * 0.2 // Just the feet
     );
     
-    // If player's feet overlap with button and power-up is not available
+    // If player's feet overlap with button
     const isOverlapping = Phaser.Geom.Rectangle.Overlaps(playerFeetBounds, buttonBounds);
     
-    // Only change button appearance if power-up is NOT available
-    if (isOverlapping && !this.powerUpAvailable) {
-      // Set button to pressed state
-      this.powerUpButtonSprite.setTexture('button-pressed');
-    } else if (!this.powerUpActive && !this.powerUpAvailable) { 
-      // Reset to idle only if not in active state and power-up is not available
-      this.powerUpButtonSprite.setTexture('button-idle');
+    // Track whether the player has just entered the button area
+    const wasOverlapping = this.playerOnButton;
+    this.playerOnButton = isOverlapping;
+    
+    // First case: Player just stepped on the button AND power-up is available
+    if (isOverlapping && !wasOverlapping && this.powerUpAvailable && !this.powerUpActive) {
+      console.log("Player stepping on button, power-up available - activating!");
+      // Activate the power-up
+      this.handlePowerUpButtonClick();
+      return;
     }
     
-    // Don't override flashing animation when power-up is available
+    // Visual feedback based on power-up state
+    if (isOverlapping) {
+      // Set button to pressed state regardless of power-up availability
+      this.powerUpButtonSprite.setTexture('button-pressed');
+      
+      // Only show warning if power-up is not available and not active
+      if (!this.powerUpAvailable && !this.powerUpActive && !this.warningShowing) {
+        this.warningShowing = true;
+        this.showPowerUpWarning('Power-up not ready!');
+        
+        // Reset warning flag after a short delay
+        this.time.delayedCall(1000, () => {
+          this.warningShowing = false;
+        });
+      }
+    } else if (!this.powerUpActive) { 
+      // Reset to idle or flashing state based on availability
+      if (this.powerUpAvailable) {
+        // Don't reset texture here to allow flashing animation to continue
+      } else {
+        // Not available, so use idle texture
+        this.powerUpButtonSprite.setTexture('button-idle');
+      }
+    }
   }
 
   private updateButtonFlashing(delta: number) {
