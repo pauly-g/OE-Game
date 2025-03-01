@@ -1046,47 +1046,54 @@ export class Level1Scene extends Phaser.Scene {
     if (index === -1) return;
     
     // Create a checkmark to show this edit has been applied
-    const checkmark = this.add.text(0, 0, '✓', {
+    const checkmark = this.add.text(0, -15, '✓', {
       fontSize: '24px',
       color: '#00ff00',
       stroke: '#000000',
       strokeThickness: 2
     });
     
-    // Position based on layout (horizontal or grid)
-    if (order.types.length <= 3) {
-      // Horizontal layout
-      if (order.types.length === 1) {
-        // Single icon centered
-        checkmark.x = 0;
-      } else {
-        // Multiple icons spaced evenly
-        const totalSpace = 80; // Total space to distribute icons
-        const spacing = totalSpace / (order.types.length - 1);
-        checkmark.x = -totalSpace/2 + index * spacing;
-        checkmark.y = 0; // Centered vertically
-      }
+    // Get the corresponding icon for positioning if available
+    if (order.icons && order.icons[index]) {
+      // Position the checkmark directly on top of the icon
+      checkmark.x = order.icons[index].x;
+      checkmark.y = order.icons[index].y - 15; // Position slightly above the icon
     } else {
-      // Grid layout
-      const row = Math.floor(index / 2);
-      const col = index % 2;
-      const spacing = 40;
-      
-      // Calculate positions to center the grid
-      // For first row (0, 1, 2)
-      if (row === 0) {
-        checkmark.x = (col - 1) * spacing; // -spacing, 0, +spacing
-      } else {
-        // For second row (centers 1 or 2 items)
-        const itemsInLastRow = order.types.length - 3;
-        if (itemsInLastRow === 1) {
-          checkmark.x = 0; // Center the single item
+      // Position based on layout (horizontal or grid)
+      if (order.types.length <= 3) {
+        // Horizontal layout
+        if (order.types.length === 1) {
+          // Single icon centered
+          checkmark.x = 0;
         } else {
-          checkmark.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
+          // Multiple icons spaced evenly
+          const totalSpace = 80; // Total space to distribute icons
+          const spacing = totalSpace / (order.types.length - 1);
+          checkmark.x = -totalSpace/2 + index * spacing;
+          checkmark.y = 0; // Centered vertically
         }
+      } else {
+        // Grid layout
+        const row = Math.floor(index / 2);
+        const col = index % 2;
+        const spacing = 40;
+        
+        // Calculate positions to center the grid
+        // For first row (0, 1, 2)
+        if (row === 0) {
+          checkmark.x = (col - 1) * spacing; // -spacing, 0, +spacing
+        } else {
+          // For second row (centers 1 or 2 items)
+          const itemsInLastRow = order.types.length - 3;
+          if (itemsInLastRow === 1) {
+            checkmark.x = 0; // Center the single item
+          } else {
+            checkmark.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
+          }
+        }
+        
+        checkmark.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
       }
-      
-      checkmark.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
     }
     
     // Add to container
@@ -2280,7 +2287,7 @@ export class Level1Scene extends Phaser.Scene {
         nextStation.container.y - 50,
         '⭐',
         { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
-      ).setOrigin(0.5).setDepth(100);
+      ).setOrigin(0.5);
       
       // Animate the celebration emoji
       this.tweens.add({
