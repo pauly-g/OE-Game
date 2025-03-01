@@ -66,6 +66,7 @@ export class Level1Scene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private dKey!: Phaser.Input.Keyboard.Key;
+  private cKey!: Phaser.Input.Keyboard.Key;
   private playerSpeed: number = 8;
   private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
@@ -100,10 +101,13 @@ export class Level1Scene extends Phaser.Scene {
   private lastDirection: string = 'down';
   private lastMoving: boolean = false;
   private animationTime: number = 0;
-  private currentAnimationFrame: number = 0;
+  private currentAnimationFrame: number = 1;
   private animationFrameDuration: number = 125; // 8 frames per second = 125ms per frame
   private powerUpSwitchBounds!: Phaser.Geom.Rectangle;
   private lastFrameTime = 0;
+  private buttonFlashTimer: number = 0;
+  private buttonFlashInterval: number = 1000; // 1 second interval
+  private buttonFlashState: boolean = false;
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -171,6 +175,12 @@ export class Level1Scene extends Phaser.Scene {
       this.load.image('hamish', 'game/Hamish and Kiril/Hamish.png');
       this.load.image('kiril', 'game/Hamish and Kiril/Kiril.png');
       this.load.image('oelogo', 'game/Hamish and Kiril/OELogoHiRes.png');
+      
+      // Load power-up button images
+      this.load.image('button-idle', 'game/Button/button.png');
+      this.load.image('button-pressed', 'game/Button/button pressed.png');
+      this.load.image('button-active', 'game/Button/button-active.png');
+      this.load.image('button-flash', 'game/Button/Button-flash.png');
       
       gameDebugger.info('Level1Scene preload completed');
     } catch (error) {
@@ -271,6 +281,7 @@ export class Level1Scene extends Phaser.Scene {
       this.cursors = this.input.keyboard.createCursorKeys();
       this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+      this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
       this.lastSpaceState = false;
       
       // Create UI elements
@@ -316,57 +327,41 @@ export class Level1Scene extends Phaser.Scene {
       strokeThickness: 3
     }).setOrigin(0.5).setVisible(false);
 
-    // Create power-up switch in middle of screen
-    this.createPowerUpSwitch(width * 0.9, height * 0.5);
+    // Create power-up button (positioned to the right side of the screen)
+    const buttonX = width * 0.76; // 76% from the left (right side)
+    const buttonY = height * 0.52; // 52% from the top (middle-ish)
+    this.createPowerUpSwitch(buttonX, buttonY);
   }
 
   private createPowerUpSwitch(x: number, y: number) {
-    // Position in middle of screen
-    this.powerUpSwitch = this.add.container(x, y);
+    // Create power-up button sprite with correct scale and depth
+    this.powerUpButtonSprite = this.add.sprite(x, y, 'button-idle');
+    this.powerUpButtonSprite.setScale(0.15); // Make it much smaller - 1/3 of original size
+    this.powerUpButtonSprite.setDepth(10);
     
-    const base = this.add.rectangle(0, 0, 40, 40, 0xff0000)
-      .setStrokeStyle(2, 0x666666);
+    // Add input event handlers
+    this.powerUpButtonSprite.setInteractive();
     
-    this.powerUpLever = this.add.rectangle(0, 0, 30, 30, 0xff0000)
-      .setStrokeStyle(2, 0xff3333);
+    // Create text for countdown (positioned properly)
+    this.powerUpCountdownText = this.add.text(x, y - 30, '', {
+      fontSize: '24px',
+      fontStyle: 'bold',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3
+    }).setOrigin(0.5).setDepth(11);
     
-    this.powerUpLight = this.add.rectangle(0, 0, 10, 10, 0xff0000)
-      .setStrokeStyle(2, 0xff3333);
+    // Create warning text (initially invisible)
+    this.powerUpWarningText = this.add.text(x, y - 80, '', {
+      fontSize: '18px',
+      color: '#ff0000',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5).setAlpha(0).setDepth(11);
     
-    const text = this.add.text(0, 25, 'POWER', {
-      fontSize: '12px',
-      color: '#ffff00',
-      align: 'center'
-    }).setOrigin(0.5);
-
-    this.powerUpCountdownText = this.add.text(0, -25, '', {
-      fontSize: '16px',
-      color: '#00ff00',
-      align: 'center'
-    }).setOrigin(0.5);
-    
-    // Set initial colors
-    this.setButtonColor(0xff0000);
-    
-    this.powerUpSwitch.add([base, this.powerUpLever, this.powerUpLight, text, this.powerUpCountdownText]);
-    
-    this.powerUpSwitchBounds = new Phaser.Geom.Rectangle(
-      this.powerUpSwitch.x - 20,
-      this.powerUpSwitch.y - 20,
-      40,
-      40
-    );
-  }
-
-  private setButtonColor(color: number) {
-    if (!this.powerUpSwitch || !this.powerUpSwitch.list) return;
-    
-    const components = this.powerUpSwitch.list.filter(item => item instanceof Phaser.GameObjects.Rectangle);
-    if (components.length < 3) return;
-    
-    components.forEach(component => {
-      (component as Phaser.GameObjects.Rectangle).setFillStyle(color);
-    });
+    // Add button click handlers
+    this.powerUpButtonSprite.on('pointerdown', this.handlePowerUpButtonClick, this);
   }
 
   private createConveyorArrows(width: number, centerX: number, centerY: number) {
@@ -645,6 +640,21 @@ export class Level1Scene extends Phaser.Scene {
           // Not near a station or order, discard the first edit
           this.removeFirstEdit();
         }
+      }
+      
+      // Handle player movement and animation
+      this.handlePlayerMovement(delta);
+      
+      // Check if player is stepping on the button
+      this.checkPlayerOnButton();
+      
+      // Handle button flashing when power-up is available
+      this.updateButtonFlashing(delta);
+      
+      // Check for 'c' key to activate powerup cheat
+      if (Phaser.Input.Keyboard.JustDown(this.cKey)) {
+        console.log('Cheat code activated: Power-Up!');
+        this.activatePowerUpCheat();
       }
     } catch (error) {
       console.error('Error in update:', error);
@@ -1427,6 +1437,11 @@ export class Level1Scene extends Phaser.Scene {
       yoyo: true,
       repeat: -1
     });
+    
+    // Check if we should make power-up available after completing a certain number of orders
+    if (this.ordersCompleted % 5 === 0 && !this.powerUpActive && !this.powerUpAvailable) {
+      this.makePowerUpAvailable();
+    }
   }
 
   // Update the order positions function to handle completed orders
@@ -1884,5 +1899,193 @@ export class Level1Scene extends Phaser.Scene {
         this.removeOrder(i);
       }
     }
+  }
+
+  private checkMissedOrders(delta: number) {
+    // Check if any orders have gone off-screen
+    for (let i = this.orders.length - 1; i >= 0; i--) {
+      const order = this.orders[i];
+      
+      // Check if order has gone off-screen
+      if (order.x > this.cameras.main.width + 50) {
+        // Remove the order
+        this.removeOrder(i);
+      }
+    }
+  }
+
+  private checkPlayerOnButton() {
+    if (!this.player || !this.powerUpButtonSprite) return;
+    
+    // Get bounds for pixel-perfect collision detection
+    const playerBounds = this.player.getBounds();
+    const buttonBounds = this.powerUpButtonSprite.getBounds();
+    
+    // Create a smaller collision area from player's feet
+    const playerFeetBounds = new Phaser.Geom.Rectangle(
+      playerBounds.x + playerBounds.width * 0.35, // Center portion of player
+      playerBounds.y + playerBounds.height * 0.8, // Bottom portion (feet)
+      playerBounds.width * 0.3, // Narrower than full player
+      playerBounds.height * 0.2 // Just the feet
+    );
+    
+    // If player's feet overlap with button and power-up is not available
+    const isOverlapping = Phaser.Geom.Rectangle.Overlaps(playerFeetBounds, buttonBounds);
+    
+    // Only change button appearance if power-up is NOT available
+    if (isOverlapping && !this.powerUpAvailable) {
+      // Set button to pressed state
+      this.powerUpButtonSprite.setTexture('button-pressed');
+    } else if (!this.powerUpActive && !this.powerUpAvailable) { 
+      // Reset to idle only if not in active state and power-up is not available
+      this.powerUpButtonSprite.setTexture('button-idle');
+    }
+    
+    // Don't override flashing animation when power-up is available
+  }
+
+  private updateButtonFlashing(delta: number) {
+    if (!this.powerUpButtonSprite) return;
+    
+    // Only flash the button when power-up is available and not active
+    if (this.powerUpAvailable && !this.powerUpActive) {
+      // Accumulate time for flashing
+      this.buttonFlashTimer += delta;
+      
+      // When we reach the flash interval, toggle the flash state
+      if (this.buttonFlashTimer >= this.buttonFlashInterval) {
+        this.buttonFlashTimer = 0; // Reset timer
+        this.buttonFlashState = !this.buttonFlashState; // Toggle flash state
+        
+        // Change button texture based on flash state
+        this.powerUpButtonSprite.setTexture(
+          this.buttonFlashState ? 'button-flash' : 'button-idle'
+        );
+      }
+    }
+  }
+
+  private makePowerUpAvailable() {
+    // Make power-up available to player
+    this.powerUpAvailable = true;
+    
+    // Reset animation state for flashing
+    this.buttonFlashTimer = 0;
+    this.buttonFlashState = false;
+    this.powerUpButtonSprite.setTexture('button-idle');
+    
+    console.log("Power-up is now available!");
+    
+    // Start power-up button flashing/animation
+    if (this.powerUpButtonSprite) {
+      this.tweens.add({
+        targets: this.powerUpButtonSprite,
+        scale: { from: 0.15, to: 0.165 }, // Adjusted scaling for smaller base size
+        duration: 600,
+        yoyo: true,
+        repeat: 2,
+        ease: 'Sine.easeInOut'
+      });
+    }
+  }
+
+  private activatePowerUpCheat() {
+    console.log("CHEAT: Making power-up available");
+    
+    // Only activate if power-up is not already available or active
+    if (!this.powerUpAvailable && !this.powerUpActive) {
+      this.makePowerUpAvailable();
+      
+      // Show a message to indicate cheat was activated
+      const cheatMessage = this.add.text(
+        this.cameras.main.width / 2,
+        100,
+        "CHEAT: Power-up Available!",
+        {
+          fontSize: '20px',
+          color: '#ffff00',
+          stroke: '#000000',
+          strokeThickness: 3
+        }
+      ).setOrigin(0.5).setDepth(100);
+      
+      // Fade out the message
+      this.tweens.add({
+        targets: cheatMessage,
+        alpha: 0,
+        y: 80,
+        duration: 1500,
+        onComplete: () => cheatMessage.destroy()
+      });
+    }
+  }
+
+  private handlePowerUpButtonClick() {
+    // Only allow pressing the button if a power-up is available
+    if (!this.powerUpAvailable || this.powerUpActive) {
+      // Show warning if power-up is not available
+      this.showPowerUpWarning('Power-up not ready!');
+      return;
+    }
+    
+    // Click animation
+    this.tweens.add({
+      targets: this.powerUpButtonSprite,
+      scale: { from: 0.15, to: 0.14 }, // Adjusted for smaller button size
+      duration: 200,
+      onStart: () => {
+        this.powerUpButtonSprite.setTexture('button-pressed');
+      },
+      onComplete: () => {
+        this.powerUpButtonSprite.setTexture('button-idle');
+        this.activatePowerUp();
+      }
+    });
+  }
+  
+  private activatePowerUp() {
+    // Set power-up to active
+    this.powerUpActive = true;
+    this.powerUpAvailable = false;
+    this.powerUpTimer = 15000; // 15 seconds of power-up time
+    this.powerUpFlashTimer = 0;
+    
+    console.log("Power-up activated!");
+    
+    // Create activation animation
+    this.tweens.add({
+      targets: this.powerUpButtonSprite,
+      scale: { from: 0.15, to: 0.17 }, // Adjusted for smaller button size
+      duration: 200,
+      onStart: () => {
+        this.powerUpButtonSprite.setTexture('button-pressed');
+      },
+      onComplete: () => {
+        this.powerUpButtonSprite.setTexture('button-active');
+      }
+    });
+    
+    // Show flash effects
+  }
+
+  private showPowerUpWarning(message: string) {
+    // Only show if we have a warning text object
+    if (!this.powerUpWarningText) return;
+    
+    // Set warning message
+    this.powerUpWarningText.setText(message);
+    this.powerUpWarningText.setAlpha(1);
+    
+    // Fade out the warning after a short delay
+    this.tweens.add({
+      targets: this.powerUpWarningText,
+      alpha: 0,
+      y: this.powerUpWarningText.y - 20, 
+      duration: 1500,
+      onComplete: () => {
+        // Reset position after fading out
+        this.powerUpWarningText.y += 20;
+      }
+    });
   }
 }
