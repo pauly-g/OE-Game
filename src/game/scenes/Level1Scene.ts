@@ -1219,8 +1219,9 @@ export class Level1Scene extends Phaser.Scene {
       repeat: -1
     });
     
-    // Check if we should make power-up available after completing a certain number of orders
-    if (this.ordersCompleted % 5 === 0 && !this.powerUpActive && !this.powerUpAvailable) {
+    // Only count manually completed orders (not created during power-up) towards power-up progress
+    // This ensures that power-ups only apply to new orders and players earn power-ups through manual edits
+    if (!order.createdDuringPowerUp && this.ordersCompleted % 5 === 0 && !this.powerUpActive && !this.powerUpAvailable) {
       this.makePowerUpAvailable();
     }
   }
@@ -1887,7 +1888,7 @@ export class Level1Scene extends Phaser.Scene {
     // Set power-up to active
     this.powerUpActive = true;
     this.powerUpAvailable = false;
-    this.powerUpTimer = 15000; // 15 seconds of power-up time
+    this.powerUpTimer = 30000; // Extend power-up duration to 30 seconds (30000ms)
     this.powerUpFlashTimer = 0;
     
     console.log("Power-up activated!");
@@ -2081,12 +2082,8 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private updatePowerUp(delta: number) {
-    // If power up is active, update timer and auto-complete orders
     if (this.powerUpActive) {
-      // Decrement timer
       this.powerUpTimer -= delta;
-      
-      // Update countdown text
       const secondsLeft = Math.ceil(this.powerUpTimer / 1000);
       this.powerUpCountdownText.setText(`${secondsLeft}s`);
       
@@ -2095,9 +2092,10 @@ export class Level1Scene extends Phaser.Scene {
         this.deactivatePowerUp();
       }
       
-      // Auto-complete any order that appears
+      // Only auto-complete orders that were created during the power-up
+      // Do not auto-complete existing orders that were on the belt before power-up activation
       for (const order of this.orders) {
-        if (!order.isComplete && !order.completedEdits.length) {
+        if (!order.isComplete && order.createdDuringPowerUp && !order.completedEdits.length) {
           // Auto-complete all edit types
           for (const editType of order.types) {
             if (!order.completedEdits.includes(editType)) {
