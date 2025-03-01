@@ -446,7 +446,7 @@ export class Level1Scene extends Phaser.Scene {
   private getStationIcon(type: Station['type']): string {
     const icons = {
       address: '🏠',
-      quantity: '#️⃣',
+      quantity: '🔢', // Change from '#️⃣' to '🔢' which renders better
       payment: '💳',
       discount: '🏷️',
       product: '📦',
@@ -457,7 +457,15 @@ export class Level1Scene extends Phaser.Scene {
       wording: '💬',
       styling: '👗'
     };
-    return icons[type];
+    
+    // Add debugging to see what types are being used
+    const icon = icons[type];
+    if (!icon) {
+      console.error(`No icon found for station type: ${type}`);
+      return '❓'; // Fallback icon if type not found
+    }
+    console.log(`Returning icon '${icon}' for type '${type}'`);
+    return icon;
   }
 
   private removeOrder(index: number) {
@@ -895,10 +903,14 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private applyEditToOrder(order: Order) {
-    if (this.carriedEdits.length === 0) return;
+    if (this.carriedEdits.length === 0) return false;
     
-    // Get the first edit (FIFO - first in, first out)
+    // Get the first edit in the queue
     const edit = this.carriedEdits[0];
+    
+    // Add debugging to see what's happening
+    console.log(`Attempting to apply edit ${edit.type} to order requiring: ${order.types.join(', ')}`);
+    console.log(`Order completed edits: ${order.completedEdits.join(', ')}`);
     
     // Check if the order requires this edit type and it hasn't been applied yet
     if (order.types.includes(edit.type) && !order.completedEdits.includes(edit.type)) {
@@ -908,13 +920,16 @@ export class Level1Scene extends Phaser.Scene {
       // Create a checkmark or visual indicator on the order
       this.markEditAsApplied(order, edit.type);
       
+      console.log(`Successfully applied ${edit.type} edit to order ${order.id}`);
+      
       // Increment total edits applied (for unlocking stations)
       this.totalEditsApplied++;
+      console.log(`Total edits applied: ${this.totalEditsApplied}, Last unlocked at: ${this.lastUnlockedAtEditCount}`);
       
       // Check if we should unlock a new station (every 5 edits)
       if (this.totalEditsApplied >= 5 && (this.totalEditsApplied - this.lastUnlockedAtEditCount) >= 5) {
+        console.log('Unlocking next station');
         this.unlockNextStation();
-        this.lastUnlockedAtEditCount = this.totalEditsApplied;
       }
       
       // Increase score
@@ -926,37 +941,44 @@ export class Level1Scene extends Phaser.Scene {
         this.completeOrder(order);
       }
       
-      // Play success sound
-      // this.sound.play('success');
-      
-      // Remove just this edit
+      // Remove the used edit
       this.removeFirstEdit();
       
+      return true;
     } else {
-      // Wrong edit type - show feedback but don't remove the edit
-      const errorMessage = this.add.text(
-        order.x, 
-        order.y - 40, 
-        'Wrong edit!', 
-        {
-          fontSize: '16px',
-          color: '#FF0000',
-          stroke: '#000000',
-          strokeThickness: 2
-        }
-      ).setOrigin(0.5).setDepth(110);
+      // Failure - wrong edit type
+      console.log('Wrong edit type!');
+      console.log(`Edit type: ${edit.type}`);
+      console.log(`Order requires: ${order.types.join(', ')}`);
+      console.log(`Already completed: ${order.completedEdits.join(', ')}`);
       
-      // Fade out error message
+      // Show a red X or failure indicator
+      const failureText = this.add.text(
+        this.player.x, 
+        this.player.y - 50, 
+        edit.type + ' ❌', 
+        { fontSize: '24px', color: '#ff0000', stroke: '#000000', strokeThickness: 3 }
+      ).setOrigin(0.5);
+      
+      // Shake the order briefly
       this.tweens.add({
-        targets: errorMessage,
-        alpha: 0,
-        y: errorMessage.y - 20,
-        duration: 1000,
-        onComplete: () => errorMessage.destroy()
+        targets: order.container,
+        x: { from: order.x, to: order.x + 5 },
+        duration: 50,
+        yoyo: true,
+        repeat: 3
       });
       
-      // Play failure sound
-      // this.sound.play('failure');
+      // Fade out and remove the failure text
+      this.tweens.add({
+        targets: failureText,
+        alpha: 0,
+        y: failureText.y - 30,
+        duration: 800,
+        onComplete: () => failureText.destroy()
+      });
+      
+      return false;
     }
   }
   
@@ -970,6 +992,7 @@ export class Level1Scene extends Phaser.Scene {
     this.tweens.add({
       targets: editToRemove.icon,
       alpha: 0,
+      scale: { from: 1, to: 0 },
       duration: 300,
       onComplete: () => {
         editToRemove.icon.destroy();
@@ -1877,5 +1900,317 @@ export class Level1Scene extends Phaser.Scene {
       this.lastDirection = direction;
       this.lastMoving = isMoving;
     }
+  }
+
+  private updatePowerUp(delta: number) {
+    // If power up is active, update timer and auto-complete orders
+    if (this.powerUpActive) {
+      // Decrement timer
+      this.powerUpTimer -= delta;
+      
+      // Update countdown text
+      const secondsLeft = Math.ceil(this.powerUpTimer / 1000);
+      this.powerUpCountdownText.setText(`${secondsLeft}s`);
+      
+      // Check if power-up has expired
+      if (this.powerUpTimer <= 0) {
+        this.deactivatePowerUp();
+      }
+      
+      // Auto-complete any order that appears
+      for (const order of this.orders) {
+        if (!order.isComplete && !order.completedEdits.length) {
+          // Auto-complete all edit types
+          for (const editType of order.types) {
+            if (!order.completedEdits.includes(editType)) {
+              order.completedEdits.push(editType);
+              this.markEditAsApplied(order, editType);
+              this.totalEditsApplied++;
+            }
+          }
+          
+          // Complete the order
+          this.completeOrder(order);
+        }
+      }
+    }
+  }
+
+  private generateOrder = () => {
+    try {
+      console.log('Generating new order');
+      
+      // Count how many stations are unlocked
+      const unlockedStations = this.stations.filter(station => station.isUnlocked);
+      console.log(`Unlocked stations: ${unlockedStations.map(s => s.type).join(', ')}`);
+      
+      if (unlockedStations.length === 0) {
+        console.log('No unlocked stations available, cannot generate order');
+        return;
+      }
+      
+      // Determine where to place the order on the conveyor belt
+      const orderY = this.conveyorBelt.y - 40; // Position above the conveyor
+      const orderX = -50; // Start offscreen to the left
+      
+      // Determine order complexity based on unlocked stations
+      const maxPossibleEdits = Math.min(5, unlockedStations.length);
+      
+      // Probability table for the number of edits
+      // Format: [1 edit, 2 edits, 3 edits, 4 edits, 5 edits]
+      // Adjust probabilities based on progress
+      let editProbabilities: number[] = [];
+      
+      // Start simple, then gradually increase complexity
+      if (unlockedStations.length === 1) {
+        // With only 1 station, all orders require 1 edit
+        editProbabilities = [1.0];
+      } else if (unlockedStations.length === 2) {
+        // With 2 stations, 70% chance of 1 edit, 30% chance of 2 edits
+        editProbabilities = [0.7, 0.3];
+      } else if (unlockedStations.length === 3) {
+        // With 3 stations: 50% for 1 edit, 30% for 2 edits, 20% for 3 edits
+        editProbabilities = [0.5, 0.3, 0.2];
+      } else if (unlockedStations.length === 4) {
+        // With 4 stations: 40% for 1 edit, 30% for 2 edits, 20% for 3 edits, 10% for 4 edits
+        editProbabilities = [0.4, 0.3, 0.2, 0.1];
+      } else {
+        // With 5 stations: 30% for 1 edit, 25% for 2 edits, 25% for 3 edits, 15% for 4 edits, 5% for 5 edits
+        editProbabilities = [0.3, 0.25, 0.25, 0.15, 0.05];
+      }
+      
+      // Determine number of edits using probability table
+      const random = Math.random();
+      let cumulativeProbability = 0;
+      let numEdits = 1;
+      
+      for (let i = 0; i < editProbabilities.length; i++) {
+        cumulativeProbability += editProbabilities[i];
+        if (random <= cumulativeProbability) {
+          numEdits = i + 1;
+          break;
+        }
+      }
+      
+      // Make sure we don't exceed our max possible edits
+      numEdits = Math.min(numEdits, maxPossibleEdits);
+      
+      // Select random edit types from unlocked stations
+      const stationTypes = unlockedStations.map(station => station.type);
+      const selectedTypes: string[] = [];
+      
+      // Shuffle the types to ensure randomness
+      const shuffledTypes = [...stationTypes].sort(() => Math.random() - 0.5);
+      
+      // Take the first numEdits types, without duplicates
+      for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
+        // Only add this type (no need to check as shuffle ensures uniqueness)
+        selectedTypes.push(shuffledTypes[i]);
+      }
+      
+      // If we couldn't get enough types (not enough unique stations), 
+      // reduce the number of edits to match available types
+      if (selectedTypes.length < numEdits) {
+        numEdits = selectedTypes.length;
+      }
+      
+      console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
+      
+      // Create container for the order
+      const container = this.add.container(orderX, orderY);
+      container.setSize(160, 120);
+      container.setDepth(25); // Set order depth higher than player (20) but lower than Hamish/Kiril (100)
+      
+      // Create cardboard box - size depends on number of edits
+      const bgWidth = numEdits <= 3 ? 90 + (numEdits * 10) : 130;
+      const bgHeight = numEdits <= 3 ? 70 : 100;
+      
+      // Create cardboard box
+      const boxColor = 0xd9c0a3; // Lighter cardboard brown color
+      const background = this.add.rectangle(0, 0, bgWidth, bgHeight, boxColor, 1)
+        .setStrokeStyle(2, 0xa0816c); // Softer brown for the edges
+      
+      // Add cardboard box flap at the top - more subtle
+      const topFlap = this.add.rectangle(0, -bgHeight/2 + 6, bgWidth * 0.7, 10, boxColor)
+        .setStrokeStyle(1, 0xa0816c);
+        
+      // Add box tape - smaller and less visible
+      const tape = this.add.rectangle(0, 0, bgWidth * 0.3, 4, 0xefefef);
+      
+      container.add([background, topFlap, tape]);
+      
+      // Create icons for each required edit
+      const icons = selectedTypes.map((type, index) => {
+        // Verify that this icon exists
+        const iconText = this.getStationIcon(type);
+        console.log(`Using icon '${iconText}' for type '${type}'`);
+        
+        const icon = this.add.text(0, 0, iconText, {
+          fontSize: '28px',
+          stroke: '#000000',
+          strokeThickness: 2
+        }).setOrigin(0.5);
+        
+        // Position based on layout (horizontal or grid)
+        if (numEdits <= 3) {
+          // Horizontal layout
+          if (numEdits === 1) {
+            // Single icon centered
+            icon.x = 0;
+            icon.y = 0;
+          } else {
+            // Multiple icons spaced evenly
+            const totalSpace = 80; // Total space to distribute icons
+            icon.x = -totalSpace/2 + index * (totalSpace / (numEdits - 1));
+            icon.y = 0; // Centered vertically
+          }
+        } else {
+          // Grid layout
+          const row = Math.floor(index / 2);
+          const col = index % 2;
+          const spacing = 40;
+          
+          icon.x = (col * spacing) - (spacing / 2);
+          icon.y = (row * spacing) - (spacing / 2);
+        }
+        
+        return icon;
+      });
+      
+      // Add all icons to the container
+      container.add(icons);
+      
+      // Create order object
+      const order: Order = {
+        id: `order-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        types: selectedTypes,
+        completedEdits: [],
+        x: orderX,
+        y: orderY,
+        container,
+        isComplete: false,
+        width: bgWidth,
+        height: bgHeight,
+        icons // Add icons to the order object
+      };
+      
+      // Add to orders array
+      this.orders.push(order);
+      
+      // If power up is active, mark this order as created during power-up
+      if (this.powerUpActive) {
+        order.createdDuringPowerUp = true;
+      }
+      
+      console.log(`Order created: ${order.id}`);
+      console.log(`Order requires edits: ${order.types.join(', ')}`);
+      console.log(`Order icon types: ${order.types.map(type => `${type}: ${this.getStationIcon(type)}`).join(', ')}`);
+    } catch (error) {
+      console.error('Error generating order:', error);
+    }
+  }
+
+  private unlockNextStation() {
+    // Check how many stations are currently unlocked
+    const unlockedCount = this.stations.filter(station => station.isUnlocked).length;
+    console.log(`Currently have ${unlockedCount} unlocked stations`);
+    
+    // Find the next station to unlock
+    const nextStation = this.stations.find(station => !station.isUnlocked);
+    
+    if (!nextStation) {
+      console.log('All stations already unlocked!');
+      return;
+    }
+    
+    console.log(`Unlocking station: ${nextStation.type}`);
+    
+    // Unlock the station
+    nextStation.isUnlocked = true;
+    
+    // Make sure the station is visible
+    if (nextStation.container) {
+      // Force the station to be fully visible
+      nextStation.container.setAlpha(1);
+      console.log(`Setting alpha to 1 for station: ${nextStation.type}`);
+      
+      // Flash the station to draw attention to it
+      this.tweens.add({
+        targets: nextStation.container,
+        alpha: { from: 0.5, to: 1 },
+        scale: { from: 0.8, to: 1 },
+        ease: 'Sine.InOut',
+        duration: 500,
+        repeat: 3,
+        yoyo: true,
+        onComplete: () => {
+          // Ensure it stays visible after the animation
+          nextStation.container.setAlpha(1);
+          console.log(`Animation complete for station: ${nextStation.type}, alpha: ${nextStation.container.alpha}`);
+        }
+      });
+      
+      // Add a celebratory animation around the station
+      const celebrationEmoji = this.add.text(
+        nextStation.container.x,
+        nextStation.container.y - 50,
+        '⭐',
+        { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+      ).setOrigin(0.5).setDepth(100);
+      
+      // Animate the celebration emoji
+      this.tweens.add({
+        targets: celebrationEmoji,
+        y: '-=50',
+        alpha: { from: 1, to: 0 },
+        scale: { from: 1, to: 2 },
+        duration: 1500,
+        ease: 'Sine.Out',
+        onComplete: () => celebrationEmoji.destroy()
+      });
+      
+      // Show an announcement
+      const announcement = this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        `New Station Unlocked: ${this.getStationIcon(nextStation.type)} ${nextStation.type}!`,
+        { 
+          fontSize: '28px', 
+          stroke: '#000000', 
+          strokeThickness: 4,
+          backgroundColor: '#FFF9C4',
+          padding: { x: 20, y: 10 }
+        }
+      ).setOrigin(0.5).setDepth(110);
+      
+      // Add a background for the announcement
+      const bgWidth = announcement.width + 40;
+      const bgHeight = announcement.height + 20;
+      const announcementBg = this.add.rectangle(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        bgWidth,
+        bgHeight,
+        0xFFF9C4,
+        0.8
+      ).setOrigin(0.5).setDepth(109).setStrokeStyle(4, 0x000000);
+      
+      // Animate the announcement
+      this.tweens.add({
+        targets: [announcement, announcementBg],
+        alpha: { from: 1, to: 0 },
+        scale: { from: 1, to: 1.2 },
+        duration: 2000,
+        delay: 1500,
+        ease: 'Sine.InOut',
+        onComplete: () => {
+          announcement.destroy();
+          announcementBg.destroy();
+        }
+      });
+    }
+    
+    // Reset the counter for the next unlock
+    this.lastUnlockedAtEditCount = this.totalEditsApplied;
   }
 }
