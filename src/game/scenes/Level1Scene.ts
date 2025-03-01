@@ -181,7 +181,7 @@ export class Level1Scene extends Phaser.Scene {
       this.load.image('button-idle', 'game/Button/button.png');
       this.load.image('button-pressed', 'game/Button/button pressed.png');
       this.load.image('button-active', 'game/Button/button-active.png');
-      this.load.image('button-flash', 'game/Button/Button-flash.png');
+      this.load.image('button-flash', 'game/Button/button-flash2.png');
       
       gameDebugger.info('Level1Scene preload completed');
     } catch (error) {
