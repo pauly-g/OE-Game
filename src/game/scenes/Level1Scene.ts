@@ -101,7 +101,7 @@ export class Level1Scene extends Phaser.Scene {
   private lastDirection: string = 'down';
   private lastMoving: boolean = false;
   private animationTime: number = 0;
-  private currentAnimationFrame: number = 1;
+  private currentAnimationFrame: number = 0; // Match the main branch value
   private animationFrameDuration: number = 125; // 8 frames per second = 125ms per frame
   private powerUpSwitchBounds!: Phaser.Geom.Rectangle;
   private lastFrameTime = 0;
