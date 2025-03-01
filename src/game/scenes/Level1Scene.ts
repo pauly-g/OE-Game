@@ -512,40 +512,65 @@ export class Level1Scene extends Phaser.Scene {
       const prevX = this.player.x;
       const prevY = this.player.y;
       
-      // Check if player is on conveyor belt
-      let onConveyorBelt = false;
+      // Create a buffer zone around the conveyor belt
+      const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
+      const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
       
-      if (this.conveyorBelt && 
-          this.player.y > this.conveyorBelt.y - 30 && 
-          this.player.y < this.conveyorBelt.y + 30) {
-        onConveyorBelt = true;
-        // Move player to the right when on conveyor belt
-        this.player.x += this.conveyorSpeed; // Conveyor speed that increases over time
-        direction = 'right';
-        isMoving = true;
-      }
-
-      // Always allow movement regardless of whether near a station or carrying an edit
-      if (this.cursors.left?.isDown) {
-        this.player.x -= this.playerSpeed;
+      // Check for movement keys and update player position
+      // But don't allow movement onto the conveyor belt
+      let newX = this.player.x;
+      let newY = this.player.y;
+      let movementBlocked = false;
+      
+      if (this.cursors.left.isDown) {
+        newX -= this.playerSpeed;
         direction = 'left';
         isMoving = true;
-      } else if (this.cursors.right?.isDown) {
-        this.player.x += this.playerSpeed;
+      } else if (this.cursors.right.isDown) {
+        newX += this.playerSpeed;
         direction = 'right';
         isMoving = true;
       }
       
       if (this.cursors.up.isDown) {
-        this.player.y -= this.playerSpeed;
+        newY -= this.playerSpeed;
         direction = 'up';
         isMoving = true;
       } else if (this.cursors.down.isDown) {
-        this.player.y += this.playerSpeed; 
+        newY += this.playerSpeed; 
         direction = 'down';
         isMoving = true;
       }
-
+      
+      // Check if the player's new position would put them on the conveyor belt
+      const futurePlayerY = newY;
+      
+      // Block movement if player would cross the conveyor buffer zone
+      if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
+        // Player trying to move up onto conveyor belt - block it
+        newY = conveyorBufferTop + 1; // Keep them just below the buffer
+        movementBlocked = true;
+      } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
+        // Player trying to move down onto conveyor belt - block it
+        newY = conveyorBufferBottom - 1; // Keep them just above the buffer
+        movementBlocked = true;
+      }
+      
+      // If the player is already within the forbidden zone, push them out
+      if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
+        // Determine which side they're closer to
+        if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
+          newY = conveyorBufferTop + 1; // Put them just below the top buffer
+        } else {
+          newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
+        }
+        movementBlocked = true;
+      }
+      
+      // Update player position
+      this.player.x = newX;
+      this.player.y = newY;
+      
       // Keep player within bounds
       if (this.player.x < 30) this.player.x = 30;
       if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
@@ -917,7 +942,7 @@ export class Level1Scene extends Phaser.Scene {
       // Success! Apply the edit
       order.completedEdits.push(edit.type);
       
-      // Create a checkmark or visual indicator on the order
+      // Create a checkmark to show this edit has been applied
       this.markEditAsApplied(order, edit.type);
       
       console.log(`Successfully applied ${edit.type} edit to order ${order.id}`);
@@ -1027,14 +1052,14 @@ export class Level1Scene extends Phaser.Scene {
         // Multiple icons spaced evenly
         const totalSpace = 80; // Total space to distribute icons
         const spacing = totalSpace / (order.types.length - 1);
-        checkmark.x = (index + 1) * spacing - order.width / 2;
+        checkmark.x = -totalSpace/2 + index * spacing;
         checkmark.y = 0; // Centered vertically
       }
     } else {
       // Grid layout
-      const row = Math.floor(index / 3);
-      const col = index % 3;
-      const spacing = 30;
+      const row = Math.floor(index / 2);
+      const col = index % 2;
+      const spacing = 40;
       
       // Calculate positions to center the grid
       // For first row (0, 1, 2)
@@ -1762,21 +1787,48 @@ export class Level1Scene extends Phaser.Scene {
       return;
     }
     
-    // Click animation
-    this.tweens.add({
-      targets: this.powerUpButtonSprite,
-      scale: { from: 0.15, to: 0.14 }, // Adjusted for smaller button size
-      duration: 200,
-      onStart: () => {
-        this.powerUpButtonSprite.setTexture('button-pressed');
-      },
-      onComplete: () => {
-        this.powerUpButtonSprite.setTexture('button-idle');
-        this.activatePowerUp();
-      }
+    // Show the "Activate Order Editing" notification
+    this.showActivationNotification();
+    
+    // Simply change texture without animation
+    this.powerUpButtonSprite.setTexture('button-pressed');
+    
+    // Short delay before activating power-up
+    this.time.delayedCall(200, () => {
+      this.powerUpButtonSprite.setTexture('button-idle');
+      this.activatePowerUp();
     });
   }
   
+  private showActivationNotification() {
+    // Create the notification text
+    const notification = this.add.text(
+      this.powerUpButtonSprite.x,
+      this.powerUpButtonSprite.y - 40, // Position above the button
+      'Activate Order Editing!', 
+      { 
+        fontSize: '18px', 
+        color: '#FFFFFF',
+        stroke: '#000000',
+        strokeThickness: 3,
+        fontStyle: 'bold'
+      }
+    ).setOrigin(0.5).setDepth(110);
+    
+    // Add a subtle glow effect
+    notification.setShadow(0, 0, '#ff9900', 5);
+    
+    // Animate the notification floating up and fading out
+    this.tweens.add({
+      targets: notification,
+      y: notification.y - 50, // Float upward
+      alpha: { from: 1, to: 0 },
+      duration: 1500,
+      ease: 'Sine.Out',
+      onComplete: () => notification.destroy()
+    });
+  }
+
   private activatePowerUp() {
     // Set power-up to active
     this.powerUpActive = true;
@@ -1836,64 +1888,100 @@ export class Level1Scene extends Phaser.Scene {
     const prevX = this.player.x;
     const prevY = this.player.y;
     
-    // Create a buffer zone around the conveyor belt
-    const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
-    const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
-      
-    // Check for movement keys and update player position
-    // But don't allow movement onto the conveyor belt
-    let newX = this.player.x;
-    let newY = this.player.y;
-    let movementBlocked = false;
+    // Check if player is on conveyor belt
+    let onConveyorBelt = false;
     
-    if (this.cursors.left.isDown) {
-      newX -= this.playerSpeed;
+    if (this.conveyorBelt && 
+        this.player.y > this.conveyorBelt.y - 30 && 
+        this.player.y < this.conveyorBelt.y + 30) {
+      onConveyorBelt = true;
+      // Move player to the right when on conveyor belt
+      this.player.x += this.conveyorSpeed; // Conveyor speed that increases over time
+      direction = 'right';
+      isMoving = true;
+    }
+
+    // Always allow movement regardless of whether near a station or carrying an edit
+    if (this.cursors.left?.isDown) {
+      this.player.x -= this.playerSpeed;
       direction = 'left';
       isMoving = true;
-    } else if (this.cursors.right.isDown) {
-      newX += this.playerSpeed;
+    } else if (this.cursors.right?.isDown) {
+      this.player.x += this.playerSpeed;
       direction = 'right';
       isMoving = true;
     }
     
     if (this.cursors.up.isDown) {
-      newY -= this.playerSpeed;
+      this.player.y -= this.playerSpeed;
       direction = 'up';
       isMoving = true;
     } else if (this.cursors.down.isDown) {
-      newY += this.playerSpeed;
+      this.player.y += this.playerSpeed; 
       direction = 'down';
       isMoving = true;
     }
-    
-    // Check if the player's new position would put them on the conveyor belt
-    const futurePlayerY = newY;
-    
-    // Block movement if player would cross the conveyor buffer zone
-    if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
-      // Player trying to move up onto conveyor belt - block it
-      newY = conveyorBufferTop + 1; // Keep them just below the buffer
-      movementBlocked = true;
-    } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
-      // Player trying to move down onto conveyor belt - block it
-      newY = conveyorBufferBottom - 1; // Keep them just above the buffer
-      movementBlocked = true;
-    }
-    
-    // If the player is already within the forbidden zone, push them out
-    if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
-      // Determine which side they're closer to
-      if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
-        newY = conveyorBufferTop + 1; // Put them just below the top buffer
-      } else {
-        newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
+
+    // Keep player within bounds
+    if (this.player.x < 30) this.player.x = 30;
+    if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
+    if (this.player.y < 30) this.player.y = 30;
+    if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
+
+    // Check collisions with stations
+    this.stations.forEach(station => {
+      if (station.isUnlocked) {
+        const stationBounds = new Phaser.Geom.Rectangle(
+          station.container.x - 50,
+          station.container.y - 50,
+          100, 
+          100
+        );
+        
+        const playerBounds = new Phaser.Geom.Rectangle(
+          this.player!.x - 20,
+          this.player!.y - 30,
+          40, 
+          60
+        );
+        
+        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+          // Determine which side of the station the player is coming from
+          const dx = this.player!.x - station.container.x;
+          const dy = this.player!.y - station.container.y;
+          
+          // Calculate distances to each edge of the station
+          const distToLeft = Math.abs(dx + 50);
+          const distToRight = Math.abs(dx - 50);
+          const distToTop = Math.abs(dy + 50);
+          const distToBottom = Math.abs(dy - 50);
+          
+          // Find the minimum distance to determine which side the player is on
+          const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+          
+          // Add a small buffer to prevent sticking/sliding
+          const buffer = 5;
+          
+          // Apply appropriate displacement with increased push distance
+          if (minDist === distToLeft) {
+            this.player!.x = station.container.x - 75; // Push player further left
+          } else if (minDist === distToRight) {
+            this.player!.x = station.container.x + 75; // Push player further right
+          } else if (minDist === distToTop) {
+            this.player!.y = station.container.y - 75; // Push player further up
+          } else if (minDist === distToBottom) {
+            this.player!.y = station.container.y + 75; // Push player further down
+            
+            // Add additional check for bottom collision to prevent sliding
+            if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
+              // If player is trying to move horizontally while colliding with bottom,
+              // push them slightly further down to avoid the collision zone
+              this.player!.y += buffer;
+            }
+          }
+        }
       }
-      movementBlocked = true;
-    }
-    
-    // Update player position
-    this.player.x = newX;
-    this.player.y = newY;
+    });
     
     // Update tracking of last direction and movement state
     if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
@@ -2057,11 +2145,11 @@ export class Level1Scene extends Phaser.Scene {
           if (numEdits === 1) {
             // Single icon centered
             icon.x = 0;
-            icon.y = 0;
           } else {
             // Multiple icons spaced evenly
             const totalSpace = 80; // Total space to distribute icons
-            icon.x = -totalSpace/2 + index * (totalSpace / (numEdits - 1));
+            const spacing = totalSpace / (numEdits - 1);
+            icon.x = -totalSpace/2 + index * spacing;
             icon.y = 0; // Centered vertically
           }
         } else {
@@ -2070,8 +2158,21 @@ export class Level1Scene extends Phaser.Scene {
           const col = index % 2;
           const spacing = 40;
           
-          icon.x = (col * spacing) - (spacing / 2);
-          icon.y = (row * spacing) - (spacing / 2);
+          // Calculate positions to center the grid
+          // For first row (0, 1, 2)
+          if (row === 0) {
+            icon.x = (col - 1) * spacing; // -spacing, 0, +spacing
+          } else {
+            // For second row (centers 1 or 2 items)
+            const itemsInLastRow = selectedTypes.length - 3;
+            if (itemsInLastRow === 1) {
+              icon.x = 0; // Center the single item
+            } else {
+              icon.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
+            }
+          }
+          
+          icon.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
         }
         
         return icon;
