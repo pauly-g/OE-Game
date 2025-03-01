@@ -68,7 +68,7 @@ export class Level1Scene extends Phaser.Scene {
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private dKey!: Phaser.Input.Keyboard.Key;
   private cKey!: Phaser.Input.Keyboard.Key;
-  private playerSpeed: number = 8;
+  private playerSpeed: number = 4; // Reduce from 8 to 4 for slower movement
   private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
   private ordersCompleted: number = 0;
@@ -1068,319 +1068,6 @@ export class Level1Scene extends Phaser.Scene {
     this.scene.start('GameOverScene', { score: this.score });
   }
 
-  private updatePowerUp(delta: number) {
-    // If power up is active, update timer and auto-complete orders
-    if (this.powerUpActive) {
-      // Decrement timer
-      this.powerUpTimer -= delta;
-      
-      // Update countdown text
-      const secondsLeft = Math.ceil(this.powerUpTimer / 1000);
-      this.powerUpCountdownText.setText(`${secondsLeft}s`);
-      
-      // Check if power-up has expired
-      if (this.powerUpTimer <= 0) {
-        this.deactivatePowerUp();
-      }
-      
-      // Auto-complete any existing orders that were created before power-up
-      for (const order of this.orders) {
-        if (!order.isComplete && !order.createdDuringPowerUp) {
-          // Get all edit types that haven't been completed yet
-          const remainingEdits = order.types.filter(
-            type => !order.completedEdits.includes(type)
-          );
-          
-          // Apply all remaining edits at once
-          if (remainingEdits.length > 0) {
-            for (const editType of remainingEdits) {
-              order.completedEdits.push(editType);
-              this.markEditAsApplied(order, editType);
-              this.totalEditsApplied++;
-            }
-            
-            // Complete the order
-            this.completeOrder(order);
-          }
-        }
-      }
-    }
-  }
-
-  private generateOrder = () => {
-    try {
-      console.log('Generating new order');
-      
-      // Count how many stations are unlocked
-      const unlockedStations = this.stations.filter(station => station.isUnlocked);
-      if (unlockedStations.length === 0) {
-        console.log('No unlocked stations available, cannot generate order');
-        return;
-      }
-      
-      // Determine where to place the order on the conveyor belt
-      const orderY = this.conveyorBelt.y - 40; // Position above the conveyor
-      const orderX = -50; // Start offscreen to the left
-      
-      // Determine order complexity based on unlocked stations
-      const maxPossibleEdits = Math.min(5, unlockedStations.length);
-      
-      // Probability table for the number of edits
-      // Format: [1 edit, 2 edits, 3 edits, 4 edits, 5 edits]
-      // Adjust probabilities based on progress
-      let editProbabilities: number[] = [];
-      
-      // Start simple, then gradually increase complexity
-      if (unlockedStations.length === 1) {
-        // With only 1 station, all orders require 1 edit
-        editProbabilities = [1.0];
-      } else if (unlockedStations.length === 2) {
-        // With 2 stations, 70% chance of 1 edit, 30% chance of 2 edits
-        editProbabilities = [0.7, 0.3];
-      } else if (unlockedStations.length === 3) {
-        // With 3 stations: 50% for 1 edit, 30% for 2 edits, 20% for 3 edits
-        editProbabilities = [0.5, 0.3, 0.2];
-      } else if (unlockedStations.length === 4) {
-        // With 4 stations: 40% for 1 edit, 30% for 2 edits, 20% for 3 edits, 10% for 4 edits
-        editProbabilities = [0.4, 0.3, 0.2, 0.1];
-      } else {
-        // With 5 stations: 30% for 1 edit, 25% for 2 edits, 25% for 3 edits, 15% for 4 edits, 5% for 5 edits
-        editProbabilities = [0.3, 0.25, 0.25, 0.15, 0.05];
-      }
-      
-      // Determine number of edits using probability table
-      const random = Math.random();
-      let cumulativeProbability = 0;
-      let numEdits = 1;
-      
-      for (let i = 0; i < editProbabilities.length; i++) {
-        cumulativeProbability += editProbabilities[i];
-        if (random <= cumulativeProbability) {
-          numEdits = i + 1;
-          break;
-        }
-      }
-      
-      // Make sure we don't exceed our max possible edits
-      numEdits = Math.min(numEdits, maxPossibleEdits);
-      
-      // Select random edit types from unlocked stations
-      const stationTypes = unlockedStations.map(station => station.type);
-      const selectedTypes: string[] = [];
-      
-      // Shuffle the types to ensure randomness
-      const shuffledTypes = [...stationTypes].sort(() => Math.random() - 0.5);
-      
-      // Take the first numEdits types, without duplicates
-      for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
-        // Only add this type (no need to check as shuffle ensures uniqueness)
-        selectedTypes.push(shuffledTypes[i]);
-      }
-      
-      console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
-      
-      // Create container for the order
-      const container = this.add.container(orderX, orderY);
-      container.setSize(160, 120);
-      container.setDepth(25); // Set order depth higher than player (20) but lower than Hamish/Kiril (100)
-      
-      // Create cardboard box - size depends on number of edits
-      const bgWidth = numEdits <= 3 ? 90 + (numEdits * 10) : 130;
-      const bgHeight = numEdits <= 3 ? 70 : 100;
-      
-      // Create cardboard box
-      const boxColor = 0xd9c0a3; // Lighter cardboard brown color
-      const background = this.add.rectangle(0, 0, bgWidth, bgHeight, boxColor, 1)
-        .setStrokeStyle(2, 0xa0816c); // Softer brown for the edges
-      
-      // Add cardboard box flap at the top - more subtle
-      const topFlap = this.add.rectangle(0, -bgHeight/2 + 6, bgWidth * 0.7, 10, boxColor)
-        .setStrokeStyle(1, 0xa0816c);
-        
-      // Add box tape - smaller and less visible
-      const tape = this.add.rectangle(0, 0, bgWidth * 0.3, 4, 0xefefef);
-      
-      container.add([background, topFlap, tape]);
-      
-      // Create icons for each required edit
-      const icons = selectedTypes.map((type, index) => {
-        const icon = this.add.text(0, 0, this.getStationIcon(type), {
-          fontSize: '28px',
-          stroke: '#000000',
-          strokeThickness: 2
-        }).setOrigin(0.5);
-        
-        // Position based on layout (horizontal or grid)
-        if (numEdits <= 3) {
-          // Horizontal layout
-          if (numEdits === 1) {
-            // Single icon centered
-            icon.x = 0;
-          } else {
-            // Multiple icons spaced evenly
-            const totalSpace = 80; // Total space to distribute icons
-            const spacing = totalSpace / (numEdits - 1);
-            icon.x = (index + 1) * spacing - numEdits * spacing / 2;
-            icon.y = 0; // Centered vertically
-          }
-        } else {
-          // Grid layout
-          const row = Math.floor(index / 3);
-          const col = index % 3;
-          const spacing = 30;
-          
-          // Calculate positions to center the grid
-          // For first row (0, 1, 2)
-          if (row === 0) {
-            icon.x = (col - 1) * spacing; // -spacing, 0, +spacing
-          } else {
-            // For second row (centers 1 or 2 items)
-            const itemsInLastRow = numEdits - 3;
-            if (itemsInLastRow === 1) {
-              icon.x = 0; // Center the single item
-            } else {
-              icon.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
-            }
-          }
-          
-          icon.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
-        }
-        
-        return icon;
-      });
-      
-      // Add all icons to the container
-      container.add(icons);
-      
-      // Create order object
-      const order: Order = {
-        id: `order-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        types: selectedTypes,
-        completedEdits: [],
-        x: orderX,
-        y: orderY,
-        container,
-        isComplete: false,
-        width: bgWidth,
-        height: bgHeight,
-        icons // Add icons to the order object
-      };
-      
-      // Add to orders array
-      this.orders.push(order);
-      
-      // If power up is active, auto-complete this order immediately
-      if (this.powerUpActive) {
-        order.createdDuringPowerUp = true;
-        // Get all edit types that need to be completed
-        const editsToApply = [...order.types];
-        
-        // Apply all edits at once
-        for (const editType of editsToApply) {
-          order.completedEdits.push(editType);
-          this.markEditAsApplied(order, editType);
-          this.totalEditsApplied++;
-        }
-        
-        // Complete the order
-        this.completeOrder(order);
-      }
-      
-      console.log(`Order created: ${order.id}`);
-    } catch (error) {
-      console.error('Error generating order:', error);
-    }
-  }
-
-  private generateOrderEdits(stationIndex: number): string[] {
-    const maxEditsPerOrder = Math.min(Math.ceil(stationIndex / 2) + 1, 5);
-    const numEdits = Phaser.Math.Between(1, maxEditsPerOrder);
-    
-    // Get the types of all unlocked stations
-    const unlockedStationTypes = this.stations
-      .slice(0, stationIndex + 1)
-      .map(station => station.type);
-    
-    // Shuffle the array to ensure randomness
-    const shuffledTypes = [...unlockedStationTypes].sort(() => Math.random() - 0.5);
-    
-    // Take only the first numEdits types
-    // This naturally prevents duplicates as we're selecting from the shuffled array
-    return shuffledTypes.slice(0, numEdits);
-  }
-
-  private unlockNextStation() {
-    // Find the first locked station
-    const nextLockedStation = this.stations.find(station => !station.isUnlocked);
-    
-    if (nextLockedStation) {
-      console.log(`Unlocking station: ${nextLockedStation.type}`);
-      
-      // Unlock the station
-      nextLockedStation.isUnlocked = true;
-      
-      // Make it visible with animation
-      nextLockedStation.container.setAlpha(0);
-      this.tweens.add({
-        targets: nextLockedStation.container,
-        alpha: 1,
-        duration: 1000,
-        ease: 'Power2'
-      });
-      
-      // Show announcement
-      const width = this.cameras.main.width;
-      const height = this.cameras.main.height;
-      const announcement = this.add.text(
-        width * 0.5,
-        height * 0.3,
-        `New Station Unlocked: ${this.getStationIcon(nextLockedStation.type)} ${nextLockedStation.type}!`,
-        {
-          fontSize: '28px',
-          color: '#ffff00',
-          stroke: '#000000',
-          strokeThickness: 3
-        }
-      ).setOrigin(0.5);
-      
-      // Animate announcement
-      this.tweens.add({
-        targets: announcement,
-        scale: { from: 0.5, to: 1.5 },
-        alpha: { from: 1, to: 0 },
-        y: '-=50',
-        duration: 2000,
-        onComplete: () => announcement.destroy()
-      });
-      
-      // Update the last unlocked order count
-      this.lastUnlockedAtEditCount = this.totalEditsApplied;
-      
-      // Increase game difficulty slightly
-      this.orderSpeedMultiplier = Math.min(
-        this.maxOrderSpeedMultiplier,
-        this.orderSpeedMultiplier + 0.15
-      );
-      this.conveyorSpeed = Math.min(
-        this.maxConveyorSpeed,
-        this.conveyorSpeed + 0.25
-      );
-      this.nextOrderDelay = Math.max(1500, this.nextOrderDelay - 250);
-      
-      // Update order generation timer with new delay
-      if (this.orderGenerationTimer) {
-        this.orderGenerationTimer.reset({
-          delay: this.nextOrderDelay,
-          callback: this.generateOrder,
-          callbackScope: this,
-          loop: true
-        });
-      }
-    } else {
-      console.log('All stations are already unlocked');
-    }
-  }
-
   private reset() {
     console.log('Resetting Level1Scene');
     
@@ -2127,7 +1814,7 @@ export class Level1Scene extends Phaser.Scene {
     const prevY = this.player.y;
     
     // Create a buffer zone around the conveyor belt
-    const conveyorBufferTop = this.conveyorBelt.y - 20; // 20px buffer above conveyor
+    const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
     const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
       
     // Check for movement keys and update player position
@@ -2156,36 +1843,39 @@ export class Level1Scene extends Phaser.Scene {
       isMoving = true;
     }
     
-    // Create a collision box at the player's feet
-    const playerCollisionBox = {
-      x: newX - 30, // 60px wide centered on player
-      y: newY + 20, // At player's feet, 40px tall
-      width: 60,
-      height: 40
-    };
+    // Check if the player's new position would put them on the conveyor belt
+    const futurePlayerY = newY;
     
-    // Check for conveyor belt collision with player's feet
-    if (playerCollisionBox.y - playerCollisionBox.height < conveyorBufferBottom && 
-        playerCollisionBox.y > conveyorBufferTop) {
-      // Player trying to move onto conveyor belt - prevent it
+    // Block movement if player would cross the conveyor buffer zone
+    if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
+      // Player trying to move up onto conveyor belt - block it
+      newY = conveyorBufferTop + 1; // Keep them just below the buffer
+      movementBlocked = true;
+    } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
+      // Player trying to move down onto conveyor belt - block it
+      newY = conveyorBufferBottom - 1; // Keep them just above the buffer
       movementBlocked = true;
     }
     
-    // Only update position if not blocked
-    if (!movementBlocked) {
-      this.player.x = newX;
-      this.player.y = newY;
-    } else {
-      // If movement would put player on conveyor, maintain previous position
-      this.player.x = prevX;
-      this.player.y = prevY;
+    // If the player is already within the forbidden zone, push them out
+    if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
+      // Determine which side they're closer to
+      if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
+        newY = conveyorBufferTop + 1; // Put them just below the top buffer
+      } else {
+        newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
+      }
+      movementBlocked = true;
     }
+    
+    // Update player position
+    this.player.x = newX;
+    this.player.y = newY;
     
     // Update tracking of last direction and movement state
     if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
       this.lastDirection = direction;
       this.lastMoving = isMoving;
     }
-    
   }
 }
