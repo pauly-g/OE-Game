@@ -32,6 +32,7 @@
  * - Fixed station unlocking to only reveal one station at a time, every 5 completed edits
  * - Added tracking of previous player position to properly handle collisions
  * - Fixed collision handling to prevent both sliding and walking through stations
+ * - Fixed conveyor belt collision to prevent player from walking onto it
  */
 import Phaser from 'phaser';
 import { gameDebugger } from '../utils/debug';
@@ -252,8 +253,10 @@ export class Level1Scene extends Phaser.Scene {
 
       // Create player sprite after ensuring textures exist
       if (this.textures.exists('idle down 1')) {
-        this.player = this.add.sprite(width * 0.5, height * 0.5, 'idle down 1');
-        this.player.setScale(2.7);
+        this.player = this.add.sprite(width * 0.5, height * 0.55, 'idle down 1');
+        this.player.setScale(4.0); // Increase the player scale to be taller than orders
+        this.player.setDepth(20); // Set depth to be behind orders but in front of most elements
+        
         this.lastDirection = 'down'; // Set initial direction
         this.lastMoving = false;
         this.currentAnimationFrame = 1;
@@ -271,7 +274,8 @@ export class Level1Scene extends Phaser.Scene {
         console.error('Player sprite texture "idle down 1" not loaded');
         // Create a fallback rectangle for the player
         this.player = this.add.rectangle(width * 0.5, height * 0.5, 32, 32, 0xff0000) as unknown as Phaser.GameObjects.Sprite;
-        this.player.setScale(2.7);
+        this.player.setScale(4.0); // Increase fallback player size too
+        this.player.setDepth(20); // Set consistent depth
       }
 
       // Create stations before UI elements
@@ -993,9 +997,16 @@ export class Level1Scene extends Phaser.Scene {
     // Position based on layout (horizontal or grid)
     if (order.types.length <= 3) {
       // Horizontal layout
-      const spacing = 30;
-      checkmark.x = (index + 1) * spacing - order.width / 2;
-      checkmark.y = -order.height / 2 - 10;
+      if (order.types.length === 1) {
+        // Single icon centered
+        checkmark.x = 0;
+      } else {
+        // Multiple icons spaced evenly
+        const totalSpace = 80; // Total space to distribute icons
+        const spacing = totalSpace / (order.types.length - 1);
+        checkmark.x = (index + 1) * spacing - order.width / 2;
+        checkmark.y = 0; // Centered vertically
+      }
     } else {
       // Grid layout
       const row = Math.floor(index / 3);
@@ -1166,16 +1177,12 @@ export class Level1Scene extends Phaser.Scene {
         selectedTypes.push(shuffledTypes[i]);
       }
       
-      // If we couldn't get enough types (not enough unique stations), 
-      // reduce the number of edits to match available types
-      if (selectedTypes.length < numEdits) {
-        numEdits = selectedTypes.length;
-      }
-      
       console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
       
       // Create container for the order
       const container = this.add.container(orderX, orderY);
+      container.setSize(160, 120);
+      container.setDepth(25); // Set order depth higher than player (20) but lower than Hamish/Kiril (100)
       
       // Create cardboard box - size depends on number of edits
       const bgWidth = numEdits <= 3 ? 90 + (numEdits * 10) : 130;
@@ -1213,9 +1220,9 @@ export class Level1Scene extends Phaser.Scene {
             // Multiple icons spaced evenly
             const totalSpace = 80; // Total space to distribute icons
             const spacing = totalSpace / (numEdits - 1);
-            icon.x = -totalSpace/2 + index * spacing;
+            icon.x = (index + 1) * spacing - numEdits * spacing / 2;
+            icon.y = 0; // Centered vertically
           }
-          icon.y = 0; // Centered vertically
         } else {
           // Grid layout
           const row = Math.floor(index / 3);
@@ -1283,6 +1290,23 @@ export class Level1Scene extends Phaser.Scene {
     } catch (error) {
       console.error('Error generating order:', error);
     }
+  }
+
+  private generateOrderEdits(stationIndex: number): string[] {
+    const maxEditsPerOrder = Math.min(Math.ceil(stationIndex / 2) + 1, 5);
+    const numEdits = Phaser.Math.Between(1, maxEditsPerOrder);
+    
+    // Get the types of all unlocked stations
+    const unlockedStationTypes = this.stations
+      .slice(0, stationIndex + 1)
+      .map(station => station.type);
+    
+    // Shuffle the array to ensure randomness
+    const shuffledTypes = [...unlockedStationTypes].sort(() => Math.random() - 0.5);
+    
+    // Take only the first numEdits types
+    // This naturally prevents duplicates as we're selecting from the shuffled array
+    return shuffledTypes.slice(0, numEdits);
   }
 
   private unlockNextStation() {
@@ -1473,13 +1497,13 @@ export class Level1Scene extends Phaser.Scene {
       this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
       this.hamishSprite.setScale(0.25); // Make it smaller
       this.hamishSprite.setOrigin(1, 1); // Bottom right corner
-      this.hamishSprite.setDepth(10);
+      this.hamishSprite.setDepth(100); // Set high depth to be in foreground
       
       // Create Kiril sprite at bottom left (off-screen)
       this.kirilSprite = this.add.sprite(-100, height, 'kiril');
       this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
       this.kirilSprite.setOrigin(0, 1); // Bottom left corner
-      this.kirilSprite.setDepth(10);
+      this.kirilSprite.setDepth(100); // Set high depth to be in foreground
       
       // Add OELogo in the middle
       const centerX = width / 2;
@@ -1489,7 +1513,7 @@ export class Level1Scene extends Phaser.Scene {
       this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
       this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
       this.oeLogoSprite.setOrigin(0.5, 0.5);
-      this.oeLogoSprite.setDepth(5); // Below Hamish and Kiril but above other elements
+      this.oeLogoSprite.setDepth(99); // Just behind Hamish and Kiril
       
       // First tween: Slide up from below
       this.tweens.add({
@@ -1637,28 +1661,13 @@ export class Level1Scene extends Phaser.Scene {
     this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
     this.hamishSprite.setScale(0.25); // Make it smaller
     this.hamishSprite.setOrigin(1, 1); // Bottom right corner
-    this.hamishSprite.setDepth(10);
+    this.hamishSprite.setDepth(100); // Set high depth to be in foreground
     
     // Create Kiril sprite at bottom left (off-screen)
     this.kirilSprite = this.add.sprite(-100, height, 'kiril');
     this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
     this.kirilSprite.setOrigin(0, 1); // Bottom left corner
-    this.kirilSprite.setDepth(10);
-    
-    // Animate them sliding in
-    this.tweens.add({
-      targets: this.hamishSprite,
-      x: width,
-      duration: 500,
-      ease: 'Back.out'
-    });
-    
-    this.tweens.add({
-      targets: this.kirilSprite,
-      x: 0,
-      duration: 500,
-      ease: 'Back.out'
-    });
+    this.kirilSprite.setDepth(100); // Set high depth to be in foreground
     
     // Add OELogo in the middle
     const centerX = width / 2;
@@ -1668,7 +1677,7 @@ export class Level1Scene extends Phaser.Scene {
     this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
     this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
     this.oeLogoSprite.setOrigin(0.5, 0.5);
-    this.oeLogoSprite.setDepth(5); // Below Hamish and Kiril but above other elements
+    this.oeLogoSprite.setDepth(99); // Just behind Hamish and Kiril
     
     // First tween: Slide up from below
     this.tweens.add({
@@ -1699,6 +1708,21 @@ export class Level1Scene extends Phaser.Scene {
       angle: 45, // Rotate lever
       duration: 300,
       ease: 'Bounce.Out'
+    });
+    
+    // Animate Hamish and Kiril sliding in
+    this.tweens.add({
+      targets: this.hamishSprite,
+      x: width,
+      duration: 500,
+      ease: 'Back.out'
+    });
+    
+    this.tweens.add({
+      targets: this.kirilSprite,
+      x: 0,
+      duration: 500,
+      ease: 'Back.out'
     });
   }
 
@@ -2087,5 +2111,81 @@ export class Level1Scene extends Phaser.Scene {
         this.powerUpWarningText.y += 20;
       }
     });
+  }
+
+  private handlePlayerMovement(delta: number) {
+    if (!this.player || !this.cursors) return;
+    
+    let isMoving = false;
+    let direction = this.lastDirection;
+
+    // Only check if near station for spacebar interactions, not to restrict movement
+    let nearStation = this.isNearStation();
+    
+    // Save the previous player position before any movement
+    const prevX = this.player.x;
+    const prevY = this.player.y;
+    
+    // Create a buffer zone around the conveyor belt
+    const conveyorBufferTop = this.conveyorBelt.y - 20; // 20px buffer above conveyor
+    const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
+      
+    // Check for movement keys and update player position
+    // But don't allow movement onto the conveyor belt
+    let newX = this.player.x;
+    let newY = this.player.y;
+    let movementBlocked = false;
+    
+    if (this.cursors.left.isDown) {
+      newX -= this.playerSpeed;
+      direction = 'left';
+      isMoving = true;
+    } else if (this.cursors.right.isDown) {
+      newX += this.playerSpeed;
+      direction = 'right';
+      isMoving = true;
+    }
+    
+    if (this.cursors.up.isDown) {
+      newY -= this.playerSpeed;
+      direction = 'up';
+      isMoving = true;
+    } else if (this.cursors.down.isDown) {
+      newY += this.playerSpeed;
+      direction = 'down';
+      isMoving = true;
+    }
+    
+    // Create a collision box at the player's feet
+    const playerCollisionBox = {
+      x: newX - 30, // 60px wide centered on player
+      y: newY + 20, // At player's feet, 40px tall
+      width: 60,
+      height: 40
+    };
+    
+    // Check for conveyor belt collision with player's feet
+    if (playerCollisionBox.y - playerCollisionBox.height < conveyorBufferBottom && 
+        playerCollisionBox.y > conveyorBufferTop) {
+      // Player trying to move onto conveyor belt - prevent it
+      movementBlocked = true;
+    }
+    
+    // Only update position if not blocked
+    if (!movementBlocked) {
+      this.player.x = newX;
+      this.player.y = newY;
+    } else {
+      // If movement would put player on conveyor, maintain previous position
+      this.player.x = prevX;
+      this.player.y = prevY;
+    }
+    
+    // Update tracking of last direction and movement state
+    if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
+      this.lastDirection = direction;
+      this.lastMoving = isMoving;
+    }
+    
   }
 }
