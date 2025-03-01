@@ -1906,181 +1906,69 @@ export class Level1Scene extends Phaser.Scene {
       }
     });
     
-    // Show flash effects
-  }
-
-  private showPowerUpWarning(message: string) {
-    // Only show if we have a warning text object
-    if (!this.powerUpWarningText) return;
+    // Show Hamish and Kiril images
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
     
-    // Set warning message
-    this.powerUpWarningText.setText(message);
-    this.powerUpWarningText.setAlpha(1);
+    // Create Hamish sprite at bottom right (off-screen)
+    this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
+    this.hamishSprite.setScale(0.25); // Make it smaller
+    this.hamishSprite.setOrigin(1, 1); // Bottom right corner
+    this.hamishSprite.setDepth(100); // Set high depth to be in foreground
     
-    // Fade out the warning after a short delay
+    // Create Kiril sprite at bottom left (off-screen)
+    this.kirilSprite = this.add.sprite(-100, height, 'kiril');
+    this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
+    this.kirilSprite.setOrigin(0, 1); // Bottom left corner
+    this.kirilSprite.setDepth(100); // Set high depth to be in foreground
+    
+    // Add OELogo in the middle
+    const centerX = width / 2;
+    
+    // Create the logo sprite (starts below the screen)
+    this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
+    this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
+    this.oeLogoSprite.setOrigin(0.5, 0.5);
+    this.oeLogoSprite.setDepth(5); // Below Hamish and Kiril but above other elements
+    
+    // First tween: Slide up from below
     this.tweens.add({
-      targets: this.powerUpWarningText,
-      alpha: 0,
-      y: this.powerUpWarningText.y - 20, 
-      duration: 1500,
+      targets: this.oeLogoSprite,
+      y: height - 200, // Position it higher to be clearly visible
+      duration: 800,
+      ease: 'Back.out',
       onComplete: () => {
-        // Reset position after fading out
-        this.powerUpWarningText.y += 20;
-      }
-    });
-  }
-
-  private handlePlayerMovement(delta: number) {
-    if (!this.player || !this.cursors) return;
-    
-    let isMoving = false;
-    let direction = this.lastDirection;
-
-    // Only check if near station for spacebar interactions, not to restrict movement
-    let nearStation = this.isNearStation();
-    
-    // Save the previous player position before any movement
-    const prevX = this.player.x;
-    const prevY = this.player.y;
-    
-    // Create a buffer zone around the conveyor belt
-    const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
-    const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
-    
-    // Check for movement keys and update player position
-    // But don't allow movement onto the conveyor belt
-    let newX = this.player.x;
-    let newY = this.player.y;
-    let movementBlocked = false;
-    
-    if (this.cursors.left?.isDown) {
-      newX -= this.playerSpeed;
-      direction = 'left';
-      isMoving = true;
-    } else if (this.cursors.right.isDown) {
-      newX += this.playerSpeed;
-      direction = 'right';
-      isMoving = true;
-    }
-    
-    if (this.cursors.up.isDown) {
-      newY -= this.playerSpeed;
-      direction = 'up';
-      isMoving = true;
-    } else if (this.cursors.down.isDown) {
-      newY += this.playerSpeed; 
-      direction = 'down';
-      isMoving = true;
-    }
-    
-    // Check if the player's new position would put them on the conveyor belt
-    const futurePlayerY = newY;
-    
-    // Block movement if player would cross the conveyor buffer zone
-    if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
-      // Player trying to move up onto conveyor belt - block it
-      newY = conveyorBufferTop + 1; // Keep them just below the buffer
-      movementBlocked = true;
-    } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
-      // Player trying to move down onto conveyor belt - block it
-      newY = conveyorBufferBottom - 1; // Keep them just above the buffer
-      movementBlocked = true;
-    }
-    
-    // If the player is already within the forbidden zone, push them out
-    if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
-      // Determine which side they're closer to
-      if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
-        newY = conveyorBufferTop + 1; // Put them just below the top buffer
-      } else {
-        newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
-      }
-      movementBlocked = true;
-    }
-    
-    // Update player position
-    this.player.x = newX;
-    this.player.y = newY;
-    
-    // Keep player within bounds
-    if (this.player.x < 30) this.player.x = 30;
-    if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
-    if (this.player.y < 30) this.player.y = 30;
-    if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
-
-    // Check collisions with stations
-    this.stations.forEach(station => {
-      if (station.isUnlocked) {
-        const stationBounds = new Phaser.Geom.Rectangle(
-          station.container.x - 50,
-          station.container.y - 50,
-          100, 
-          100
-        );
-        
-        const playerBounds = new Phaser.Geom.Rectangle(
-          this.player!.x - 20,
-          this.player!.y - 30,
-          40, 
-          60
-        );
-        
-        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
-          // Determine which side of the station the player is coming from
-          const dx = this.player!.x - station.container.x;
-          const dy = this.player!.y - station.container.y;
-          
-          // Calculate distances to each edge of the station
-          const distToLeft = Math.abs(dx + 50);
-          const distToRight = Math.abs(dx - 50);
-          const distToTop = Math.abs(dy + 50);
-          const distToBottom = Math.abs(dy - 50);
-          
-          // Find the minimum distance to determine which side the player is on
-          const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-          
-          // Add a small buffer to prevent sticking/sliding
-          const buffer = 5;
-          
-          // Apply appropriate displacement with increased push distance
-          if (minDist === distToLeft) {
-            this.player!.x = station.container.x - 80; // Increased push distance to 80
-          } else if (minDist === distToRight) {
-            this.player!.x = station.container.x + 80; // Increased push distance to 80
-          } else if (minDist === distToTop) {
-            this.player!.y = station.container.y - 80; // Increased push distance to 80
-          } else if (minDist === distToBottom) {
-            this.player!.y = station.container.y + 80; // Increased push distance to 80
-            
-            // Add additional check for bottom collision to prevent sliding
-            if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
-              // If player is trying to move horizontally while colliding with bottom,
-              // push them slightly further down to avoid the collision zone
-              this.player!.y += buffer;
-            }
-          }
-          
-          // Add extra push when trying to move directly into a station
-          if (minDist === distToLeft && this.cursors.right.isDown) {
-            this.player!.x -= buffer; // Push little extra left when trying to move right
-          } else if (minDist === distToRight && this.cursors.left.isDown) {
-            this.player!.x += buffer; // Push little extra right when trying to move left
-          } else if (minDist === distToTop && this.cursors.down.isDown) {
-            this.player!.y -= buffer; // Push little extra up when trying to move down
-          } else if (minDist === distToBottom && this.cursors.up.isDown) {
-            this.player!.y += buffer; // Push little extra down when trying to move up
-          }
-        }
+        // Start bouncing animation after sliding up
+        this.startLogoBouncingAnimation();
       }
     });
     
-    // Update tracking of last direction and movement state
-    if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
-      this.lastDirection = direction;
-      this.lastMoving = isMoving;
+    // Play activation sound
+    if (this.sound && this.sound.add) {
+      try {
+        const activateSound = this.sound.add('powerup', { volume: 0.7 });
+        activateSound.play();
+      } catch (error) {
+        console.error('Could not play power-up sound:', error);
+      }
     }
+    
+    // Animate Hamish and Kiril sliding in
+    this.tweens.add({
+      targets: this.hamishSprite,
+      x: width,
+      duration: 500,
+      ease: 'Back.out'
+    });
+    
+    this.tweens.add({
+      targets: this.kirilSprite,
+      x: 0,
+      duration: 500,
+      ease: 'Back.out'
+    });
   }
-
+  
   private updatePowerUp(delta: number) {
     if (this.powerUpActive) {
       this.powerUpTimer -= delta;
@@ -2418,5 +2306,177 @@ export class Level1Scene extends Phaser.Scene {
     
     // Restore scale to maintain same size
     this.powerUpButtonSprite.setScale(currentScale.x, currentScale.y);
+  }
+
+  private showPowerUpWarning(message: string) {
+    // Only show if we have a warning text object
+    if (!this.powerUpWarningText) return;
+    
+    // Set warning message
+    this.powerUpWarningText.setText(message);
+    this.powerUpWarningText.setAlpha(1);
+    
+    // Fade out the warning after a short delay
+    this.tweens.add({
+      targets: this.powerUpWarningText,
+      alpha: 0,
+      y: this.powerUpWarningText.y - 20, 
+      duration: 1500,
+      onComplete: () => {
+        // Reset position after fading out
+        this.powerUpWarningText.y += 20;
+      }
+    });
+  }
+
+  private handlePlayerMovement(delta: number) {
+    if (!this.player || !this.cursors) return;
+    
+    let isMoving = false;
+    let direction = this.lastDirection;
+
+    // Only check if near station for spacebar interactions, not to restrict movement
+    let nearStation = this.isNearStation();
+    
+    // Save the previous player position before any movement
+    const prevX = this.player.x;
+    const prevY = this.player.y;
+    
+    // Create a buffer zone around the conveyor belt
+    const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
+    const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
+    
+    // Check for movement keys and update player position
+    // But don't allow movement onto the conveyor belt
+    let newX = this.player.x;
+    let newY = this.player.y;
+    let movementBlocked = false;
+    
+    if (this.cursors.left?.isDown) {
+      newX -= this.playerSpeed;
+      direction = 'left';
+      isMoving = true;
+    } else if (this.cursors.right.isDown) {
+      newX += this.playerSpeed;
+      direction = 'right';
+      isMoving = true;
+    }
+    
+    if (this.cursors.up.isDown) {
+      newY -= this.playerSpeed;
+      direction = 'up';
+      isMoving = true;
+    } else if (this.cursors.down.isDown) {
+      newY += this.playerSpeed; 
+      direction = 'down';
+      isMoving = true;
+    }
+    
+    // Check if the player's new position would put them on the conveyor belt
+    const futurePlayerY = newY;
+    
+    // Block movement if player would cross the conveyor buffer zone
+    if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
+      // Player trying to move up onto conveyor belt - block it
+      newY = conveyorBufferTop + 1; // Keep them just below the buffer
+      movementBlocked = true;
+    } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
+      // Player trying to move down onto conveyor belt - block it
+      newY = conveyorBufferBottom - 1; // Keep them just above the buffer
+      movementBlocked = true;
+    }
+    
+    // If the player is already within the forbidden zone, push them out
+    if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
+      // Determine which side they're closer to
+      if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
+        newY = conveyorBufferTop + 1; // Put them just below the top buffer
+      } else {
+        newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
+      }
+      movementBlocked = true;
+    }
+    
+    // Update player position
+    this.player.x = newX;
+    this.player.y = newY;
+    
+    // Keep player within bounds
+    if (this.player.x < 30) this.player.x = 30;
+    if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
+    if (this.player.y < 30) this.player.y = 30;
+    if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
+
+    // Check collisions with stations
+    this.stations.forEach(station => {
+      if (station.isUnlocked) {
+        const stationBounds = new Phaser.Geom.Rectangle(
+          station.container.x - 50,
+          station.container.y - 50,
+          100, 
+          100
+        );
+        
+        const playerBounds = new Phaser.Geom.Rectangle(
+          this.player!.x - 20,
+          this.player!.y - 30,
+          40, 
+          60
+        );
+        
+        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+          // Determine which side of the station the player is coming from
+          const dx = this.player!.x - station.container.x;
+          const dy = this.player!.y - station.container.y;
+          
+          // Calculate distances to each edge of the station
+          const distToLeft = Math.abs(dx + 50);
+          const distToRight = Math.abs(dx - 50);
+          const distToTop = Math.abs(dy + 50);
+          const distToBottom = Math.abs(dy - 50);
+          
+          // Find the minimum distance to determine which side the player is on
+          const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+          
+          // Add a small buffer to prevent sticking/sliding
+          const buffer = 5;
+          
+          // Apply appropriate displacement with increased push distance
+          if (minDist === distToLeft) {
+            this.player!.x = station.container.x - 80; // Increased push distance to 80
+          } else if (minDist === distToRight) {
+            this.player!.x = station.container.x + 80; // Increased push distance to 80
+          } else if (minDist === distToTop) {
+            this.player!.y = station.container.y - 80; // Increased push distance to 80
+          } else if (minDist === distToBottom) {
+            this.player!.y = station.container.y + 80; // Increased push distance to 80
+            
+            // Add additional check for bottom collision to prevent sliding
+            if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
+              // If player is trying to move horizontally while colliding with bottom,
+              // push them slightly further down to avoid the collision zone
+              this.player!.y += buffer;
+            }
+          }
+          
+          // Add extra push when trying to move directly into a station
+          if (minDist === distToLeft && this.cursors.right.isDown) {
+            this.player!.x -= buffer; // Push little extra left when trying to move right
+          } else if (minDist === distToRight && this.cursors.left.isDown) {
+            this.player!.x += buffer; // Push little extra right when trying to move left
+          } else if (minDist === distToTop && this.cursors.down.isDown) {
+            this.player!.y -= buffer; // Push little extra up when trying to move down
+          } else if (minDist === distToBottom && this.cursors.up.isDown) {
+            this.player!.y += buffer; // Push little extra down when trying to move up
+          }
+        }
+      }
+    });
+    
+    // Update tracking of last direction and movement state
+    if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
+      this.lastDirection = direction;
+      this.lastMoving = isMoving;
+    }
   }
 }
