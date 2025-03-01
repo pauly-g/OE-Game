@@ -183,7 +183,9 @@ export class Level1Scene extends Phaser.Scene {
       this.load.image('button-idle', 'game/Button/button.png');
       this.load.image('button-pressed', 'game/Button/button pressed.png');
       this.load.image('button-active', 'game/Button/button-active.png');
-      this.load.image('button-flash', 'game/Button/button-flash2.png');
+      this.load.image('button active-flash', 'game/Button/button active-flash.png');
+      this.load.image('button-flash', 'game/Button/button-flash.png');
+      this.load.image('button-flash2', 'game/Button/button-flash2.png');
       
       gameDebugger.info('Level1Scene preload completed');
     } catch (error) {
@@ -1726,7 +1728,7 @@ export class Level1Scene extends Phaser.Scene {
     // Visual feedback based on power-up state
     if (isOverlapping) {
       // Set button to pressed state regardless of power-up availability
-      this.powerUpButtonSprite.setTexture('button-pressed');
+      this.setButtonTexture('button-pressed');
       
       // Only show warning if power-up is not available and not active
       if (!this.powerUpAvailable && !this.powerUpActive && !this.warningShowing) {
@@ -1744,7 +1746,7 @@ export class Level1Scene extends Phaser.Scene {
         // Don't reset texture here to allow flashing animation to continue
       } else {
         // Not available, so use idle texture
-        this.powerUpButtonSprite.setTexture('button-idle');
+        this.setButtonTexture('button-idle');
       }
     }
   }
@@ -1752,19 +1754,24 @@ export class Level1Scene extends Phaser.Scene {
   private updateButtonFlashing(delta: number) {
     if (!this.powerUpButtonSprite) return;
     
-    // Only flash the button when power-up is available and not active
-    if (this.powerUpAvailable && !this.powerUpActive) {
-      // Accumulate time for flashing
-      this.buttonFlashTimer += delta;
+    // Accumulate time for flashing
+    this.buttonFlashTimer += delta;
+    
+    // When we reach the flash interval, toggle the flash state
+    if (this.buttonFlashTimer >= this.buttonFlashInterval) {
+      this.buttonFlashTimer = 0; // Reset timer
+      this.buttonFlashState = !this.buttonFlashState; // Toggle flash state
       
-      // When we reach the flash interval, toggle the flash state
-      if (this.buttonFlashTimer >= this.buttonFlashInterval) {
-        this.buttonFlashTimer = 0; // Reset timer
-        this.buttonFlashState = !this.buttonFlashState; // Toggle flash state
-        
-        // Change button texture based on flash state
-        this.powerUpButtonSprite.setTexture(
-          this.buttonFlashState ? 'button-flash' : 'button-idle'
+      // Different flashing states based on power-up status
+      if (this.powerUpAvailable && !this.powerUpActive) {
+        // Power-up is available but not active - flash between idle and flash2
+        this.setButtonTexture(
+          this.buttonFlashState ? 'button-flash2' : 'button-idle'
+        );
+      } else if (this.powerUpActive) {
+        // Power-up is active - flash between active and active-flash
+        this.setButtonTexture(
+          this.buttonFlashState ? 'button active-flash' : 'button-active'
         );
       }
     }
@@ -1777,7 +1784,7 @@ export class Level1Scene extends Phaser.Scene {
     // Reset animation state for flashing
     this.buttonFlashTimer = 0;
     this.buttonFlashState = false;
-    this.powerUpButtonSprite.setTexture('button-idle');
+    this.setButtonTexture('button-idle');
     
     console.log("Power-up is now available!");
     
@@ -1935,40 +1942,65 @@ export class Level1Scene extends Phaser.Scene {
     const prevX = this.player.x;
     const prevY = this.player.y;
     
-    // Check if player is on conveyor belt
-    let onConveyorBelt = false;
+    // Create a buffer zone around the conveyor belt
+    const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
+    const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
     
-    if (this.conveyorBelt && 
-        this.player.y > this.conveyorBelt.y - 30 && 
-        this.player.y < this.conveyorBelt.y + 30) {
-      onConveyorBelt = true;
-      // Move player to the right when on conveyor belt
-      this.player.x += this.conveyorSpeed; // Conveyor speed that increases over time
-      direction = 'right';
-      isMoving = true;
-    }
-
-    // Always allow movement regardless of whether near a station or carrying an edit
+    // Check for movement keys and update player position
+    // But don't allow movement onto the conveyor belt
+    let newX = this.player.x;
+    let newY = this.player.y;
+    let movementBlocked = false;
+    
     if (this.cursors.left?.isDown) {
-      this.player.x -= this.playerSpeed;
+      newX -= this.playerSpeed;
       direction = 'left';
       isMoving = true;
-    } else if (this.cursors.right?.isDown) {
-      this.player.x += this.playerSpeed;
+    } else if (this.cursors.right.isDown) {
+      newX += this.playerSpeed;
       direction = 'right';
       isMoving = true;
     }
     
     if (this.cursors.up.isDown) {
-      this.player.y -= this.playerSpeed;
+      newY -= this.playerSpeed;
       direction = 'up';
       isMoving = true;
     } else if (this.cursors.down.isDown) {
-      this.player.y += this.playerSpeed; 
+      newY += this.playerSpeed; 
       direction = 'down';
       isMoving = true;
     }
-
+    
+    // Check if the player's new position would put them on the conveyor belt
+    const futurePlayerY = newY;
+    
+    // Block movement if player would cross the conveyor buffer zone
+    if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
+      // Player trying to move up onto conveyor belt - block it
+      newY = conveyorBufferTop + 1; // Keep them just below the buffer
+      movementBlocked = true;
+    } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
+      // Player trying to move down onto conveyor belt - block it
+      newY = conveyorBufferBottom - 1; // Keep them just above the buffer
+      movementBlocked = true;
+    }
+    
+    // If the player is already within the forbidden zone, push them out
+    if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
+      // Determine which side they're closer to
+      if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
+        newY = conveyorBufferTop + 1; // Put them just below the top buffer
+      } else {
+        newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
+      }
+      movementBlocked = true;
+    }
+    
+    // Update player position
+    this.player.x = newX;
+    this.player.y = newY;
+    
     // Keep player within bounds
     if (this.player.x < 30) this.player.x = 30;
     if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
@@ -2371,5 +2403,22 @@ export class Level1Scene extends Phaser.Scene {
     
     // Reset the counter for the next unlock
     this.lastUnlockedAtEditCount = this.totalEditsApplied;
+  }
+
+  // Helper to set button texture while maintaining scale
+  private setButtonTexture(textureName: string) {
+    if (!this.powerUpButtonSprite) return;
+    
+    // Store current scale
+    const currentScale = {
+      x: this.powerUpButtonSprite.scaleX,
+      y: this.powerUpButtonSprite.scaleY
+    };
+    
+    // Change texture
+    this.powerUpButtonSprite.setTexture(textureName);
+    
+    // Restore scale to maintain same size
+    this.powerUpButtonSprite.setScale(currentScale.x, currentScale.y);
   }
 }
