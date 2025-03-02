@@ -114,6 +114,8 @@ export class Level1Scene extends Phaser.Scene {
   private playerOnButton: boolean = false;
   private warningShowing: boolean = false;
   private orderMinSpacing: number = 40; // Minimum space between orders
+  private playerCollisionVisualizer?: Phaser.GameObjects.Rectangle;
+  private showDebugCollisions: boolean = false; // Set to true to see collision boundaries
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -503,9 +505,9 @@ export class Level1Scene extends Phaser.Scene {
     switch (type) {
       case 'address': return 'Address Edit';
       case 'quantity': return 'Quantity Edit';
-      case 'discount': return 'Discount Code';
+      case 'discount': return 'Discount Edit';
       case 'product': return 'Change Product';
-      case 'invoice': return 'Need Invoice';
+      case 'invoice': return 'Invoice Edit';
       case 'cancel': return 'Cancel Order';
       default: return 'Unknown Station';
     }
@@ -551,7 +553,7 @@ export class Level1Scene extends Phaser.Scene {
       const prevY = this.player.y;
       
       // Create a buffer zone around the conveyor belt
-      const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
+      const conveyorBufferTop = this.conveyorBelt.y - 90; // Significantly increased buffer to keep player's shadow from touching
       const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
       
       // Check for movement keys and update player position
@@ -608,6 +610,23 @@ export class Level1Scene extends Phaser.Scene {
       // Update player position
       this.player.x = newX;
       this.player.y = newY;
+      
+      // Visualize player collision area (for debugging)
+      if (this.showDebugCollisions) {
+        if (!this.playerCollisionVisualizer) {
+          this.playerCollisionVisualizer = this.add.rectangle(
+            this.player.x, 
+            this.player.y + 20, // Position at player's feet
+            60, // Width of collision box
+            40, // Height of collision box
+            0xff0000, // Red color
+            0.5 // Semi-transparent
+          ).setDepth(100);
+        } else {
+          this.playerCollisionVisualizer.x = this.player.x;
+          this.playerCollisionVisualizer.y = this.player.y + 20;
+        }
+      }
       
       // Keep player within bounds
       if (this.player.x < 30) this.player.x = 30;
@@ -2178,6 +2197,8 @@ export class Level1Scene extends Phaser.Scene {
     }
   }
 
+  // Power-up methods
+
   private unlockNextStation() {
     // Check how many stations are currently unlocked
     const unlockedCount = this.stations.filter(station => station.isUnlocked).length;
@@ -2360,7 +2381,7 @@ export class Level1Scene extends Phaser.Scene {
     const prevY = this.player.y;
     
     // Create a buffer zone around the conveyor belt
-    const conveyorBufferTop = this.conveyorBelt.y - 40; // Increased buffer above conveyor from 20px to 40px
+    const conveyorBufferTop = this.conveyorBelt.y - 90; // Significantly increased buffer to keep player's shadow from touching
     const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
     
     // Check for movement keys and update player position
