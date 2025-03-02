@@ -36,6 +36,8 @@
  */
 import Phaser from 'phaser';
 import { gameDebugger } from '../utils/debug';
+import { SpeechBubble } from '../ui/SpeechBubble';
+import { regularComments, powerUpComments } from '../data/BuyerComments';
 
 interface Order {
   id: string;
@@ -49,6 +51,7 @@ interface Order {
   height: number;
   icons?: Phaser.GameObjects.Text[]; // Add icons property
   createdDuringPowerUp?: boolean; // Add createdDuringPowerUp property
+  hasComment?: boolean; // Tracks if a comment has been shown for this order
 }
 
 interface Station {
@@ -117,6 +120,11 @@ export class Level1Scene extends Phaser.Scene {
   private orderMinSpacing: number = 40; // Minimum space between orders
   private playerCollisionVisualizer?: Phaser.GameObjects.Rectangle;
   private showDebugCollisions: boolean = false; // Set to true to see collision boundaries
+
+  // Speech bubble related properties
+  private activeBubbles: Map<string, SpeechBubble> = new Map();
+  private screenWidthThreshold: number = 0; // Will be set in create method
+  private commentsEnabled: boolean = true;
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -234,11 +242,16 @@ export class Level1Scene extends Phaser.Scene {
     gameDebugger.info('Starting create method in Level1Scene');
     
     try {
-      // Set up some game variables
-      gameDebugger.info('Setting up game variables');
-      
+      // Get screen dimensions
       const width = this.cameras.main.width;
       const height = this.cameras.main.height;
+      
+      // Calculate screen width threshold for comments (1/3 of the screen width)
+      this.screenWidthThreshold = width / 3;
+      
+      // Initialize game state
+      this.score = 0;
+      this.lives = 3;
       
       // Add background image if loaded
       if (this.textures.exists('background')) {
@@ -1325,7 +1338,125 @@ export class Level1Scene extends Phaser.Scene {
     }
   }
 
-  // Update the order positions function to handle completed orders
+  // Update the order positions function to show comments
+  private updateOrderPositions(delta: number) {
+    // Move orders along conveyor belt
+    for (let i = this.orders.length - 1; i >= 0; i--) {
+      const order = this.orders[i];
+      
+      // Move all orders to the right (including completed ones)
+      order.x += this.conveyorSpeed;
+      
+      // Update container position
+      if (order.container) {
+        order.container.x = order.x;
+      }
+      
+      // Try-catch block to handle any speech bubble errors
+      try {
+        // Check if order has crossed the threshold to show comment and doesn't already have a comment
+        if (this.commentsEnabled && !order.hasComment && 
+            order.x > this.screenWidthThreshold && 
+            !this.activeBubbles.has(order.id)) {
+          // Set hasComment before showing to prevent multiple attempts if showing fails
+          order.hasComment = true;
+          this.showOrderComment(order);
+        }
+        
+        // Update existing bubble positions if we have the speech bubble
+        if (this.activeBubbles.has(order.id)) {
+          const bubble = this.activeBubbles.get(order.id);
+          if (bubble) {
+            try {
+              bubble.update(order.x, order.y + 80); // Position below the order
+            } catch (err) {
+              console.error("Error updating bubble position:", err);
+              // If update fails, try to remove the bubble safely
+              this.activeBubbles.delete(order.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error handling speech bubbles in updateOrderPositions:", error);
+      }
+      
+      // Check if order went off screen
+      if (order.x > this.cameras.main.width + 50) {
+        // Try-catch to handle any errors during cleanup
+        try {
+          // Remove any active speech bubbles for this order
+          if (this.activeBubbles.has(order.id)) {
+            const bubble = this.activeBubbles.get(order.id);
+            if (bubble) {
+              bubble.destroy();
+            }
+            this.activeBubbles.delete(order.id);
+          }
+          
+          // Additional logging to help debug
+          console.log(`Order ${order.id} went off screen, removing...`);
+          
+          // Rest of the existing off-screen handling code
+          if (!order.isComplete && this.lives > 0) {
+            // Incomplete order - remove a life
+            this.lives--;
+            this.failedOrders++;
+            
+            // Update life indicators
+            this.updateLivesDisplay();
+            
+            // Visual feedback for failed order - angry emoji floating up
+            const failEmoji = this.add.text(
+              order.x - 100,
+              order.y,
+              '😡',
+              { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+            ).setOrigin(0.5);
+            
+            // Animate the angry emoji floating up
+            this.tweens.add({
+              targets: failEmoji,
+              y: '-=150',
+              alpha: { from: 1, to: 0 },
+              scale: { from: 1, to: 1.5 },
+              duration: 1500,
+              ease: 'Sine.Out',
+              onComplete: () => failEmoji.destroy()
+            });
+            
+            // If all lives are gone, it's game over
+            if (this.lives <= 0) {
+              this.gameOver();
+            }
+          } else if (order.isComplete) {
+            // Completed order - just animate a heart emoji floating away
+            const heartEmoji = this.add.text(
+              order.x - 100,
+              order.y,
+              '❤️',
+              { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+            ).setOrigin(0.5);
+            
+            // Animate the heart emoji floating up
+            this.tweens.add({
+              targets: heartEmoji,
+              y: '-=150',
+              alpha: { from: 1, to: 0 },
+              scale: { from: 1, to: 1.5 },
+              duration: 1500,
+              ease: 'Sine.Out',
+              onComplete: () => heartEmoji.destroy()
+            });
+          }
+          
+          // Remove the order in both cases
+          this.removeOrder(i);
+        } catch (error) {
+          console.error("Error handling order removal:", error);
+        }
+      }
+    }
+  }
 
   // Power-up methods
 
@@ -1647,79 +1778,6 @@ export class Level1Scene extends Phaser.Scene {
     
     // Make sure the edits are always on top
     this.carriedEdits.forEach(edit => edit.icon.setDepth(100));
-  }
-
-  private updateOrderPositions(delta: number) {
-    // Move orders along conveyor belt
-    for (let i = this.orders.length - 1; i >= 0; i--) {
-      const order = this.orders[i];
-      
-      // Move all orders to the right (including completed ones)
-      order.x += this.conveyorSpeed;
-      
-      // Update container position
-      if (order.container) {
-        order.container.x = order.x;
-      }
-      
-      // Check if order went off screen
-      if (order.x > this.cameras.main.width + 50) {
-        if (!order.isComplete && this.lives > 0) {
-          // Incomplete order - remove a life
-          this.lives--;
-          this.failedOrders++;
-          
-          // Update life indicators
-          this.updateLivesDisplay();
-          
-          // Visual feedback for failed order - angry emoji floating up
-          const failEmoji = this.add.text(
-            order.x - 100,
-            order.y,
-            '😡',
-            { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
-          ).setOrigin(0.5);
-          
-          // Animate the angry emoji floating up
-          this.tweens.add({
-            targets: failEmoji,
-            y: '-=150',
-            alpha: { from: 1, to: 0 },
-            scale: { from: 1, to: 1.5 },
-            duration: 1500,
-            ease: 'Sine.Out',
-            onComplete: () => failEmoji.destroy()
-          });
-          
-          // If all lives are gone, it's game over
-          if (this.lives <= 0) {
-            this.gameOver();
-          }
-        } else if (order.isComplete) {
-          // Completed order - just animate a heart emoji floating away
-          const heartEmoji = this.add.text(
-            order.x - 100,
-            order.y,
-            '❤️',
-            { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
-          ).setOrigin(0.5);
-          
-          // Animate the heart emoji floating up
-          this.tweens.add({
-            targets: heartEmoji,
-            y: '-=150',
-            alpha: { from: 1, to: 0 },
-            scale: { from: 1, to: 1.5 },
-            duration: 1500,
-            ease: 'Sine.Out',
-            onComplete: () => heartEmoji.destroy()
-          });
-        }
-        
-        // Remove the order in both cases
-        this.removeOrder(i);
-      }
-    }
   }
 
   private checkMissedOrders(delta: number) {
@@ -2124,7 +2182,7 @@ export class Level1Scene extends Phaser.Scene {
             icon.x = 0;
           } else {
             // Multiple icons spaced evenly
-            const totalSpace = bgWidth * 0.6; // 60% of box width for icon spacing
+            const totalSpace = 80; // Total space to distribute icons
             const spacing = totalSpace / (numEdits - 1);
             icon.x = -totalSpace/2 + index * spacing;
             icon.y = 0; // Centered vertically
@@ -2189,7 +2247,8 @@ export class Level1Scene extends Phaser.Scene {
         isComplete: false,
         width: bgWidth,
         height: bgHeight,
-        icons // Add icons to the order object
+        icons, // Add icons to the order object
+        hasComment: false // Initialize hasComment property to false
       };
       
       // Add to orders array
@@ -2675,5 +2734,136 @@ export class Level1Scene extends Phaser.Scene {
     
     // Verify that all stations are visible
     this.verifyStationVisibility();
+  }
+
+  /**
+   * Shows a comment for an order based on its edit type requirements
+   */
+  private showOrderComment(order: Order): void {
+    console.log(`Showing comment for order ${order.id}`);
+    
+    // Skip comments for auto-completed orders if needed
+    if (order.createdDuringPowerUp) {
+      this.showPowerUpComment(order);
+      return;
+    }
+    
+    // For normal orders, pick a comment related to one of its required edits
+    this.showRegularComment(order);
+  }
+
+  /**
+   * Shows a regular comment for an order
+   */
+  private showRegularComment(order: Order): void {
+    // Get a random edit type from the order's requirements
+    const randomEditType = this.getRandomEditType(order.types);
+    
+    if (randomEditType && regularComments[randomEditType]) {
+      const commentsForType = regularComments[randomEditType];
+      const randomIndex = Math.floor(Math.random() * commentsForType.length);
+      const comment = commentsForType[randomIndex];
+      
+      this.createSpeechBubble(order, comment.text);
+    }
+  }
+
+  /**
+   * Shows a power-up related comment for an order
+   */
+  private showPowerUpComment(order: Order): void {
+    // Filter power-up comments that match the order's edit types
+    const matchingComments = powerUpComments.filter(comment => 
+      order.types.includes(comment.editType) || comment.editType === 'general'
+    );
+    
+    if (matchingComments.length === 0) {
+      // Fall back to general comments if no matching ones
+      const generalComments = powerUpComments.filter(comment => comment.editType === 'general');
+      
+      if (generalComments.length > 0) {
+        const randomIndex = Math.floor(Math.random() * generalComments.length);
+        this.createSpeechBubble(order, generalComments[randomIndex].text);
+      }
+      
+      return;
+    }
+    
+    // Select a random matching comment
+    const randomIndex = Math.floor(Math.random() * matchingComments.length);
+    this.createSpeechBubble(order, matchingComments[randomIndex].text);
+  }
+
+  /**
+   * Gets a random edit type from the order's requirements
+   */
+  private getRandomEditType(editTypes: string[]): string | null {
+    if (editTypes.length === 0) return null;
+    
+    const randomIndex = Math.floor(Math.random() * editTypes.length);
+    return editTypes[randomIndex];
+  }
+
+  /**
+   * Creates a speech bubble for an order
+   */
+  private createSpeechBubble(order: Order, text: string): void {
+    console.log(`Creating speech bubble for order ${order.id}: "${text}"`);
+    
+    // Check if this order already has a bubble
+    if (this.activeBubbles.has(order.id)) {
+      console.log(`Order ${order.id} already has a speech bubble, skipping`);
+      return;
+    }
+    
+    // If we already have 2 active bubbles, remove the oldest one first
+    if (this.activeBubbles.size >= 2) {
+      console.log("Already showing 2 bubbles, removing oldest");
+      const oldestOrderId = Array.from(this.activeBubbles.keys())[0];
+      if (oldestOrderId) {
+        const oldestBubble = this.activeBubbles.get(oldestOrderId);
+        if (oldestBubble) {
+          oldestBubble.destroy();
+        }
+        this.activeBubbles.delete(oldestOrderId);
+      }
+    }
+    
+    // Create bubble with the SpeechBubble class
+    const bubble = new SpeechBubble({
+      scene: this,
+      x: order.x,
+      y: order.y + 80, // Position below the order
+      text: text,
+      padding: 12,
+      backgroundColor: order.createdDuringPowerUp ? 0x7358a7 : 0x4a6481, // Different color for power-up orders
+      borderColor: order.createdDuringPowerUp ? 0xff8bf7 : 0x8bf7ff,
+      borderWidth: 3,
+      pointerPosition: 'center',
+      lifespan: 0 // We'll manage the lifespan ourselves
+    });
+    
+    // Store reference to manage lifecycle
+    this.activeBubbles.set(order.id, bubble);
+    
+    // Add a small pop-in animation
+    bubble.container.setScale(0.1);
+    this.tweens.add({
+      targets: bubble.container,
+      scale: 1,
+      duration: 300,
+      ease: 'Back.Out'
+    });
+    
+    // Remove from tracking after a delay
+    this.time.delayedCall(5000, () => {
+      if (this.activeBubbles.has(order.id)) {
+        const storedBubble = this.activeBubbles.get(order.id);
+        if (storedBubble) {
+          storedBubble.destroy();
+          this.activeBubbles.delete(order.id);
+        }
+      }
+    });
   }
 }
