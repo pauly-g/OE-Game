@@ -1271,6 +1271,19 @@ export class Level1Scene extends Phaser.Scene {
     if (!order.createdDuringPowerUp) {
       this.manualOrdersCompleted++;
       console.log(`Manual order completed: ${this.manualOrdersCompleted}/10 needed for power-up`);
+      
+      // Add a tiny jump animation for manually completed orders
+      this.tweens.add({
+        targets: order.container,
+        y: order.container.y - 10,
+        duration: 100,
+        ease: 'Sine.Out',
+        yoyo: true,
+        onComplete: () => {
+          // Reset position to normal after animation completes
+          order.container.y = order.y;
+        }
+      });
     } else {
       console.log(`Power-up auto-completed order (not counting towards manual total)`);
     }
