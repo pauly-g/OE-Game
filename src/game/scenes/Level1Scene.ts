@@ -304,8 +304,11 @@ export class Level1Scene extends Phaser.Scene {
       });
 
       console.log('Level1Scene create completed');
+      
+      // Verify that all unlocked stations are visible
+      this.verifyStationVisibility();
     } catch (error) {
-      console.error('Error in create:', error);
+      console.error('Error in create method:', error);
     }
   }
 
@@ -413,6 +416,10 @@ export class Level1Scene extends Phaser.Scene {
     const startX = (this.cameras.main.width - totalWidth) / 2;
     const y = this.cameras.main.height * 0.2;
 
+    // Define consistent size for all stations
+    const tableSize = 120; // Size of the table
+    const iconScale = 1.2; // Make emoji slightly larger
+
     stationTypes.forEach((type, index) => {
       const station: Station = {
         type,
@@ -421,21 +428,42 @@ export class Level1Scene extends Phaser.Scene {
         bounds: null
       };
 
+      // Create table top with a nicer appearance - will be the same for all stations
+      // 1. Create the main tabletop with rounded corners and a light wood color
+      const tableTop = this.add.rectangle(0, 0, tableSize, tableSize, 0xDEB887)
+        .setStrokeStyle(3, 0xA0522D)
+        .setOrigin(0.5)
+        .setAlpha(0.9);
+      
+      // 2. Add some texture/detail to make it look more like a table
+      const tableEdge = this.add.rectangle(0, 0, tableSize - 14, tableSize - 14, 0xB8860B)
+        .setStrokeStyle(2, 0x8B4513)
+        .setOrigin(0.5)
+        .setAlpha(0.7);
+      
+      // 3. Add a small shadow underneath
+      const tableShadow = this.add.rectangle(4, 4, tableSize, tableSize, 0x000000)
+        .setOrigin(0.5)
+        .setAlpha(0.2);
+
+      // Create the station icon (emoji) with enhanced visibility
       const icon = this.add.text(0, 0, this.getStationIcon(type), {
-        fontSize: '48px'  // Increase font size from 32px to 48px
-      }).setOrigin(0.5);
+        fontSize: '48px',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 3,
+        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 5, stroke: true, fill: true }
+      }).setOrigin(0.5).setScale(iconScale);
 
-      const base = this.add.rectangle(0, 0, 100, 100, 0x888888)  // Increase size from 60x60 to 100x100 and lighten color
-        .setStrokeStyle(4, 0xaaaaaa);  // Thicker border with lighter color
-
-      station.container.add([base, icon]);
+      // Add everything to the container - order matters for layering
+      station.container.add([tableShadow, tableTop, tableEdge, icon]);
       
       // Create bounds for collision detection
       station.bounds = new Phaser.Geom.Rectangle(
-        station.container.x - 50,
-        station.container.y - 50,
-        100, 
-        100
+        station.container.x - tableSize/2,
+        station.container.y - tableSize/2,
+        tableSize, 
+        tableSize
       );
       
       // Hide locked stations completely (alpha 0)
@@ -447,29 +475,16 @@ export class Level1Scene extends Phaser.Scene {
     });
   }
 
-  private getStationIcon(type: Station['type']): string {
-    const icons = {
-      address: '🏠',
-      quantity: '🔢', // Change from '#️⃣' to '🔢' which renders better
-      payment: '💳',
-      discount: '🏷️',
-      product: '📦',
-      cancel: '❌',
-      emoji: '😊',
-      grammar: '📝',
-      color: '🎨',
-      wording: '💬',
-      styling: '👗'
-    };
-    
-    // Add debugging to see what types are being used
-    const icon = icons[type];
-    if (!icon) {
-      console.error(`No icon found for station type: ${type}`);
-      return '❓'; // Fallback icon if type not found
+  private getStationIcon(type: string): string {
+    switch (type) {
+      case 'address': return '🏠'; // House for address
+      case 'quantity': return '🔢'; // Numbers for quantity
+      case 'payment': return '💰'; // Money bag for payment
+      case 'discount': return '🏷️'; // Tag for discount
+      case 'product': return '📦'; // Package for product
+      case 'cancel': return '❌'; // X for cancel
+      default: return '❓'; // Question mark as fallback
     }
-    console.log(`Returning icon '${icon}' for type '${type}'`);
-    return icon;
   }
 
   private removeOrder(index: number) {
@@ -1050,18 +1065,27 @@ export class Level1Scene extends Phaser.Scene {
     if (index === -1) return;
     
     // Create a checkmark to show this edit has been applied
-    const checkmark = this.add.text(0, -15, '✓', {
-      fontSize: '24px',
-      color: '#00ff00',
+    const checkmark = this.add.text(0, 0, '✓', {
+      fontSize: '32px', // Increased from 24px
+      color: '#00ff00', // Keep the same bright green
       stroke: '#000000',
-      strokeThickness: 2
-    });
+      strokeThickness: 3, // Increased from 2
+      fontStyle: 'bold', // Added bold style
+      shadow: { // Added shadow for better visibility
+        offsetX: 2,
+        offsetY: 2,
+        color: '#000',
+        blur: 3,
+        stroke: true,
+        fill: true
+      }
+    }).setOrigin(0.5);
     
     // Get the corresponding icon for positioning if available
     if (order.icons && order.icons[index]) {
       // Position the checkmark directly on top of the icon
       checkmark.x = order.icons[index].x;
-      checkmark.y = order.icons[index].y - 15; // Position slightly above the icon
+      checkmark.y = order.icons[index].y - 20; // Position slightly higher above the icon (adjusted for larger size)
     } else {
       // Position based on layout (horizontal or grid)
       if (order.types.length <= 3) {
@@ -2050,16 +2074,35 @@ export class Level1Scene extends Phaser.Scene {
       numEdits = Math.min(numEdits, maxPossibleEdits);
       
       // Select random edit types from unlocked stations
-      const stationTypes = unlockedStations.map(station => station.type);
+      // First, ensure we have unique station types
+      const stationTypesSet = new Set(unlockedStations.map(station => station.type));
+      const uniqueStationTypes = Array.from(stationTypesSet);
       const selectedTypes: string[] = [];
       
-      // Shuffle the types to ensure randomness
-      const shuffledTypes = [...stationTypes].sort(() => Math.random() - 0.5);
+      console.log(`Available unique station types: ${uniqueStationTypes.join(', ')}`);
       
-      // Take the first numEdits types, without duplicates
+      // Fisher-Yates shuffle algorithm for true randomness
+      function fisherYatesShuffle(array: any[]): any[] {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      }
+      
+      // Shuffle the types using Fisher-Yates for proper randomization
+      const shuffledTypes = fisherYatesShuffle(uniqueStationTypes);
+      console.log(`Shuffled station types: ${shuffledTypes.join(', ')}`);
+      
+      // Take the first numEdits types, with explicit duplicate checking
       for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
-        // Only add this type (no need to check as shuffle ensures uniqueness)
-        selectedTypes.push(shuffledTypes[i]);
+        const typeToAdd = shuffledTypes[i];
+        
+        // Double-check that we're not adding a duplicate (should never happen with this algorithm, but being safe)
+        if (!selectedTypes.includes(typeToAdd)) {
+          selectedTypes.push(typeToAdd);
+        }
       }
       
       // If we couldn't get enough types (not enough unique stations), 
@@ -2197,19 +2240,17 @@ export class Level1Scene extends Phaser.Scene {
     
     // Make sure the station is visible
     if (nextStation.container) {
-      // Force the station to be fully visible
-      nextStation.container.setAlpha(1);
-      console.log(`Setting alpha to 1 for station: ${nextStation.type}`);
+      // Start with alpha 0
+      nextStation.container.setAlpha(0);
       
       // Flash the station to draw attention to it
       this.tweens.add({
         targets: nextStation.container,
-        alpha: { from: 0.5, to: 1 },
-        scale: { from: 0.8, to: 1 },
-        ease: 'Sine.InOut',
-        duration: 500,
-        repeat: 3,
-        yoyo: true,
+        alpha: { from: 0, to: 1 },
+        scale: { from: 0.7, to: 1 },
+        ease: 'Back.Out',
+        duration: 600,
+        yoyo: false,
         onComplete: () => {
           // Ensure it stays visible after the animation
           nextStation.container.setAlpha(1);
@@ -2217,68 +2258,29 @@ export class Level1Scene extends Phaser.Scene {
         }
       });
       
-      // Add a celebratory animation around the station
-      const celebrationEmoji = this.add.text(
-        nextStation.container.x,
-        nextStation.container.y - 50,
-        '⭐',
-        { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
-      ).setOrigin(0.5);
+      // Display an announcement text about the new station
+      this.stationUnlockText.setText(`${this.getStationIcon(nextStation.type)} New station unlocked! ${this.getStationIcon(nextStation.type)}`);
+      this.stationUnlockText.setVisible(true);
       
-      // Animate the celebration emoji
-      this.tweens.add({
-        targets: celebrationEmoji,
-        y: '-=50',
-        alpha: { from: 1, to: 0 },
-        scale: { from: 1, to: 2 },
-        duration: 1500,
-        ease: 'Sine.Out',
-        onComplete: () => celebrationEmoji.destroy()
-      });
-      
-      // Show an announcement
-      const announcement = this.add.text(
-        this.cameras.main.width / 2,
-        this.cameras.main.height / 2,
-        `New Station Unlocked: ${this.getStationIcon(nextStation.type)} ${nextStation.type}!`,
-        { 
-          fontSize: '28px', 
-          stroke: '#000000', 
-          strokeThickness: 4,
-          backgroundColor: '#FFF9C4',
-          padding: { x: 20, y: 10 }
-        }
-      ).setOrigin(0.5).setDepth(110);
-      
-      // Add a background for the announcement
-      const bgWidth = announcement.width + 40;
-      const bgHeight = announcement.height + 20;
-      const announcementBg = this.add.rectangle(
-        this.cameras.main.width / 2,
-        this.cameras.main.height / 2,
-        bgWidth,
-        bgHeight,
-        0xFFF9C4,
-        0.8
-      ).setOrigin(0.5).setDepth(109).setStrokeStyle(4, 0x000000);
-      
-      // Animate the announcement
-      this.tweens.add({
-        targets: [announcement, announcementBg],
-        alpha: { from: 1, to: 0 },
-        scale: { from: 1, to: 1.2 },
-        duration: 2000,
-        delay: 1500,
-        ease: 'Sine.InOut',
-        onComplete: () => {
-          announcement.destroy();
-          announcementBg.destroy();
-        }
+      // Fade out the announcement after a delay
+      this.time.delayedCall(3000, () => {
+        this.tweens.add({
+          targets: this.stationUnlockText,
+          alpha: 0,
+          duration: 500,
+          onComplete: () => {
+            this.stationUnlockText.setVisible(false);
+            this.stationUnlockText.setAlpha(1);
+          }
+        });
       });
     }
     
-    // Reset the counter for the next unlock
+    // Reset the counter
     this.lastUnlockedAtEditCount = this.totalEditsApplied;
+    
+    // Verify all station visibility after unlocking
+    this.verifyStationVisibility();
   }
 
   // Helper to set button texture while maintaining scale
@@ -2467,6 +2469,49 @@ export class Level1Scene extends Phaser.Scene {
     if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
       this.lastDirection = direction;
       this.lastMoving = isMoving;
+    }
+  }
+
+  private verifyStationVisibility() {
+    console.log('Verifying station visibility...');
+    
+    this.stations.forEach(station => {
+      if (station.isUnlocked && station.container) {
+        // Check if the station should be visible but isn't
+        if (station.container.alpha < 1) {
+          console.log(`Fixing visibility for unlocked station: ${station.type}`);
+          station.container.setAlpha(1);
+        }
+        
+        // Make sure the container is visible
+        if (!station.container.visible) {
+          console.log(`Setting visible=true for unlocked station: ${station.type}`);
+          station.container.setVisible(true);
+        }
+      }
+    });
+    
+    // Special check for quantity station
+    const quantityStation = this.stations.find(s => s.type === 'quantity');
+    if (quantityStation && quantityStation.isUnlocked) {
+      console.log(`Quantity station status: unlocked=${quantityStation.isUnlocked}, alpha=${quantityStation.container.alpha}, visible=${quantityStation.container.visible}`);
+    }
+  }
+
+  private checkForUnlock() {
+    // Check if we've met the threshold for unlocking a new station
+    const unlockedCount = this.stations.filter(station => station.isUnlocked).length;
+    
+    // If we already have all stations unlocked, no need to check
+    if (unlockedCount >= this.stations.length) {
+      return;
+    }
+    
+    // If we've passed the threshold for the next unlock
+    if (this.totalEditsApplied >= this.lastUnlockedAtEditCount + 5) {
+      console.log('Threshold met to unlock next station: ${this.totalEditsApplied} edits applied');
+      
+      this.unlockNextStation();
     }
   }
 }
