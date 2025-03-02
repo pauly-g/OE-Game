@@ -1345,7 +1345,7 @@ export class Level1Scene extends Phaser.Scene {
         targets: this.hamishSprite,
         x: this.cameras.main.width + 100,
         duration: 500,
-        ease: 'Sine.Out',
+        ease: 'Back.in',
         onComplete: () => {
           if (this.hamishSprite) this.hamishSprite.destroy();
         }
@@ -1357,7 +1357,7 @@ export class Level1Scene extends Phaser.Scene {
         targets: this.kirilSprite,
         x: -100,
         duration: 500,
-        ease: 'Sine.Out',
+        ease: 'Back.in',
         onComplete: () => {
           if (this.kirilSprite) this.kirilSprite.destroy();
         }
