@@ -125,6 +125,8 @@ export class Level1Scene extends Phaser.Scene {
   private activeBubbles: Map<string, SpeechBubble> = new Map();
   private screenWidthThreshold: number = 0; // Will be set in create method
   private commentsEnabled: boolean = true;
+  private recentComments: string[] = []; // Track recently shown comments
+  private maxRecentComments: number = 5; // How many recent comments to track
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -2761,8 +2763,20 @@ export class Level1Scene extends Phaser.Scene {
     
     if (randomEditType && regularComments[randomEditType]) {
       const commentsForType = regularComments[randomEditType];
-      const randomIndex = Math.floor(Math.random() * commentsForType.length);
-      const comment = commentsForType[randomIndex];
+      
+      // Filter out recently shown comments
+      const availableComments = commentsForType.filter(
+        comment => !this.recentComments.includes(comment.text)
+      );
+      
+      // If all comments have been recently shown, use the full list
+      const commentPool = availableComments.length > 0 ? availableComments : commentsForType;
+      
+      const randomIndex = Math.floor(Math.random() * commentPool.length);
+      const comment = commentPool[randomIndex];
+      
+      // Add to recent comments list
+      this.addToRecentComments(comment.text);
       
       this.createSpeechBubble(order, comment.text);
     }
@@ -2782,16 +2796,42 @@ export class Level1Scene extends Phaser.Scene {
       const generalComments = powerUpComments.filter(comment => comment.editType === 'general');
       
       if (generalComments.length > 0) {
-        const randomIndex = Math.floor(Math.random() * generalComments.length);
-        this.createSpeechBubble(order, generalComments[randomIndex].text);
+        // Filter out recently shown comments
+        const availableComments = generalComments.filter(
+          comment => !this.recentComments.includes(comment.text)
+        );
+        
+        // If all comments have been recently shown, use the full list
+        const commentPool = availableComments.length > 0 ? availableComments : generalComments;
+        
+        const randomIndex = Math.floor(Math.random() * commentPool.length);
+        const commentText = commentPool[randomIndex].text;
+        
+        // Add to recent comments list
+        this.addToRecentComments(commentText);
+        
+        this.createSpeechBubble(order, commentText);
       }
       
       return;
     }
     
+    // Filter out recently shown comments
+    const availableComments = matchingComments.filter(
+      comment => !this.recentComments.includes(comment.text)
+    );
+    
+    // If all comments have been recently shown, use the full list
+    const commentPool = availableComments.length > 0 ? availableComments : matchingComments;
+    
     // Select a random matching comment
-    const randomIndex = Math.floor(Math.random() * matchingComments.length);
-    this.createSpeechBubble(order, matchingComments[randomIndex].text);
+    const randomIndex = Math.floor(Math.random() * commentPool.length);
+    const commentText = commentPool[randomIndex].text;
+    
+    // Add to recent comments list
+    this.addToRecentComments(commentText);
+    
+    this.createSpeechBubble(order, commentText);
   }
 
   /**
@@ -2800,8 +2840,22 @@ export class Level1Scene extends Phaser.Scene {
   private getRandomEditType(editTypes: string[]): string | null {
     if (editTypes.length === 0) return null;
     
+    // Simple random selection is more reliable here
     const randomIndex = Math.floor(Math.random() * editTypes.length);
     return editTypes[randomIndex];
+  }
+
+  /**
+   * Adds a comment to the recent comments list and removes oldest if needed
+   */
+  private addToRecentComments(comment: string): void {
+    // Add new comment to the list
+    this.recentComments.push(comment);
+    
+    // Keep only the most recent 5 comments
+    if (this.recentComments.length > this.maxRecentComments) {
+      this.recentComments.shift(); // Remove oldest comment
+    }
   }
 
   /**
