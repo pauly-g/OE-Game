@@ -62,38 +62,11 @@ export class SpeechBubble {
     this.background.lineStyle(borderWidth, borderColor, 1);
     this.background.strokeRoundedRect(-width / 2, -height / 2, width, height, 8);
     
-    // Create a pointer (small triangle) at the bottom of the bubble
+    // Create an empty graphics object for compatibility
     this.pointer = config.scene.add.graphics();
-    this.pointer.fillStyle(backgroundColor, 1);
     
-    // Default pointer position is center
-    const pointerPosition = config.pointerPosition || 'center';
-    let pointerX = 0;
-    
-    if (pointerPosition === 'left') {
-      pointerX = -width / 4;
-    } else if (pointerPosition === 'right') {
-      pointerX = width / 4;
-    }
-    
-    // Draw the pointer triangle
-    this.pointer.fillTriangle(
-      pointerX, height / 2,
-      pointerX - 10, height / 2 - 10,
-      pointerX + 10, height / 2 - 10
-    );
-    
-    // Add a border to the pointer
-    this.pointer.lineStyle(borderWidth, borderColor, 1);
-    this.pointer.beginPath();
-    this.pointer.moveTo(pointerX, height / 2);
-    this.pointer.lineTo(pointerX - 10, height / 2 - 10);
-    this.pointer.lineTo(pointerX + 10, height / 2 - 10);
-    this.pointer.closePath();
-    this.pointer.strokePath();
-    
-    // Add components to container
-    this.container.add([this.background, this.text, this.pointer]);
+    // Add components to container (without the pointer)
+    this.container.add([this.background, this.text]);
     
     // Set depth to ensure it appears above orders
     this.container.setDepth(50);
