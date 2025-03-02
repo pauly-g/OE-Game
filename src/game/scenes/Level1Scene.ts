@@ -507,7 +507,7 @@ export class Level1Scene extends Phaser.Scene {
     switch (type) {
       case 'address': return 'Address Edit';
       case 'quantity': return 'Quantity Edit';
-      case 'discount': return 'Discount Edit';
+      case 'discount': return 'Add Discount';
       case 'product': return 'Change Product';
       case 'invoice': return 'Invoice Edit';
       case 'cancel': return 'Cancel Order';
