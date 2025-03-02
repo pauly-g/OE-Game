@@ -73,6 +73,7 @@ export class Level1Scene extends Phaser.Scene {
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
   private ordersCompleted: number = 0;
   private totalEditsApplied: number = 0;
+  private manualOrdersCompleted: number = 0; // Track manually completed orders
   private lastUnlockedAtEditCount: number = 0;
   private lives: number = 3;
   private livesContainer!: Phaser.GameObjects.Container;
@@ -503,19 +504,14 @@ export class Level1Scene extends Phaser.Scene {
         return;
       }
 
-      // Check for 'd' key to activate powerup (cheat)
-      if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
-        console.log('Cheat code activated: Power-Up!');
-        this.activatePowerUpCheat();
-      }
-
       // Process power-up status
       if (this.powerUpActive) {
         this.updatePowerUp(delta);
       }
 
       // Activate power-up after 10 edits
-      if (!this.powerUpAvailable && !this.powerUpActive && this.ordersCompleted >= 10) {
+      if (!this.powerUpAvailable && !this.powerUpActive && this.manualOrdersCompleted >= 10) {
+        console.log(`Power-up now available after ${this.manualOrdersCompleted} manual orders completed`);
         this.powerUpAvailable = true;
         this.setButtonColor(0x00ff00);
       }
@@ -718,6 +714,12 @@ export class Level1Scene extends Phaser.Scene {
       // Handle button flashing when power-up is available
       this.updateButtonFlashing(delta);
       
+      // Check for 'd' key to activate powerup (cheat)
+      if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
+        console.log('Cheat code activated: Power-Up!');
+        this.activatePowerUpCheat();
+      }
+
       // Check for 'c' key to activate powerup cheat
       if (Phaser.Input.Keyboard.JustDown(this.cKey)) {
         console.log('Cheat code activated: Power-Up!');
@@ -1171,6 +1173,7 @@ export class Level1Scene extends Phaser.Scene {
     this.lives = 3;
     this.ordersCompleted = 0;
     this.totalEditsApplied = 0;
+    this.manualOrdersCompleted = 0;
     this.failedOrders = 0;
     this.carriedEdits = [];
     
@@ -1208,10 +1211,18 @@ export class Level1Scene extends Phaser.Scene {
   private completeOrder(order: Order) {
     if (!order) return;
     
-    console.log(`Completed order ${order.id}`);
+    console.log(`Completed order ${order.id} - Created during power-up: ${order.createdDuringPowerUp ? 'YES' : 'NO'}`);
     
     // Update counters
     this.ordersCompleted++;
+    
+    // Only increment manual orders if this wasn't created during a power-up
+    if (!order.createdDuringPowerUp) {
+      this.manualOrdersCompleted++;
+      console.log(`Manual order completed: ${this.manualOrdersCompleted}/10 needed for power-up`);
+    } else {
+      console.log(`Power-up auto-completed order (not counting towards manual total)`);
+    }
     
     // Add completion bonus
     const bonus = 25 * order.types.length; // More edits = bigger bonus
@@ -1245,7 +1256,7 @@ export class Level1Scene extends Phaser.Scene {
     
     // Only count manually completed orders (not created during power-up) towards power-up progress
     // This ensures that power-ups only apply to new orders and players earn power-ups through manual edits
-    if (!order.createdDuringPowerUp && this.ordersCompleted % 5 === 0 && !this.powerUpActive && !this.powerUpAvailable) {
+    if (!order.createdDuringPowerUp && this.manualOrdersCompleted % 5 === 0 && !this.powerUpActive && !this.powerUpAvailable) {
       this.makePowerUpAvailable();
     }
   }
@@ -1261,6 +1272,10 @@ export class Level1Scene extends Phaser.Scene {
     this.powerUpActive = false;
     this.setButtonTexture('button-idle');
     this.powerUpCountdownText.setText('');
+    
+    // Reset the manual orders counter after power-up ends
+    this.manualOrdersCompleted = 0;
+    console.log('Reset manual orders counter to 0 after power-up ended');
     
     console.log('Debug sprite state before animations:');
     console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
@@ -1350,7 +1365,6 @@ export class Level1Scene extends Phaser.Scene {
       
       // Add OELogo in the middle
       const centerX = width / 2;
-      const centerY = height;
       
       // Create the logo sprite (starts below the screen)
       this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
@@ -1412,90 +1426,37 @@ export class Level1Scene extends Phaser.Scene {
   }
   
   private activatePowerUpCheat() {
-    console.log("Activating Power-Up Cheat!");
+    console.log("CHEAT: Making power-up available");
     
-    // Set button state
-    this.powerUpActive = true;
-    this.powerUpAvailable = false;
-    this.powerUpTimer = this.powerUpDuration; // 30 seconds of power-up time
+    // Set manual orders to 10 to trigger power-up availability
+    this.manualOrdersCompleted = 10;
     
-    // Visual feedback
-    this.setButtonColor(0x0000ff); // Blue for active
-    
-    // Show countdown
-    this.powerUpCountdownText.setText('30s');
-    
-    // Show Hamish and Kiril images
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    
-    // Create Hamish sprite at bottom right (off-screen)
-    this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
-    this.hamishSprite.setScale(0.25); // Make it smaller
-    this.hamishSprite.setOrigin(1, 1); // Bottom right corner
-    this.hamishSprite.setDepth(100); // Set high depth to be in foreground
-    
-    // Create Kiril sprite at bottom left (off-screen)
-    this.kirilSprite = this.add.sprite(-100, height, 'kiril');
-    this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
-    this.kirilSprite.setOrigin(0, 1); // Bottom left corner
-    this.kirilSprite.setDepth(100); // Set high depth to be in foreground
-    
-    // Add OELogo in the middle
-    const centerX = width / 2;
-    const centerY = height;
-    
-    // Create the logo sprite (starts below the screen)
-    this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
-    this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
-    this.oeLogoSprite.setOrigin(0.5, 0.5);
-    this.oeLogoSprite.setDepth(99); // Just behind Hamish and Kiril
-    
-    // First tween: Slide up from below
-    this.tweens.add({
-      targets: this.oeLogoSprite,
-      y: height - 200, // Position it higher to be clearly visible
-      duration: 800,
-      ease: 'Back.out',
-      onComplete: () => {
-        // Start bouncing animation after sliding up
-        this.startLogoBouncingAnimation();
-      }
-    });
-    
-    // Play activation sound
-    if (this.sound && this.sound.add) {
-      try {
-        const activateSound = this.sound.add('powerup', { volume: 0.7 });
-        activateSound.play();
-      } catch (error) {
-        console.error('Could not play power-up sound:', error);
-      }
+    // Only activate if power-up is not already available or active
+    if (!this.powerUpAvailable && !this.powerUpActive) {
+      this.makePowerUpAvailable();
+      
+      // Show a message to indicate cheat was activated
+      const cheatMessage = this.add.text(
+        this.cameras.main.width / 2,
+        100,
+        "CHEAT: Power-up Available!",
+        {
+          fontSize: '20px',
+          color: '#ffff00',
+          stroke: '#000000',
+          strokeThickness: 3
+        }
+      ).setOrigin(0.5).setDepth(100);
+      
+      // Fade out the message
+      this.tweens.add({
+        targets: cheatMessage,
+        alpha: 0,
+        y: 80,
+        duration: 1500,
+        onComplete: () => cheatMessage.destroy()
+      });
     }
-    
-    // Animate the lever being pulled
-    this.tweens.add({
-      targets: this.powerUpLever,
-      y: 10, // Move lever down
-      angle: 45, // Rotate lever
-      duration: 300,
-      ease: 'Bounce.Out'
-    });
-    
-    // Animate Hamish and Kiril sliding in
-    this.tweens.add({
-      targets: this.hamishSprite,
-      x: width,
-      duration: 500,
-      ease: 'Back.out'
-    });
-    
-    this.tweens.add({
-      targets: this.kirilSprite,
-      x: 0,
-      duration: 500,
-      ease: 'Back.out'
-    });
   }
 
   private startLogoBouncingAnimation() {
@@ -1816,88 +1777,6 @@ export class Level1Scene extends Phaser.Scene {
     }
   }
 
-  private activatePowerUpCheat() {
-    console.log("CHEAT: Making power-up available");
-    
-    // Only activate if power-up is not already available or active
-    if (!this.powerUpAvailable && !this.powerUpActive) {
-      this.makePowerUpAvailable();
-      
-      // Show a message to indicate cheat was activated
-      const cheatMessage = this.add.text(
-        this.cameras.main.width / 2,
-        100,
-        "CHEAT: Power-up Available!",
-        {
-          fontSize: '20px',
-          color: '#ffff00',
-          stroke: '#000000',
-          strokeThickness: 3
-        }
-      ).setOrigin(0.5).setDepth(100);
-      
-      // Fade out the message
-      this.tweens.add({
-        targets: cheatMessage,
-        alpha: 0,
-        y: 80,
-        duration: 1500,
-        onComplete: () => cheatMessage.destroy()
-      });
-    }
-  }
-
-  private handlePowerUpButtonClick() {
-    // Only allow pressing the button if a power-up is available
-    if (!this.powerUpAvailable || this.powerUpActive) {
-      // Show warning if power-up is not available
-      this.showPowerUpWarning('Power-up not ready!');
-      return;
-    }
-    
-    // Show the "Activate Order Editing" notification
-    this.showActivationNotification();
-    
-    // Simply change texture without animation
-    this.powerUpButtonSprite.setTexture('button-pressed');
-    
-    // Short delay before activating power-up
-    this.time.delayedCall(200, () => {
-      this.powerUpButtonSprite.setTexture('button-idle');
-      this.activatePowerUp();
-    });
-  }
-  
-  private showActivationNotification() {
-    // Create the notification text
-    const notification = this.add.text(
-      this.powerUpButtonSprite.x,
-      this.powerUpButtonSprite.y - 40, // Position above the button
-      'Activate Order Editing!', 
-      { 
-        fontSize: '18px', 
-        color: '#FFFFFF',
-        stroke: '#000000',
-        strokeThickness: 3,
-        fontStyle: 'bold'
-      }
-    ).setOrigin(0.5).setDepth(110);
-    
-    // Add a subtle glow effect
-    notification.setShadow(0, 0, '#ff9900', 5);
-    
-    // Animate the notification floating up and fading out
-    this.tweens.add({
-      targets: notification,
-      y: notification.y - 50, // Float upward
-      alpha: { from: 1, to: 0 },
-      scale: { from: 1, to: 1.2 },
-      duration: 1500,
-      ease: 'Sine.Out',
-      onComplete: () => notification.destroy()
-    });
-  }
-
   private activatePowerUp() {
     // Set power-up to active
     this.powerUpActive = true;
@@ -2000,11 +1879,9 @@ export class Level1Scene extends Phaser.Scene {
         if (!order.isComplete && order.createdDuringPowerUp && !order.completedEdits.length) {
           // Auto-complete all edit types
           for (const editType of order.types) {
-            if (!order.completedEdits.includes(editType)) {
-              order.completedEdits.push(editType);
-              this.markEditAsApplied(order, editType);
-              this.totalEditsApplied++;
-            }
+            order.completedEdits.push(editType);
+            this.markEditAsApplied(order, editType);
+            this.totalEditsApplied++;
           }
           
           // Complete the order
@@ -2207,9 +2084,19 @@ export class Level1Scene extends Phaser.Scene {
       // Add to orders array
       this.orders.push(order);
       
-      // If power up is active, mark this order as created during power-up
+      // If power up is active, mark this order as created during power-up and auto-complete it
       if (this.powerUpActive) {
         order.createdDuringPowerUp = true;
+        
+        // Auto-complete all edit types
+        for (const editType of order.types) {
+          order.completedEdits.push(editType);
+          this.markEditAsApplied(order, editType);
+          this.totalEditsApplied++;
+        }
+        
+        // Complete the order
+        this.completeOrder(order);
       }
       
       console.log(`Order created: ${order.id}`);
@@ -2318,6 +2205,57 @@ export class Level1Scene extends Phaser.Scene {
         // Reset position after fading out
         this.powerUpWarningText.y += 20;
       }
+    });
+  }
+
+  private handlePowerUpButtonClick() {
+    // Only allow pressing the button if a power-up is available
+    if (!this.powerUpAvailable || this.powerUpActive) {
+      // Show warning if power-up is not available
+      this.showPowerUpWarning('Power-up not ready!');
+      return;
+    }
+    
+    // Show the "Activate Order Editing" notification
+    this.showActivationNotification();
+    
+    // Simply change texture without animation
+    this.powerUpButtonSprite.setTexture('button-pressed');
+    
+    // Short delay before activating power-up
+    this.time.delayedCall(200, () => {
+      this.powerUpButtonSprite.setTexture('button-idle');
+      this.activatePowerUp();
+    });
+  }
+  
+  private showActivationNotification() {
+    // Create the notification text
+    const notification = this.add.text(
+      this.powerUpButtonSprite.x,
+      this.powerUpButtonSprite.y - 40, // Position above the button
+      'Activate Order Editing!', 
+      { 
+        fontSize: '18px', 
+        color: '#FFFFFF',
+        stroke: '#000000',
+        strokeThickness: 3,
+        fontStyle: 'bold'
+      }
+    ).setOrigin(0.5).setDepth(110);
+    
+    // Add a subtle glow effect
+    notification.setShadow(0, 0, '#ff9900', 5);
+    
+    // Animate the notification floating up and fading out
+    this.tweens.add({
+      targets: notification,
+      y: notification.y - 50, // Float upward
+      alpha: { from: 1, to: 0 },
+      scale: { from: 1, to: 1.2 },
+      duration: 1500,
+      ease: 'Sine.Out',
+      onComplete: () => notification.destroy()
     });
   }
 
