@@ -113,6 +113,7 @@ export class Level1Scene extends Phaser.Scene {
   private buttonFlashState: boolean = false;
   private playerOnButton: boolean = false;
   private warningShowing: boolean = false;
+  private orderMinSpacing: number = 40; // Minimum space between orders
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -1915,9 +1916,23 @@ export class Level1Scene extends Phaser.Scene {
         return;
       }
       
+      // Check if there's an existing order too close to the spawn point
+      const orderX = -50; // Start offscreen to the left
+      const spawnBuffer = 150; // Check area around spawn point
+      
+      // Find if there's an order in the spawn buffer zone
+      const ordersNearSpawn = this.orders.filter(order => 
+        order.x > orderX - this.orderMinSpacing && order.x < spawnBuffer
+      );
+      
+      if (ordersNearSpawn.length > 0) {
+        console.log('Order in spawn area, delaying generation');
+        this.time.delayedCall(500, this.generateOrder, [], this);
+        return;
+      }
+      
       // Determine where to place the order on the conveyor belt
       const orderY = this.conveyorBelt.y - 40; // Position above the conveyor
-      const orderX = -50; // Start offscreen to the left
       
       // Determine order complexity based on unlocked stations
       const maxPossibleEdits = Math.min(5, unlockedStations.length);
@@ -2007,16 +2022,29 @@ export class Level1Scene extends Phaser.Scene {
       container.setDepth(25); // Set order depth higher than player (20) but lower than Hamish/Kiril (100)
       
       // Create cardboard box - size depends on number of edits
-      const bgWidth = numEdits <= 3 ? 90 + (numEdits * 10) : 130;
-      const bgHeight = numEdits <= 3 ? 70 : 100;
+      let bgWidth, bgHeight;
+      
+      if (numEdits <= 2) {
+        // Small boxes for 1-2 edits
+        bgWidth = 110 + (numEdits * 10);
+        bgHeight = 70;
+      } else if (numEdits <= 4) {
+        // Medium boxes for 3-4 edits
+        bgWidth = 130 + ((numEdits - 2) * 15);
+        bgHeight = numEdits === 3 ? 75 : 100;
+      } else {
+        // Large boxes for 5-6 edits
+        bgWidth = 160 + ((numEdits - 4) * 20);
+        bgHeight = 120;
+      }
       
       // Create cardboard box
-      const boxColor = 0xd9c0a3; // Lighter cardboard brown color
-      const background = this.add.rectangle(0, 0, bgWidth, bgHeight, boxColor, 1)
+      const bgColor = 0xd9c0a3; // Lighter cardboard brown color
+      const background = this.add.rectangle(0, 0, bgWidth, bgHeight, bgColor, 1)
         .setStrokeStyle(2, 0xa0816c); // Softer brown for the edges
       
       // Add cardboard box flap at the top - more subtle
-      const topFlap = this.add.rectangle(0, -bgHeight/2 + 6, bgWidth * 0.7, 10, boxColor)
+      const topFlap = this.add.rectangle(0, -bgHeight/2 + 6, bgWidth * 0.7, 10, bgColor)
         .setStrokeStyle(1, 0xa0816c);
         
       // Add box tape - smaller and less visible
@@ -2044,32 +2072,52 @@ export class Level1Scene extends Phaser.Scene {
             icon.x = 0;
           } else {
             // Multiple icons spaced evenly
-            const totalSpace = 80; // Total space to distribute icons
+            const totalSpace = bgWidth * 0.6; // 60% of box width for icon spacing
             const spacing = totalSpace / (numEdits - 1);
             icon.x = -totalSpace/2 + index * spacing;
             icon.y = 0; // Centered vertically
           }
-        } else {
-          // Grid layout
-          const row = Math.floor(index / 2);
-          const col = index % 2;
-          const spacing = 40;
+        } else if (numEdits <= 6) {
+          // Grid layout for 4-6 edits
+          const itemsPerRow = numEdits <= 4 ? 2 : 3; // For 5-6 edits, use 3 items in top row
+          const horizontalSpacing = 40;
+          const verticalSpacing = 40;
           
-          // Calculate positions to center the grid
-          // For first row (0, 1, 2)
-          if (row === 0) {
-            icon.x = (col - 1) * spacing; // -spacing, 0, +spacing
+          if (numEdits <= 4) {
+            // 2x2 grid for 4 edits
+            const row = Math.floor(index / 2);
+            const col = index % 2;
+            icon.x = (col - 0.5) * horizontalSpacing;
+            icon.y = (row - 0.5) * verticalSpacing;
           } else {
-            // For second row (centers 1 or 2 items)
-            const itemsInLastRow = selectedTypes.length - 3;
-            if (itemsInLastRow === 1) {
-              icon.x = 0; // Center the single item
+            // 5-6 edits: 3 in top row, remainder in bottom row
+            const itemsInTopRow = 3;
+            const itemsInBottomRow = numEdits - itemsInTopRow;
+            
+            // Determine if this icon is in the top or bottom row
+            const isInTopRow = index < itemsInTopRow;
+            
+            if (isInTopRow) {
+              // Top row with 3 items
+              icon.x = (index - 1) * horizontalSpacing; // -40, 0, +40
+              icon.y = -verticalSpacing/2;
             } else {
-              icon.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
+              // Bottom row with 1-3 items (centered)
+              let positionInRow = index - itemsInTopRow;
+              let bottomRowOffset = 0;
+              
+              if (itemsInBottomRow === 1) {
+                bottomRowOffset = 0; // Single item centered
+              } else if (itemsInBottomRow === 2) {
+                bottomRowOffset = (positionInRow - 0.5) * horizontalSpacing; // -20, +20
+              } else {
+                bottomRowOffset = (positionInRow - 1) * horizontalSpacing; // -40, 0, +40
+              }
+              
+              icon.x = bottomRowOffset;
+              icon.y = verticalSpacing/2;
             }
           }
-          
-          icon.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
         }
         
         return icon;
