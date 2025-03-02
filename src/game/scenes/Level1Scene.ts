@@ -69,6 +69,7 @@ export class Level1Scene extends Phaser.Scene {
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private dKey!: Phaser.Input.Keyboard.Key;
   private cKey!: Phaser.Input.Keyboard.Key;
+  private fKey!: Phaser.Input.Keyboard.Key; // New f key for cheat code
   private playerSpeed: number = 4; // Reduce from 8 to 4 for slower movement
   private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
@@ -295,6 +296,7 @@ export class Level1Scene extends Phaser.Scene {
       this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
       this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+      this.fKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F); // Initialize f key
       this.lastSpaceState = false;
       
       // Create UI elements
@@ -766,6 +768,12 @@ export class Level1Scene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.cKey)) {
         console.log('Cheat code activated: Power-Up!');
         this.activatePowerUpCheat();
+      }
+      
+      // Check for 'f' key to unlock all stations (cheat)
+      if (Phaser.Input.Keyboard.JustDown(this.fKey)) {
+        console.log('Cheat code activated: Unlock All Stations!');
+        this.unlockAllStationsCheat();
       }
     } catch (error) {
       console.error('Error in update:', error);
@@ -2618,5 +2626,41 @@ export class Level1Scene extends Phaser.Scene {
     signContainer.setDepth(15); // Set to a depth that makes it visible but not too prominent
     
     return signContainer;
+  }
+
+  // Cheat function to unlock all stations
+  private unlockAllStationsCheat() {
+    // Unlock all stations
+    this.stations.forEach(station => {
+      station.isUnlocked = true;
+      
+      // Make station visible if it wasn't before
+      if (station.container) {
+        station.container.setAlpha(1);
+        station.sign.setAlpha(1);
+      }
+    });
+    
+    // Update the count of when stations were last unlocked
+    this.lastUnlockedAtEditCount = this.totalEditsApplied;
+    
+    // Show notification
+    this.stationUnlockText.setText('🔓 All stations unlocked! 🔓');
+    this.stationUnlockText.setVisible(true);
+    
+    // Fade out the notification after a delay
+    this.tweens.add({
+      targets: this.stationUnlockText,
+      alpha: 0,
+      duration: 2000,
+      delay: 1500,
+      onComplete: () => {
+        this.stationUnlockText.setVisible(false);
+        this.stationUnlockText.setAlpha(1);
+      }
+    });
+    
+    // Verify that all stations are visible
+    this.verifyStationVisibility();
   }
 }
