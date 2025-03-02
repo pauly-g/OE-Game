@@ -1230,6 +1230,67 @@ export class Level1Scene extends Phaser.Scene {
 
   // Power-up methods
 
+  private deactivatePowerUp() {
+    console.log('Deactivating power-up');
+    
+    // Reset power-up state
+    this.powerUpActive = false;
+    this.setButtonTexture('button-idle');
+    this.powerUpCountdownText.setText('');
+    
+    console.log('Debug sprite state before animations:');
+    console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
+    console.log(`Kiril exists: ${!!this.kirilSprite}, active: ${this.kirilSprite?.active}`);
+    console.log(`OE Logo exists: ${!!this.oeLogoSprite}, active: ${this.oeLogoSprite?.active}`);
+    
+    // Animate Hamish and Kiril sliding out
+    if (this.hamishSprite && this.hamishSprite.active) {
+      console.log('Animating Hamish out to the right');
+      this.tweens.add({
+        targets: this.hamishSprite,
+        x: this.cameras.main.width + 100,
+        duration: 500,
+        ease: 'Back.in',
+        onComplete: () => {
+          console.log('Hamish animation complete, destroying sprite');
+          if (this.hamishSprite) this.hamishSprite.destroy();
+          this.hamishSprite = null;
+        }
+      });
+    }
+    
+    if (this.kirilSprite && this.kirilSprite.active) {
+      console.log('Animating Kiril out to the left');
+      this.tweens.add({
+        targets: this.kirilSprite,
+        x: -100,
+        duration: 500,
+        ease: 'Back.in',
+        onComplete: () => {
+          console.log('Kiril animation complete, destroying sprite');
+          if (this.kirilSprite) this.kirilSprite.destroy();
+          this.kirilSprite = null;
+        }
+      });
+    }
+    
+    // Animate the OELogo sliding out
+    if (this.oeLogoSprite && this.oeLogoSprite.active) {
+      console.log('Animating OE Logo down');
+      this.tweens.add({
+        targets: this.oeLogoSprite,
+        y: this.cameras.main.height + 100,
+        duration: 800,
+        ease: 'Back.in',
+        onComplete: () => {
+          console.log('OE Logo animation complete, destroying sprite');
+          if (this.oeLogoSprite) this.oeLogoSprite.destroy();
+          this.oeLogoSprite = null;
+        }
+      });
+    }
+  }
+
   private activatePowerUpSwitch() {
     if (!this.powerUpAvailable || this.powerUpActive) return;
     
@@ -1326,79 +1387,8 @@ export class Level1Scene extends Phaser.Scene {
     }
   }
   
-  private deactivatePowerUp() {
-    if (!this.powerUpActive) return;
-    
-    console.log('Power-Up expired!');
-    
-    // Reset button state
-    this.powerUpActive = false;
-    this.powerUpTimer = 0;
-    this.powerUpCountdownText.setText('');
-    
-    // Visual feedback
-    this.setButtonColor(0xff0000); // Red for inactive
-    
-    // Animate Hamish and Kiril sliding out
-    if (this.hamishSprite && this.hamishSprite.active) {
-      this.tweens.add({
-        targets: this.hamishSprite,
-        x: this.cameras.main.width + 100,
-        duration: 500,
-        ease: 'Back.in',
-        onComplete: () => {
-          if (this.hamishSprite) this.hamishSprite.destroy();
-        }
-      });
-    }
-    
-    if (this.kirilSprite && this.kirilSprite.active) {
-      this.tweens.add({
-        targets: this.kirilSprite,
-        x: -100,
-        duration: 500,
-        ease: 'Back.in',
-        onComplete: () => {
-          if (this.kirilSprite) this.kirilSprite.destroy();
-        }
-      });
-    }
-    
-    // Animate the OELogo sliding out
-    if (this.oeLogoSprite && this.oeLogoSprite.active) {
-      this.tweens.add({
-        targets: this.oeLogoSprite,
-        y: this.cameras.main.height + 100,
-        duration: 800,
-        ease: 'Back.in',
-        onComplete: () => {
-          if (this.oeLogoSprite) this.oeLogoSprite.destroy();
-        }
-      });
-    }
-    
-    // Play deactivation sound
-    if (this.sound && this.sound.add) {
-      try {
-        const deactivateSound = this.sound.add('powerdown', { volume: 0.5 });
-        deactivateSound.play();
-      } catch (error) {
-        console.error('Could not play power-down sound:', error);
-      }
-    }
-    
-    // Animate the lever returning
-    this.tweens.add({
-      targets: this.powerUpLever,
-      y: 0, // Return to original position
-      angle: 0, // Reset rotation
-      duration: 300,
-      ease: 'Sine.InOut'
-    });
-  }
-
   private activatePowerUpCheat() {
-    console.log('Activating Power-Up Cheat!');
+    console.log("Activating Power-Up Cheat!");
     
     // Set button state
     this.powerUpActive = true;
