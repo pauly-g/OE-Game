@@ -56,6 +56,7 @@ interface Station {
   container: Phaser.GameObjects.Container;
   isUnlocked: boolean;
   bounds: Phaser.Geom.Rectangle | null;
+  sign: Phaser.GameObjects.Container;
 }
 
 export class Level1Scene extends Phaser.Scene {
@@ -422,11 +423,13 @@ export class Level1Scene extends Phaser.Scene {
     const iconScale = 1.2; // Make emoji slightly larger
 
     stationTypes.forEach((type, index) => {
+      const stationX = startX + (index * spacing);
       const station: Station = {
         type,
-        container: this.add.container(startX + (index * spacing), y),
+        container: this.add.container(stationX, y),
         isUnlocked: index === 0, // Only first station starts unlocked
-        bounds: null
+        bounds: null,
+        sign: null // Initialize sign property
       };
 
       // Create table top with a nicer appearance - will be the same for all stations
@@ -467,10 +470,17 @@ export class Level1Scene extends Phaser.Scene {
         tableSize
       );
       
+      // Create and add the station sign
+      const sign = this.createStationSign(stationX, y, type);
+      
       // Hide locked stations completely (alpha 0)
       if (!station.isUnlocked) {
         station.container.setAlpha(0);
+        sign.setAlpha(0); // Also hide the sign
       }
+      
+      // Store the sign in the station object for later reference
+      station.sign = sign;
 
       this.stations.push(station);
     });
@@ -1195,6 +1205,7 @@ export class Level1Scene extends Phaser.Scene {
       this.stations.forEach((station, index) => {
         station.isUnlocked = index === 0; // Only first station starts unlocked
         station.container.setAlpha(index === 0 ? 1 : 0);
+        station.sign.setAlpha(index === 0 ? 1 : 0); // Also reset the sign
       });
     }
     
@@ -2129,6 +2140,7 @@ export class Level1Scene extends Phaser.Scene {
     if (nextStation.container) {
       // Start with alpha 0
       nextStation.container.setAlpha(0);
+      nextStation.sign.setAlpha(0); // Also set sign to invisible
       
       // Flash the station to draw attention to it
       this.tweens.add({
@@ -2143,6 +2155,21 @@ export class Level1Scene extends Phaser.Scene {
           nextStation.container.setAlpha(1);
           console.log(`Animation complete for station: ${nextStation.type}, alpha: ${nextStation.container.alpha}`);
         }
+      });
+      
+      // Animate the sign with a slight delay for a more dramatic reveal
+      this.time.delayedCall(300, () => {
+        this.tweens.add({
+          targets: nextStation.sign,
+          alpha: { from: 0, to: 1 },
+          scale: { from: 0.8, to: 1 },
+          ease: 'Back.Out',
+          duration: 800,
+          onComplete: () => {
+            // Ensure sign stays visible
+            nextStation.sign.setAlpha(1);
+          }
+        });
       });
       
       // Display an announcement text about the new station
@@ -2451,5 +2478,61 @@ export class Level1Scene extends Phaser.Scene {
       
       this.unlockNextStation();
     }
+  }
+
+  // Helper function to create a pixel art style sign
+  private createStationSign(x: number, y: number, text: string): Phaser.GameObjects.Container {
+    // Create a container for the sign - position higher above the station to create more space
+    const signContainer = this.add.container(x, y - 85); // Increased distance from y - 50 to y - 85
+    
+    // Create the sign background (wooden plank)
+    const signWidth = Math.max(text.length * 14, 80); // Adjust width based on text length
+    const signHeight = 40;
+    
+    // Sign shadow
+    const signShadow = this.add.rectangle(2, 2, signWidth, signHeight, 0x000000)
+      .setOrigin(0.5, 0.5)
+      .setAlpha(0.3);
+    
+    // Main sign board with pixel art style
+    const sign = this.add.rectangle(0, 0, signWidth, signHeight, 0xC19A6B)
+      .setOrigin(0.5, 0.5)
+      .setStrokeStyle(2, 0x8B4513);
+    
+    // Add grain texture to the sign to give it a pixel art feel
+    const grainTexture = this.add.grid(
+      0, 0,
+      signWidth, signHeight,
+      8, 8, // Pixel grid size
+      0, 0,
+      0x8B4513, 0.1
+    ).setOrigin(0.5, 0.5);
+    
+    // Create nails at the corners for decorative effect
+    const nail1 = this.add.circle(-signWidth/2 + 8, -signHeight/2 + 8, 2, 0x808080);
+    const nail2 = this.add.circle(signWidth/2 - 8, -signHeight/2 + 8, 2, 0x808080);
+    const nail3 = this.add.circle(-signWidth/2 + 8, signHeight/2 - 8, 2, 0x808080);
+    const nail4 = this.add.circle(signWidth/2 - 8, signHeight/2 - 8, 2, 0x808080);
+    
+    // Format the text to make it look nicer
+    const formattedText = text.charAt(0).toUpperCase() + text.slice(1);
+    
+    // Add the text to the sign
+    const signText = this.add.text(0, 0, formattedText, {
+      fontFamily: 'monospace', // Pixel font style
+      fontSize: '20px',
+      color: '#000000',
+      align: 'center',
+      stroke: '#000000',
+      strokeThickness: 0.5
+    }).setOrigin(0.5, 0.5);
+    
+    // Add all elements to the container - removed post from this list
+    signContainer.add([signShadow, sign, grainTexture, nail1, nail2, nail3, nail4, signText]);
+    
+    // Set the depth to ensure it's visible but doesn't interfere with other elements
+    signContainer.setDepth(15); // Set to a depth that makes it visible but not too prominent
+    
+    return signContainer;
   }
 }
