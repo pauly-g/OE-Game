@@ -1347,9 +1347,15 @@ export class Level1Scene extends Phaser.Scene {
         duration: 500,
         ease: 'Back.in',
         onComplete: () => {
-          if (this.hamishSprite) this.hamishSprite.destroy();
+          if (this.hamishSprite) {
+            this.hamishSprite.destroy();
+            this.hamishSprite = null;
+          }
         }
       });
+    } else if (this.hamishSprite) {
+      this.hamishSprite.destroy();
+      this.hamishSprite = null;
     }
     
     if (this.kirilSprite && this.kirilSprite.active) {
@@ -1359,9 +1365,15 @@ export class Level1Scene extends Phaser.Scene {
         duration: 500,
         ease: 'Back.in',
         onComplete: () => {
-          if (this.kirilSprite) this.kirilSprite.destroy();
+          if (this.kirilSprite) {
+            this.kirilSprite.destroy();
+            this.kirilSprite = null;
+          }
         }
       });
+    } else if (this.kirilSprite) {
+      this.kirilSprite.destroy();
+      this.kirilSprite = null;
     }
     
     // Animate the OELogo sliding out
@@ -1372,9 +1384,15 @@ export class Level1Scene extends Phaser.Scene {
         duration: 800,
         ease: 'Back.in',
         onComplete: () => {
-          if (this.oeLogoSprite) this.oeLogoSprite.destroy();
+          if (this.oeLogoSprite) {
+            this.oeLogoSprite.destroy();
+            this.oeLogoSprite = null;
+          }
         }
       });
+    } else if (this.oeLogoSprite) {
+      this.oeLogoSprite.destroy();
+      this.oeLogoSprite = null;
     }
     
     // Play deactivation sound
@@ -1395,93 +1413,61 @@ export class Level1Scene extends Phaser.Scene {
       duration: 300,
       ease: 'Sine.InOut'
     });
+    
+    // Add a final failsafe cleanup after all animations should be complete
+    this.time.delayedCall(1000, () => {
+      console.log("Final sprite cleanup check");
+      
+      // Emergency cleanup in case animations failed
+      if (this.hamishSprite) {
+        console.log("Emergency cleanup: Destroying Hamish sprite");
+        this.hamishSprite.destroy();
+        this.hamishSprite = null;
+      }
+      
+      if (this.kirilSprite) {
+        console.log("Emergency cleanup: Destroying Kiril sprite");
+        this.kirilSprite.destroy();
+        this.kirilSprite = null;
+      }
+      
+      if (this.oeLogoSprite) {
+        console.log("Emergency cleanup: Destroying OE Logo sprite");
+        this.oeLogoSprite.destroy();
+        this.oeLogoSprite = null;
+      }
+    });
   }
 
   private activatePowerUpCheat() {
-    console.log('Activating Power-Up Cheat!');
+    console.log("CHEAT: Making power-up available");
     
-    // Set button state
-    this.powerUpActive = true;
-    this.powerUpAvailable = false;
-    this.powerUpTimer = this.powerUpDuration; // 30 seconds of power-up time
-    
-    // Visual feedback
-    this.setButtonColor(0x0000ff); // Blue for active
-    
-    // Show countdown
-    this.powerUpCountdownText.setText('30s');
-    
-    // Show Hamish and Kiril images
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    
-    // Create Hamish sprite at bottom right (off-screen)
-    this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
-    this.hamishSprite.setScale(0.25); // Make it smaller
-    this.hamishSprite.setOrigin(1, 1); // Bottom right corner
-    this.hamishSprite.setDepth(100); // Set high depth to be in foreground
-    
-    // Create Kiril sprite at bottom left (off-screen)
-    this.kirilSprite = this.add.sprite(-100, height, 'kiril');
-    this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
-    this.kirilSprite.setOrigin(0, 1); // Bottom left corner
-    this.kirilSprite.setDepth(100); // Set high depth to be in foreground
-    
-    // Add OELogo in the middle
-    const centerX = width / 2;
-    const centerY = height;
-    
-    // Create the logo sprite (starts below the screen)
-    this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
-    this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
-    this.oeLogoSprite.setOrigin(0.5, 0.5);
-    this.oeLogoSprite.setDepth(99); // Just behind Hamish and Kiril
-    
-    // First tween: Slide up from below
-    this.tweens.add({
-      targets: this.oeLogoSprite,
-      y: height - 200, // Position it higher to be clearly visible
-      duration: 800,
-      ease: 'Back.out',
-      onComplete: () => {
-        // Start bouncing animation after sliding up
-        this.startLogoBouncingAnimation();
-      }
-    });
-    
-    // Play activation sound
-    if (this.sound && this.sound.add) {
-      try {
-        const activateSound = this.sound.add('powerup', { volume: 0.7 });
-        activateSound.play();
-      } catch (error) {
-        console.error('Could not play power-up sound:', error);
-      }
+    // Only activate if power-up is not already available or active
+    if (!this.powerUpAvailable && !this.powerUpActive) {
+      this.makePowerUpAvailable();
+      
+      // Show a message to indicate cheat was activated
+      const cheatMessage = this.add.text(
+        this.cameras.main.width / 2,
+        100,
+        "CHEAT: Power-up Available!",
+        {
+          fontSize: '20px',
+          color: '#ffff00',
+          stroke: '#000000',
+          strokeThickness: 3
+        }
+      ).setOrigin(0.5).setDepth(100);
+      
+      // Fade out the message
+      this.tweens.add({
+        targets: cheatMessage,
+        alpha: 0,
+        y: 80,
+        duration: 1500,
+        onComplete: () => cheatMessage.destroy()
+      });
     }
-    
-    // Animate the lever being pulled
-    this.tweens.add({
-      targets: this.powerUpLever,
-      y: 10, // Move lever down
-      angle: 45, // Rotate lever
-      duration: 300,
-      ease: 'Bounce.Out'
-    });
-    
-    // Animate Hamish and Kiril sliding in
-    this.tweens.add({
-      targets: this.hamishSprite,
-      x: width,
-      duration: 500,
-      ease: 'Back.out'
-    });
-    
-    this.tweens.add({
-      targets: this.kirilSprite,
-      x: 0,
-      duration: 500,
-      ease: 'Back.out'
-    });
   }
 
   private startLogoBouncingAnimation() {
