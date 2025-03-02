@@ -409,7 +409,7 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private createStations() {
-    const stationTypes = ['address', 'quantity', 'payment', 'discount', 'product', 'cancel'];
+    const stationTypes = ['address', 'quantity', 'discount', 'product', 'invoice', 'cancel'];
     
     // Calculate total width for all stations
     const spacing = 200; // Increased space between stations
@@ -491,11 +491,23 @@ export class Level1Scene extends Phaser.Scene {
     switch (type) {
       case 'address': return '🏠'; // House for address
       case 'quantity': return '🔢'; // Numbers for quantity
-      case 'payment': return '💰'; // Money bag for payment
       case 'discount': return '🏷️'; // Tag for discount
-      case 'product': return '📦'; // Package for product
+      case 'product': return '🔄'; // Change symbol for product change
+      case 'invoice': return '📄'; // Document/paper for invoice
       case 'cancel': return '❌'; // X for cancel
       default: return '❓'; // Question mark as fallback
+    }
+  }
+
+  private getStationName(type: string): string {
+    switch (type) {
+      case 'address': return 'Address Edit';
+      case 'quantity': return 'Quantity Edit';
+      case 'discount': return 'Discount Edit';
+      case 'product': return 'Change Product';
+      case 'invoice': return 'Invoice Edit';
+      case 'cancel': return 'Cancel Order';
+      default: return 'Unknown Station';
     }
   }
 
@@ -1123,6 +1135,7 @@ export class Level1Scene extends Phaser.Scene {
         // For first row (0, 1, 2)
         if (row === 0) {
           checkmark.x = (col - 1) * spacing; // -spacing, 0, +spacing
+          checkmark.y = -spacing/2; // Add vertical positioning
         } else {
           // For second row (centers 1 or 2 items)
           const itemsInLastRow = order.types.length - 3;
@@ -1131,9 +1144,8 @@ export class Level1Scene extends Phaser.Scene {
           } else {
             checkmark.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
           }
+          checkmark.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
         }
-        
-        checkmark.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
       }
     }
     
@@ -2087,8 +2099,8 @@ export class Level1Scene extends Phaser.Scene {
             // 2x2 grid for 4 edits
             const row = Math.floor(index / 2);
             const col = index % 2;
-            icon.x = (col - 0.5) * horizontalSpacing;
-            icon.y = (row - 0.5) * verticalSpacing;
+            icon.x = (col - 0.5) * horizontalSpacing; // -20, 0, +20
+            icon.y = (row - 0.5) * verticalSpacing; // -20, 0, +20
           } else {
             // 5-6 edits: 3 in top row, remainder in bottom row
             const itemsInTopRow = 3;
@@ -2100,7 +2112,7 @@ export class Level1Scene extends Phaser.Scene {
             if (isInTopRow) {
               // Top row with 3 items
               icon.x = (index - 1) * horizontalSpacing; // -40, 0, +40
-              icon.y = -verticalSpacing/2;
+              icon.y = -verticalSpacing/2; // Add vertical positioning
             } else {
               // Bottom row with 1-3 items (centered)
               let positionInRow = index - itemsInTopRow;
@@ -2529,9 +2541,12 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   // Helper function to create a pixel art style sign
-  private createStationSign(x: number, y: number, text: string): Phaser.GameObjects.Container {
+  private createStationSign(x: number, y: number, type: string): Phaser.GameObjects.Container {
     // Create a container for the sign - position higher above the station to create more space
     const signContainer = this.add.container(x, y - 85); // Increased distance from y - 50 to y - 85
+    
+    // Get the station name from the type
+    const text = this.getStationName(type);
     
     // Create the sign background (wooden plank)
     const signWidth = Math.max(text.length * 14, 80); // Adjust width based on text length
