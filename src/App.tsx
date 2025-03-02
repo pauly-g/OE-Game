@@ -107,7 +107,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-      <h1 className="text-3xl font-bold mb-4">Super Order Editing</h1>
+      <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
       
       <div id="game-container" className="relative w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden">
         {!game && (

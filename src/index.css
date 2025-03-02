@@ -5,6 +5,10 @@
  * - Initial setup: Basic styles
  * - Added Tailwind imports
  * - Fixed game container styling
+ * - Added arcade-font class for the retro style title
+ * - Added text-shadow effect to arcade-font class
+ * - Improved text-shadow effect for a more authentic 80s arcade neon glow
+ * - Adjusted color scheme to blue-themed neon glow
  */
 @tailwind base;
 @tailwind components;
@@ -15,6 +19,19 @@ body {
   padding: 0;
   overflow: hidden;
   background-color: #1a202c;
+}
+
+.arcade-font {
+  font-family: 'Press Start 2P', cursive;
+  text-align: center;
+  text-shadow: 
+    0 0 5px #fff,
+    0 0 10px #fff,
+    0 0 15px #03A9F4,
+    0 0 20px #03A9F4,
+    0 0 25px #03A9F4,
+    0 0 30px #03A9F4,
+    0 0 35px #03A9F4;
 }
 
 #game-container {
