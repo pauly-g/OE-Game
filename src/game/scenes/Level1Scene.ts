@@ -1655,7 +1655,7 @@ export class Level1Scene extends Phaser.Scene {
           const failEmoji = this.add.text(
             order.x - 100,
             order.y,
-            '��',
+            '😡',
             { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
           ).setOrigin(0.5);
           
