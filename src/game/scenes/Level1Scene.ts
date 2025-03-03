@@ -1055,8 +1055,7 @@ export class Level1Scene extends Phaser.Scene {
       }
       
       // Increase score
-      this.score += 10;
-      this.scoreText.setText(`Score: ${this.score}`);
+      this.updateScore(10);
       
       // Check if order is now complete
       if (order.completedEdits.length === order.types.length) {
@@ -1303,11 +1302,6 @@ export class Level1Scene extends Phaser.Scene {
       console.log(`Power-up auto-completed order (not counting towards manual total)`);
     }
     
-    // Add completion bonus
-    const bonus = 25 * order.types.length; // More edits = bigger bonus
-    this.score += bonus;
-    this.scoreText.setText(`Score: ${this.score}`);
-    
     // Mark order as complete but don't remove it
     order.isComplete = true;
     
@@ -1404,6 +1398,9 @@ export class Level1Scene extends Phaser.Scene {
             this.lives--;
             this.failedOrders++;
             
+            // Penalize the player for an incomplete order
+            this.updateScore(-50);
+            
             // Update life indicators
             this.updateLivesDisplay();
             
@@ -1447,7 +1444,10 @@ export class Level1Scene extends Phaser.Scene {
               scale: { from: 1, to: 1.5 },
               duration: 1500,
               ease: 'Sine.Out',
-              onComplete: () => heartEmoji.destroy()
+              onComplete: () => {
+                heartEmoji.destroy();
+                this.updateScore(5); // Flat 5 points for completing an order
+              }
             });
           }
           
@@ -2919,5 +2919,11 @@ export class Level1Scene extends Phaser.Scene {
         }
       }
     });
+  }
+
+  private updateScore(points: number): void {
+    // Update score, ensuring it never goes below 0
+    this.score = Math.max(0, this.score + points);
+    this.scoreText.setText(`Score: ${this.score}`);
   }
 }
