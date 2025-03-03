@@ -185,6 +185,23 @@ export class Level1Scene extends Phaser.Scene {
         .on('loaderror', (_key: string, _file: string, error: Error) => {
           console.error(`Failed to load background: ${error.message}`);
         });
+        
+      // Load conveyor belt assets
+      this.load.image('conveyor-belt-tile', 'game/ConveyorBelt/conveyor-belt-tile.svg')
+        .on('filecomplete', () => {
+          gameDebugger.info('Conveyor belt tile loaded');
+        })
+        .on('loaderror', (_key: string, _file: string, error: Error) => {
+          console.error(`Failed to load conveyor belt tile: ${error.message}`);
+        });
+        
+      this.load.image('conveyor-arrow', 'game/ConveyorBelt/conveyor-arrow.svg')
+        .on('filecomplete', () => {
+          gameDebugger.info('Conveyor arrow loaded');
+        })
+        .on('loaderror', (_key: string, _file: string, error: Error) => {
+          console.error(`Failed to load conveyor arrow: ${error.message}`);
+        });
 
       // Load power-up and cheat sounds
       this.sound.add('powerup');
@@ -269,8 +286,27 @@ export class Level1Scene extends Phaser.Scene {
       const conveyorWidth = width * 0.95;
       const conveyorX = width * 0.5;
       const conveyorY = height * 0.85;
-      this.conveyorBelt = this.add.rectangle(conveyorX, conveyorY, conveyorWidth, 40, 0x444444)
-        .setStrokeStyle(2, 0x666666);
+      
+      // Create the conveyor belt using the tileable texture
+      if (this.textures.exists('conveyor-belt-tile')) {
+        // Create a tiled sprite for the conveyor belt
+        this.conveyorBelt = this.add.tileSprite(conveyorX, conveyorY, conveyorWidth, 40, 'conveyor-belt-tile') as any;
+        this.conveyorBelt.setDepth(5);
+        
+        // Store the conveyor belt bounds for collision detection
+        this.conveyorBounds = {
+          top: conveyorY - 20,    // Top of conveyor
+          bottom: conveyorY + 20, // Bottom of conveyor
+          left: conveyorX - conveyorWidth/2,   // Left edge
+          right: conveyorX + conveyorWidth/2   // Right edge
+        };
+      } else {
+        // Fallback to the original rectangle implementation
+        console.warn('Conveyor belt texture not loaded, using fallback rectangle');
+        this.conveyorBelt = this.add.rectangle(conveyorX, conveyorY, conveyorWidth, 40, 0x444444)
+          .setStrokeStyle(2, 0x666666);
+      }
+      
       this.createConveyorArrows(conveyorWidth, conveyorX, conveyorY);
 
       // Create player animations first
@@ -396,37 +432,10 @@ export class Level1Scene extends Phaser.Scene {
     // Add button click handlers
     this.powerUpButtonSprite.on('pointerdown', this.handlePowerUpButtonClick, this);
   }
-
   private createConveyorArrows(width: number, centerX: number, centerY: number) {
-    const arrowWidth = 30;
-    const arrowHeight = 20;
-    const arrowSpacing = 60;
-    const numArrows = Math.floor(width / arrowSpacing);
-    const startX = centerX - width/2 + arrowSpacing/2;
-
-    for (let i = 0; i < numArrows; i++) {
-      const arrow = this.add.triangle(
-        startX + i * arrowSpacing, 
-        centerY, 
-        0, arrowHeight/2, 
-        arrowWidth, 0,     
-        0, -arrowHeight/2, 
-        0x666666
-      );
-
-      this.tweens.add({
-        targets: arrow,
-        x: arrow.x + arrowSpacing,
-        duration: 1000,
-        ease: 'Linear',
-        repeat: -1,
-        onRepeat: () => {
-          arrow.x = startX + i * arrowSpacing;
-        }
-      });
-    }
+    // Simply return without creating any arrows
+    return;
   }
-
   private createStations() {
     const stationTypes = ['address', 'quantity', 'discount', 'product', 'invoice', 'cancel'];
     
@@ -550,6 +559,12 @@ export class Level1Scene extends Phaser.Scene {
       if (this.powerUpActive) {
         this.updatePowerUp(delta);
       }
+      
+      // Animate the conveyor belt texture to make it look like it's moving
+      if (this.conveyorBelt && 'tilePositionX' in this.conveyorBelt) {
+        // Scroll the texture horizontally to create a movement effect
+        this.conveyorBelt.tilePositionX -= this.conveyorSpeed; // Adjust speed as needed
+      }
 
       // Activate power-up after 10 edits
       if (!this.powerUpAvailable && !this.powerUpActive && this.manualOrdersCompleted >= 10) {
@@ -627,23 +642,6 @@ export class Level1Scene extends Phaser.Scene {
       // Update player position
       this.player.x = newX;
       this.player.y = newY;
-      
-      // Visualize player collision area (for debugging)
-      if (this.showDebugCollisions) {
-        if (!this.playerCollisionVisualizer) {
-          this.playerCollisionVisualizer = this.add.rectangle(
-            this.player.x, 
-            this.player.y + 20, // Position at player's feet
-            60, // Width of collision box
-            40, // Height of collision box
-            0xff0000, // Red color
-            0.5 // Semi-transparent
-          ).setDepth(100);
-        } else {
-          this.playerCollisionVisualizer.x = this.player.x;
-          this.playerCollisionVisualizer.y = this.player.y + 20;
-        }
-      }
       
       // Keep player within bounds
       if (this.player.x < 30) this.player.x = 30;
