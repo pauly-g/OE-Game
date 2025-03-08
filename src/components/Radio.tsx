@@ -458,22 +458,48 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
       }
     };
     
-    // Add a periodic check
-    const intervalId = setInterval(checkForUnlocks, 3000);
+    // Listen for playTrack events from the notification
+    const handlePlayTrack = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail && customEvent.detail.trackId) {
+        const { trackId } = customEvent.detail;
+        console.log(`[Radio] Received request to play track: ${trackId}`);
+        
+        // Find the track in our list
+        const trackToPlay = tracks.find(track => track.id === trackId);
+        if (trackToPlay) {
+          // Check if this track is unlocked
+          if (stationTracker.isStationUnlocked(trackToPlay.stationType)) {
+            console.log(`[Radio] Playing track: ${trackToPlay.title}`);
+            changeTrack(trackToPlay);
+            
+            // Start playback if not already playing
+            if (!isPlaying) {
+              togglePlay();
+            }
+          } else {
+            console.log(`[Radio] Track ${trackToPlay.title} is not unlocked yet.`);
+          }
+        }
+      }
+    };
     
+    // Set up all event listeners
     window.addEventListener('stationUnlocked', handleStationUnlock);
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('playTrack', handlePlayTrack);
     
-    // Run a check right away
+    // Check for unlocks immediately
     checkForUnlocks();
     
-    // And another check after a short delay
-    setTimeout(checkForUnlocks, 1000);
+    // Set up periodic checks for unlocks
+    const intervalId = setInterval(checkForUnlocks, 3000);
     
-    // Cleanup
     return () => {
+      // Clean up all event listeners
       window.removeEventListener('stationUnlocked', handleStationUnlock);
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('playTrack', handlePlayTrack);
       clearInterval(intervalId);
     };
   }, []);

@@ -20,6 +20,7 @@
  * - Integrated debug utility for enhanced error logging
  * - Fixed debugger variable name to avoid using reserved keyword
  * - Added Radio component for music playback
+ * - Added radio button wiggle and unlock notifications
  */
 import React, { useEffect, useState } from 'react';
 import Phaser from 'phaser';
@@ -27,6 +28,8 @@ import { gameConfig } from './game/config';
 import { gameDebugger } from './game/utils/debug';
 import Radio from './components/Radio';
 import RadioButton from './components/RadioButton';
+import SongNotification from './components/SongNotification';
+import { tracks } from './data/musicData';
 
 function App() {
   const [showInstructions, setShowInstructions] = useState(false);
@@ -34,6 +37,12 @@ function App() {
   const [game, setGame] = useState<Phaser.Game | null>(null);
   const [errorLogs, setErrorLogs] = useState<Array<{level: string, message: string, timestamp?: Date, data?: any}>>([]);
   const [showRadio, setShowRadio] = useState(false);
+  const [radioWiggle, setRadioWiggle] = useState(false);
+  const [notification, setNotification] = useState({
+    isVisible: false,
+    title: '',
+    artist: ''
+  });
 
   // Enable debug mode
   useEffect(() => {
@@ -51,6 +60,48 @@ function App() {
       gameDebugger.disable();
     };
   }, [showDebug]);
+
+  // Listen for station unlock events
+  useEffect(() => {
+    const handleStationUnlock = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail && customEvent.detail.stationType) {
+        const { stationType } = customEvent.detail;
+        console.log(`[App] Station unlocked: ${stationType}`);
+        
+        // Find the track associated with this station
+        const unlockedTrack = tracks.find(track => track.stationType === stationType);
+        if (unlockedTrack) {
+          // Trigger wiggle animation
+          setRadioWiggle(true);
+          
+          // Show notification
+          setNotification({
+            isVisible: true,
+            title: unlockedTrack.title,
+            artist: unlockedTrack.artist
+          });
+        }
+      }
+    };
+    
+    // Listen for the stationUnlocked event
+    window.addEventListener('stationUnlocked', handleStationUnlock);
+    
+    return () => {
+      window.removeEventListener('stationUnlocked', handleStationUnlock);
+    };
+  }, []);
+
+  // Reset wiggle animation after it plays
+  useEffect(() => {
+    if (radioWiggle) {
+      const timer = setTimeout(() => {
+        setRadioWiggle(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [radioWiggle]);
 
   useEffect(() => {
     // Prevent double initialization
@@ -113,6 +164,30 @@ function App() {
     setShowRadio(!showRadio);
   };
 
+  const closeNotification = () => {
+    setNotification(prev => ({...prev, isVisible: false}));
+  };
+
+  const handleListenNow = () => {
+    // Open the radio if it's not already open
+    if (!showRadio) {
+      setShowRadio(true);
+    }
+    
+    // Find the track to play
+    const trackToPlay = tracks.find(track => track.title === notification.title);
+    if (trackToPlay) {
+      // Dispatch an event for the Radio component to pick up
+      const playEvent = new CustomEvent('playTrack', { 
+        detail: { trackId: trackToPlay.id }
+      });
+      window.dispatchEvent(playEvent);
+    }
+    
+    // Close the notification
+    closeNotification();
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-start p-4">
       <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
@@ -134,9 +209,18 @@ function App() {
           {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
         </button>
         
-        <RadioButton onClick={toggleRadio} showRadio={showRadio} />
+        <RadioButton onClick={toggleRadio} showRadio={showRadio} wiggle={radioWiggle} />
       </div>
 
+      {/* Song unlock notification */}
+      <SongNotification 
+        title={notification.title}
+        artist={notification.artist}
+        isVisible={notification.isVisible}
+        onClose={closeNotification}
+        onListen={handleListenNow}
+      />
+      
       {/* Instructions and Radio are placed below the game without affecting its size */}
       <div className="w-full max-w-6xl">
         {showInstructions && (
