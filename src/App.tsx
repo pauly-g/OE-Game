@@ -194,13 +194,21 @@ function App() {
     const trackTitle = notification.title;
     console.log(`[App] Looking for track to play: "${trackTitle}"`);
     
+    // Debug - check if first_song is unlocked in stationTracker
+    console.log('[App] DEBUG - Checking stationTracker status:');
+    stationTracker.logUnlockedStations();
+    
     // Find the track to play by title
     const trackToPlay = tracks.find(track => {
       return track.title.toLowerCase() === trackTitle.toLowerCase();
     });
     
     if (trackToPlay) {
-      console.log(`[App] Found track to play: ${trackToPlay.title} (ID: ${trackToPlay.id})`);
+      console.log(`[App] Found track to play: ${trackToPlay.title} (ID: ${trackToPlay.id}, Type: ${trackToPlay.stationType})`);
+      
+      // Check if this track is unlocked explicitly
+      const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType);
+      console.log(`[App] Is track ${trackToPlay.title} with type ${trackToPlay.stationType} unlocked: ${isUnlocked}`);
       
       // Call the direct function on the Radio component if it's available
       if (radioRef.current) {

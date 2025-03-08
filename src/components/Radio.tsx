@@ -54,8 +54,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
     if (!globalAudio) {
       console.log('[Radio] Creating new global audio element');
       globalAudio = new Audio();
-      globalAudio.volume = 1.0;
-      globalAudioState.volume = 1.0;
+      globalAudio.volume = 1.0; // Maximum volume
       
       // Test audio creation
       if (globalAudio) {
@@ -72,16 +71,18 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
     // Set up current track based on global state
     updateCurrentTrackFromGlobal();
     
-    // Update component state to match global state
-    setVolume(globalAudioState.volume);
-    
-    // Test audio function - remove low volume setting
+    // Try playing a test sound to ensure audio is working
     const testAudio = () => {
       if (audioRef.current) {
         console.log('[Radio] Testing audio capabilities...');
         const originalSrc = audioRef.current.src;
+        const originalVolume = audioRef.current.volume;
         
         try {
+          // Save current state
+          // Use full volume for test to ensure we can hear it
+          audioRef.current.volume = 1.0; 
+          
           // Play a short audio to check if audio works
           const playPromise = audioRef.current.play();
           
@@ -94,6 +95,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
                 setTimeout(() => {
                   if (audioRef.current) {
                     audioRef.current.pause();
+                    audioRef.current.volume = originalVolume;
                     console.log('[Radio] Audio test complete');
                   }
                 }, 50);
@@ -222,7 +224,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
       globalAudioState.currentTrackId = firstUnlockedTrack.id;
       if (globalAudio) {
         globalAudio.src = firstUnlockedTrack.src;
-        globalAudioState.currentTime = 0;
+        globalAudio.currentTime = 0;
       }
     }
     
@@ -560,8 +562,11 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
               if (audioRef.current) {
                 console.log('[Radio] Setting audio source to:', trackToPlay.src);
                 audioRef.current.src = trackToPlay.src;
-                audioRef.current.volume = 1.0;
                 audioRef.current.load();
+                // Set volume to full
+                audioRef.current.volume = 1.0;
+                globalAudioState.volume = 1.0;
+                setVolume(1.0);
                 globalAudioState.currentTrackId = trackToPlay.id;
                 
                 // Force play after a brief moment to ensure audio is loaded
@@ -646,40 +651,60 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
         // Check if this track is unlocked
         const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType);
         console.log(`[Radio Ref] Is track "${trackToPlay.title}" unlocked?`, isUnlocked ? 'YES' : 'NO');
+        console.log(`[Radio Ref] Full station status:`, stationTracker.logUnlockedStations());
         
         if (isUnlocked) {
           console.log(`[Radio Ref] Playing track: ${trackToPlay.title}`);
           
-          // Check if we're already playing this track
-          if (currentTrack && currentTrack.id === trackToPlay.id) {
-            console.log(`[Radio Ref] Already playing this track: ${trackToPlay.title}`);
-            return;
+          // ALWAYS stop current playback before starting a new track
+          if (audioRef.current) {
+            console.log('[Radio Ref] Stopping any current playback');
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
           }
           
-          // Stop current playback if necessary
-          if (audioRef.current && isPlaying) {
-            console.log('[Radio Ref] Pausing current playback before switching tracks');
-            audioRef.current.pause();
+          // Explicitly create a new audio element if needed
+          if (!audioRef.current) {
+            console.log('[Radio Ref] Creating new audio element');
+            globalAudio = new Audio();
+            audioRef.current = globalAudio;
           }
           
           // Set the track
           console.log('[Radio Ref] Setting current track to:', trackToPlay.title);
           setCurrentTrack(trackToPlay);
           
-          // Ensure audio is ready and start playback immediately
+          // Ensure audio is ready and configure for playback
           if (audioRef.current) {
             console.log('[Radio Ref] Setting audio source to:', trackToPlay.src);
             audioRef.current.src = trackToPlay.src;
-            audioRef.current.volume = 1.0;
+            audioRef.current.volume = 1.0; // Ensure maximum volume
+            audioRef.current.preload = 'auto'; // Force preloading
             audioRef.current.load();
-            globalAudioState.currentTrackId = trackToPlay.id;
             
-            // Force play after a brief moment to ensure audio is loaded
-            console.log('[Radio Ref] Setting up playback timeout');
-            setTimeout(() => {
-              console.log('[Radio Ref] Timeout triggered, attempting to play');
-              if (audioRef.current) {
-                console.log('[Radio Ref] Audio reference still exists, calling play()');
+            // Update all state
+            globalAudioState.currentTrackId = trackToPlay.id;
+            globalAudioState.volume = 1.0;
+            globalAudioState.isPlaying = true;
+            setVolume(1.0);
+            
+            // Add event listeners to track loading progress
+            const loadStartListener = () => console.log('[Radio Ref] Audio loadstart event triggered');
+            const loadedDataListener = () => console.log('[Radio Ref] Audio loadeddata event triggered');
+            const canPlayListener = () => console.log('[Radio Ref] Audio canplay event triggered');
+            
+            audioRef.current.addEventListener('loadstart', loadStartListener);
+            audioRef.current.addEventListener('loadeddata', loadedDataListener);
+            audioRef.current.addEventListener('canplay', canPlayListener);
+            
+            // Try to play immediately, then again after a delay for safety
+            const attemptPlay = () => {
+              if (!audioRef.current) return;
+              
+              console.log('[Radio Ref] Attempting to play audio');
+              console.log('[Radio Ref] Audio readyState:', audioRef.current.readyState);
+              
+              try {
                 const playPromise = audioRef.current.play();
                 
                 if (playPromise !== undefined) {
@@ -687,23 +712,53 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
                     .then(() => {
                       console.log(`[Radio Ref] Successfully started playback of ${trackToPlay.title}`);
                       setIsPlaying(true);
-                      globalAudioState.isPlaying = true;
                     })
                     .catch(error => {
                       console.error(`[Radio Ref] Error playing ${trackToPlay.title}:`, error);
+                      
+                      // Try one more time after a longer delay if the first attempt fails
+                      setTimeout(() => {
+                        console.log('[Radio Ref] Retry after error...');
+                        if (audioRef.current) {
+                          audioRef.current.play()
+                            .then(() => {
+                              console.log('[Radio Ref] Retry successful');
+                              setIsPlaying(true);
+                            })
+                            .catch(retryError => {
+                              console.error('[Radio Ref] Retry failed:', retryError);
+                            });
+                        }
+                      }, 500);
                     });
                 } else {
-                  console.log('[Radio Ref] Play promise is undefined, which may indicate a browser restriction');
+                  console.log('[Radio Ref] Play promise is undefined');
                 }
-              } else {
-                console.error('[Radio Ref] Audio reference lost during timeout');
+              } catch (error) {
+                console.error('[Radio Ref] Exception during play():', error);
               }
-            }, 100);
+            };
+            
+            // Try immediately 
+            attemptPlay();
+            
+            // Also try after a delay to ensure audio is loaded
+            setTimeout(() => {
+              console.log('[Radio Ref] Delayed play attempt');
+              attemptPlay();
+              
+              // Remove event listeners to avoid memory leaks
+              if (audioRef.current) {
+                audioRef.current.removeEventListener('loadstart', loadStartListener);
+                audioRef.current.removeEventListener('loadeddata', loadedDataListener);
+                audioRef.current.removeEventListener('canplay', canPlayListener);
+              }
+            }, 300);
           } else {
             console.error('[Radio Ref] No audio reference available');
           }
         } else {
-          console.log(`[Radio Ref] Track ${trackToPlay.title} is not unlocked yet.`);
+          console.error(`[Radio Ref] Track ${trackToPlay.title} is not unlocked yet.`);
         }
       } else {
         console.error('[Radio Ref] Could not find track with ID:', trackId);

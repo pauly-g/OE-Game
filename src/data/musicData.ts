@@ -14,7 +14,7 @@ export const tracks: Track[] = [
     title: 'A Dress Issue',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/A Dress Issue.mp3',
-    stationType: 'address', // First station - always unlocked
+    stationType: 'first_song', // Changed from 'address' to 'first_song' to be unlocked after 2 edits
     lyrics: `Lorem ipsum dolor sit amet
 Consectetur adipiscing elit
 Sed do eiusmod tempor incididunt

@@ -129,6 +129,9 @@ export class Level1Scene extends Phaser.Scene {
   private recentComments: string[] = []; // Track recently shown comments
   private maxRecentComments: number = 5; // How many recent comments to track
 
+  private totalEditsCompleted: number = 0;
+  private firstSongUnlocked: boolean = false;
+
   constructor() {
     super({ key: 'Level1Scene' });
     console.log('Level1Scene constructor called');
@@ -1062,6 +1065,16 @@ export class Level1Scene extends Phaser.Scene {
       this.totalEditsApplied++;
       console.log(`Total edits applied: ${this.totalEditsApplied}, Last unlocked at: ${this.lastUnlockedAtEditCount}`);
       
+      // Unlock the first song after 2 edits
+      if (this.totalEditsApplied === 2) {
+        console.log('Unlocking first song after 2 edits');
+        import('../utils/stationTracker').then(({ stationTracker }) => {
+          stationTracker.unlockStation('first_song');
+        }).catch(err => {
+          console.error('Failed to import stationTracker:', err);
+        });
+      }
+      
       // Check if we should unlock a new station (every 5 edits)
       if (this.totalEditsApplied >= 5 && (this.totalEditsApplied - this.lastUnlockedAtEditCount) >= 5) {
         console.log('Unlocking next station');
@@ -1277,6 +1290,10 @@ export class Level1Scene extends Phaser.Scene {
       });
     }
     
+    // Reset the station tracker in localStorage
+    console.log('Resetting station tracker in localStorage');
+    stationTracker.resetStations();
+    
     // Clean up any existing orders
     this.children.getAll().forEach(child => {
       if (child instanceof Phaser.GameObjects.Container && child !== this.livesContainer) {
@@ -1298,7 +1315,11 @@ export class Level1Scene extends Phaser.Scene {
     // Only increment manual orders if this wasn't created during a power-up
     if (!order.createdDuringPowerUp) {
       this.manualOrdersCompleted++;
-      console.log(`Manual order completed: ${this.manualOrdersCompleted}/10 needed for power-up`);
+      // Track total edits for song unlocking
+      this.totalEditsCompleted++;
+      console.log(`Manual order completed: ${this.manualOrdersCompleted}/10 needed for power-up, Total edits: ${this.totalEditsCompleted}`);
+      
+      // Remove redundant unlock code - this is now handled in applyEditToOrder
       
       // Add a tiny jump animation for manually completed orders
       this.tweens.add({

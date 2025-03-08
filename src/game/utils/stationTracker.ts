@@ -28,7 +28,7 @@ const initializeStations = (): void => {
   const existingStations = localStorage.getItem(UNLOCKED_STATIONS_KEY);
   if (!existingStations) {
     const initial = {
-      address: true, // Only the first station is unlocked by default
+      address: false, // Changed to false - address station should start locked
       quantity: false,
       discount: false,
       product: false,
@@ -36,7 +36,7 @@ const initializeStations = (): void => {
       cancel: false
     };
     localStorage.setItem(UNLOCKED_STATIONS_KEY, JSON.stringify(initial));
-    console.log('[StationTracker] Initialized stations with address unlocked');
+    console.log('[StationTracker] Initialized all stations as locked');
   }
 };
 
@@ -50,11 +50,7 @@ const getUnlockedStations = (): Record<string, boolean> => {
 
 // Check if a specific station type is unlocked
 const isStationUnlocked = (stationType: string): boolean => {
-  // Only address should be unlocked by default
-  if (stationType === 'address') {
-    return true;
-  }
-  
+  // Removed special case for address - all stations follow the same rules
   const stations = getUnlockedStations();
   const isUnlocked = !!stations[stationType];
   console.log(`[StationTracker] Checking if ${stationType} is unlocked:`, isUnlocked);
