@@ -768,167 +768,169 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
   }));
 
   return (
-    <>
-      {/* Main player UI - only shown when isOpen is true */}
-      {isOpen && currentTrack && (
-        <div className="radio-container">
-          <div className="radio-header">
-            <div className="radio-header-title">
-              <span>🎵</span>
-              <span>WAREHOUSE RADIO</span>
-              {isPlaying && renderEqualizer()}
+    <div className={`radio-player ${isOpen ? 'open' : ''}`}>
+      <div className="radio-content">
+        {/* Main player UI - only shown when isOpen is true */}
+        {isOpen && currentTrack && (
+          <div className="radio-container">
+            <div className="radio-header">
+              <div className="radio-header-title">
+                <span>🎵</span>
+                <span>WAREHOUSE RADIO</span>
+                {isPlaying && renderEqualizer()}
+              </div>
+              <button 
+                onClick={onClose}
+                className="radio-button"
+              >
+                ✕
+              </button>
             </div>
+
+            <div className="radio-body">
+              {/* Left side: Controls - made more compact */}
+              <div className="radio-controls">
+                {/* Track info with more compact layout */}
+                <div className="track-info-container">
+                  <div className="track-title">{currentTrack.title}</div>
+                  <div className="track-artist">{currentTrack.artist}</div>
+                  <div className="time-display">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div 
+                  className="progress-container"
+                  onClick={handleProgressClick}
+                >
+                  <div 
+                    className="progress-bar"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+
+                {/* Playback controls in a more condensed layout */}
+                <div className="control-panel">
+                  <button 
+                    onClick={prevTrack}
+                    className="radio-button"
+                    disabled={tracks.findIndex(t => t.id === currentTrack.id) === 0}
+                  >
+                    ⏮
+                  </button>
+                  <button 
+                    onClick={togglePlay}
+                    className="radio-button radio-button-primary"
+                  >
+                    {isPlaying ? '⏸' : '▶'}
+                  </button>
+                  <button 
+                    onClick={stopPlayback}
+                    className="radio-button"
+                  >
+                    ⏹
+                  </button>
+                  <button 
+                    onClick={nextTrack}
+                    className="radio-button"
+                    disabled={tracks.findIndex(t => t.id === currentTrack.id) === tracks.filter(t => stationTracker.isStationUnlocked(t.stationType)).length - 1}
+                  >
+                    ⏭
+                  </button>
+                </div>
+
+                {/* Volume control */}
+                <div className="volume-control">
+                  <span>VOL</span>
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="1" 
+                    step="0.01" 
+                    value={volume}
+                    onChange={handleVolumeChange}
+                    className="pixel-slider"
+                  />
+                </div>
+              </div>
+
+              {/* Right side: Display - playlist/lyrics */}
+              <div className="radio-display">
+                {/* Tab buttons */}
+                <div className="tab-buttons">
+                  <button 
+                    className={`tab-button ${activeTab === 'playlist' ? 'active' : ''}`}
+                    onClick={() => setTab('playlist')}
+                  >
+                    Playlist
+                  </button>
+                  <button 
+                    className={`tab-button ${activeTab === 'lyrics' ? 'active' : ''}`}
+                    onClick={() => setTab('lyrics')}
+                  >
+                    Lyrics
+                  </button>
+                </div>
+                
+                {/* Playlist */}
+                {showPlaylist && (
+                  <div className="playlist-panel">
+                    {tracks.map(track => {
+                      const isLocked = !stationTracker.isStationUnlocked(track.stationType) || track.locked;
+                      const isActive = currentTrack?.id === track.id;
+                      
+                      return (
+                        <div 
+                          key={track.id}
+                          className={`playlist-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+                          onClick={() => !isLocked && changeTrack(track)}
+                        >
+                          {isLocked && <span className="lock-icon">🔒 </span>}
+                          {isLocked ? "Fix more orders to unlock this song!" : track.title}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {/* Lyrics panel */}
+                {activeTab === 'lyrics' && (
+                  <div className="lyrics-panel">
+                    {currentTrack?.lyrics.split('\n').map((line, index) => (
+                      <p key={index}>{line}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mini player when main UI is closed but music is playing */}
+        {!isOpen && isPlaying && currentTrack && (
+          <div className="mini-player">
             <button 
-              onClick={onClose}
-              className="radio-button"
+              onClick={togglePlay}
+              className="radio-button radio-button-primary"
+              title="Pause"
             >
-              ✕
+              ⏸️
+            </button>
+            <div className="mini-track-info">
+              {currentTrack.title} - {currentTrack.artist}
+            </div>
+            <button
+              onClick={() => onClose()}
+              className="radio-button"
+              title="Open Player"
+            >
+              🔽
             </button>
           </div>
-
-          <div className="radio-body">
-            {/* Left side: Controls - made more compact */}
-            <div className="radio-controls">
-              {/* Track info with more compact layout */}
-              <div className="track-info-container">
-                <div className="track-title">{currentTrack.title}</div>
-                <div className="track-artist">{currentTrack.artist}</div>
-                <div className="time-display">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div 
-                className="progress-container"
-                onClick={handleProgressClick}
-              >
-                <div 
-                  className="progress-bar"
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
-
-              {/* Playback controls in a more condensed layout */}
-              <div className="control-panel">
-                <button 
-                  onClick={prevTrack}
-                  className="radio-button"
-                  disabled={tracks.findIndex(t => t.id === currentTrack.id) === 0}
-                >
-                  ⏮
-                </button>
-                <button 
-                  onClick={togglePlay}
-                  className="radio-button radio-button-primary"
-                >
-                  {isPlaying ? '⏸' : '▶'}
-                </button>
-                <button 
-                  onClick={stopPlayback}
-                  className="radio-button"
-                >
-                  ⏹
-                </button>
-                <button 
-                  onClick={nextTrack}
-                  className="radio-button"
-                  disabled={tracks.findIndex(t => t.id === currentTrack.id) === tracks.filter(t => stationTracker.isStationUnlocked(t.stationType)).length - 1}
-                >
-                  ⏭
-                </button>
-              </div>
-
-              {/* Volume control */}
-              <div className="volume-control">
-                <span>VOL</span>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="1" 
-                  step="0.01" 
-                  value={volume}
-                  onChange={handleVolumeChange}
-                  className="pixel-slider"
-                />
-              </div>
-            </div>
-
-            {/* Right side: Display - playlist/lyrics */}
-            <div className="radio-display">
-              {/* Tab buttons */}
-              <div className="tab-buttons">
-                <button 
-                  className={`tab-button ${activeTab === 'playlist' ? 'active' : ''}`}
-                  onClick={() => setTab('playlist')}
-                >
-                  PLAYLIST
-                </button>
-                <button 
-                  className={`tab-button ${activeTab === 'lyrics' ? 'active' : ''}`}
-                  onClick={() => setTab('lyrics')}
-                >
-                  LYRICS
-                </button>
-              </div>
-              
-              {/* Playlist panel */}
-              {activeTab === 'playlist' && (
-                <div className="playlist-panel">
-                  {tracks.map(track => {
-                    const isLocked = !stationTracker.isStationUnlocked(track.stationType);
-                    const isActive = currentTrack?.id === track.id;
-                    
-                    return (
-                      <div 
-                        key={track.id}
-                        className={`playlist-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
-                        onClick={() => !isLocked && changeTrack(track)}
-                      >
-                        {isLocked && <span className="lock-icon">🔒 </span>}
-                        {track.title}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              
-              {/* Lyrics panel */}
-              {activeTab === 'lyrics' && (
-                <div className="lyrics-panel">
-                  {currentTrack?.lyrics.split('\n').map((line, index) => (
-                    <p key={index}>{line}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mini player when main UI is closed but music is playing */}
-      {!isOpen && isPlaying && currentTrack && (
-        <div className="mini-player">
-          <button 
-            onClick={togglePlay}
-            className="radio-button radio-button-primary"
-            title="Pause"
-          >
-            ⏸️
-          </button>
-          <div className="mini-track-info">
-            {currentTrack.title} - {currentTrack.artist}
-          </div>
-          <button
-            onClick={() => onClose()}
-            className="radio-button"
-            title="Open Player"
-          >
-            🔽
-          </button>
-        </div>
-      )}
-    </>
+        )}
+      </div>
+    </div>
   );
 });
 

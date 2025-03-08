@@ -50,7 +50,12 @@ const getUnlockedStations = (): Record<string, boolean> => {
 
 // Check if a specific station type is unlocked
 const isStationUnlocked = (stationType: string): boolean => {
-  // Removed special case for address - all stations follow the same rules
+  // Always unlock warehouse station
+  if (stationType === 'warehouse') {
+    return true;
+  }
+  
+  // For all other stations, check the unlocked status
   const stations = getUnlockedStations();
   const isUnlocked = !!stations[stationType];
   console.log(`[StationTracker] Checking if ${stationType} is unlocked:`, isUnlocked);

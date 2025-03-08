@@ -5,16 +5,44 @@ export interface Track {
   src: string;
   lyrics: string;
   stationType: string; // Corresponds to station types in the game
+  locked?: boolean; // Flag to indicate if a track should display as locked
 }
 
 // Using the actual music files from public/game/Music/OE-Radio
 export const tracks: Track[] = [
+  // Warehouse station songs - available from the beginning
+  {
+    id: 'warehouse1',
+    title: 'The Warehouse',
+    artist: 'The Order Editors',
+    src: 'game/Music/BG-Music/The Warehouse.mp3',
+    stationType: 'warehouse', // Always unlocked from the start
+    lyrics: 'www.orderediting.com'
+  },
+  {
+    id: 'warehouse2',
+    title: 'The Warehouse (1)',
+    artist: 'The Order Editors',
+    src: 'game/Music/BG-Music/The Warehouse (1).mp3',
+    stationType: 'warehouse', // Always unlocked from the start
+    lyrics: 'www.orderediting.com'
+  },
+  {
+    id: 'warehouse3',
+    title: 'The Warehouse (2)',
+    artist: 'The Order Editors',
+    src: 'game/Music/BG-Music/The Warehouse (2).mp3',
+    stationType: 'warehouse', // Always unlocked from the start
+    lyrics: 'www.orderediting.com'
+  },
+  // Unlockable songs
   {
     id: '1',
     title: 'A Dress Issue',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/A Dress Issue.mp3',
     stationType: 'first_song', // Changed from 'address' to 'first_song' to be unlocked after 2 edits
+    locked: true,
     lyrics: `Lorem ipsum dolor sit amet
 Consectetur adipiscing elit
 Sed do eiusmod tempor incididunt
@@ -31,6 +59,7 @@ Consequat duis aute irure dolor`
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/Quantity Blues.mp3',
     stationType: 'quantity', // Matches the station type in the game
+    locked: true,
     lyrics: `Sed ut perspiciatis unde omnis
 Iste natus error sit voluptatem
 Accusantium doloremque laudantium
