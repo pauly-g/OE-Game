@@ -8,25 +8,35 @@
 
 // LocalStorage key for saving station unlock states
 const UNLOCKED_STATIONS_KEY = 'oe-game-unlocked-stations';
+const RESET_TRACKER_KEY = 'oe-game-tracker-reset';
 
-// Initialize with the first station (address) always unlocked
+// Initialize the set of unlocked stations
 const initializeStations = (): void => {
-  const existingStations = localStorage.getItem(UNLOCKED_STATIONS_KEY);
+  // Check if we've done a reset during this page load
+  const hasReset = localStorage.getItem(RESET_TRACKER_KEY);
   
+  if (!hasReset) {
+    // If this is a fresh page load, explicitly reset all stations first
+    localStorage.removeItem(UNLOCKED_STATIONS_KEY);
+    console.log('[StationTracker] Fresh page load - resetting all stations');
+    
+    // Mark that we've done the reset this session
+    localStorage.setItem(RESET_TRACKER_KEY, Date.now().toString());
+  }
+
+  // Now initialize with only the first station unlocked
+  const existingStations = localStorage.getItem(UNLOCKED_STATIONS_KEY);
   if (!existingStations) {
-    // Set initial state with first station unlocked
-    const initialState = {
-      address: true,  // First station - always unlocked
+    const initial = {
+      address: true, // Only the first station is unlocked by default
       quantity: false,
       discount: false,
       product: false,
       invoice: false,
       cancel: false
     };
-    localStorage.setItem(UNLOCKED_STATIONS_KEY, JSON.stringify(initialState));
-    console.log('[StationTracker] Initialized stations:', initialState);
-  } else {
-    console.log('[StationTracker] Using existing station state:', JSON.parse(existingStations));
+    localStorage.setItem(UNLOCKED_STATIONS_KEY, JSON.stringify(initial));
+    console.log('[StationTracker] Initialized stations with address unlocked');
   }
 };
 
@@ -95,6 +105,8 @@ const unlockStation = (stationType: string): void => {
 // Reset all stations (mainly for testing)
 const resetStations = (): void => {
   localStorage.removeItem(UNLOCKED_STATIONS_KEY);
+  // Also clear the reset tracker so next page load will trigger a reset
+  localStorage.removeItem(RESET_TRACKER_KEY);
   console.log('[StationTracker] Reset all stations');
   initializeStations();
 };

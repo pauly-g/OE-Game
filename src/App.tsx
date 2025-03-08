@@ -26,6 +26,7 @@ import React, { useEffect, useState } from 'react';
 import Phaser from 'phaser';
 import { gameConfig } from './game/config';
 import { gameDebugger } from './game/utils/debug';
+import { stationTracker } from './game/utils/stationTracker';
 import Radio from './components/Radio';
 import RadioButton from './components/RadioButton';
 import SongNotification from './components/SongNotification';
@@ -43,6 +44,24 @@ function App() {
     title: '',
     artist: ''
   });
+
+  // Reset stations on page load
+  useEffect(() => {
+    console.log('[App] Resetting stations on page load');
+    stationTracker.resetStations();
+    
+    // Add global debug function
+    (window as any).resetStations = () => {
+      console.log('[Debug] Manually resetting stations');
+      stationTracker.resetStations();
+      alert('Stations reset complete!');
+    };
+    
+    return () => {
+      // Cleanup
+      delete (window as any).resetStations;
+    };
+  }, []);
 
   // Enable debug mode
   useEffect(() => {
@@ -210,6 +229,16 @@ function App() {
         </button>
         
         <RadioButton onClick={toggleRadio} showRadio={showRadio} wiggle={radioWiggle} />
+        
+        <button
+          onClick={() => {
+            stationTracker.resetStations();
+            alert('All stations reset! Only the first station (address) remains unlocked.');
+          }}
+          className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+        >
+          Reset Stations
+        </button>
       </div>
 
       {/* Song unlock notification */}
