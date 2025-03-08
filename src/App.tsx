@@ -284,16 +284,6 @@ function App() {
         )}
         
         <RadioButton onClick={toggleRadio} showRadio={showRadio} wiggle={radioWiggle} />
-        
-        <button
-          onClick={() => {
-            stationTracker.resetStations();
-            alert('All stations reset! Only the first station (address) remains unlocked.');
-          }}
-          className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-        >
-          Reset Stations
-        </button>
       </div>
 
       {/* Song unlock notification */}
