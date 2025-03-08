@@ -56,26 +56,24 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     
     // Set up track change listener
     const handleTrackEnded = () => {
+      console.log('[Radio] Track ended, finding next track');
+      
+      // Get only unlocked tracks
+      const unlockedTracks = tracks.filter(t => stationTracker.isStationUnlocked(t.stationType));
+      
+      if (unlockedTracks.length === 0) {
+        console.log('[Radio] No unlocked tracks available');
+        return;
+      }
+      
       // Find next track
       if (globalAudioState.currentTrackId) {
-        const currentIndex = tracks.findIndex(t => t.id === globalAudioState.currentTrackId);
-        let nextIndex = (currentIndex + 1) % tracks.length;
+        const currentIndex = unlockedTracks.findIndex(t => t.id === globalAudioState.currentTrackId);
+        let nextIndex = (currentIndex + 1) % unlockedTracks.length;
         
-        // Find the next unlocked track
-        let nextTrack = tracks[nextIndex];
-        while (!stationTracker.isStationUnlocked(nextTrack.stationType)) {
-          nextIndex = (nextIndex + 1) % tracks.length;
-          // If we've checked all tracks and none are unlocked (except the current one),
-          // just loop the current track
-          if (nextIndex === currentIndex) {
-            nextIndex = currentIndex;
-            break;
-          }
-          nextTrack = tracks[nextIndex];
-        }
-        
-        // Get the next track (this line was duplicated)
-        nextTrack = tracks[nextIndex];
+        // Get the next track
+        const nextTrack = unlockedTracks[nextIndex];
+        console.log('[Radio] Playing next track:', nextTrack.title);
         
         // Update global state
         globalAudioState.currentTrackId = nextTrack.id;
@@ -119,35 +117,54 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
   
   // Helper function to update component state from global state
   const updateCurrentTrackFromGlobal = () => {
+    // Force log station status to debug
+    const stationStatus = stationTracker.logUnlockedStations();
+    console.log('[Radio] Station status during track update:', stationStatus);
+    
+    // Get only unlocked tracks - with special debug logging for 'quantity' station
+    console.log('[Radio] Checking if quantity station is unlocked:', stationStatus.quantity);
+    
+    const unlockedTracks = tracks.filter(t => {
+      const isUnlocked = stationTracker.isStationUnlocked(t.stationType);
+      console.log(`[Radio] Track ${t.title} with type ${t.stationType} is unlocked: ${isUnlocked}`);
+      return isUnlocked;
+    });
+    
+    console.log('[Radio] Available unlocked tracks:', unlockedTracks.map(t => t.title));
+    
     if (globalAudioState.currentTrackId) {
       const track = tracks.find(t => t.id === globalAudioState.currentTrackId);
       if (track) {
-        // Make sure the track is unlocked
-        if (stationTracker.isStationUnlocked(track.stationType)) {
+        // Double check that the track is unlocked with explicit logging
+        const isUnlocked = stationTracker.isStationUnlocked(track.stationType);
+        console.log(`[Radio] Current track ${track.title} with type ${track.stationType} is unlocked: ${isUnlocked}`);
+        
+        if (isUnlocked) {
+          console.log('[Radio] Selected previously playing track:', track.title);
           setCurrentTrack(track);
         } else {
           // If the previously playing track is now locked, switch to the first track
-          const firstTrack = tracks.find(t => stationTracker.isStationUnlocked(t.stationType));
-          if (firstTrack) {
-            setCurrentTrack(firstTrack);
-            globalAudioState.currentTrackId = firstTrack.id;
+          const firstUnlockedTrack = unlockedTracks[0];
+          if (firstUnlockedTrack) {
+            console.log('[Radio] Previous track locked, switching to:', firstUnlockedTrack.title);
+            setCurrentTrack(firstUnlockedTrack);
+            globalAudioState.currentTrackId = firstUnlockedTrack.id;
             if (globalAudio) {
-              globalAudio.src = firstTrack.src;
+              globalAudio.src = firstUnlockedTrack.src;
               globalAudio.currentTime = 0;
             }
           }
         }
       }
-    } else if (tracks.length > 0) {
+    } else if (unlockedTracks.length > 0) {
       // Set default track if none is playing (first unlocked track)
-      const firstTrack = tracks.find(t => stationTracker.isStationUnlocked(t.stationType));
-      if (firstTrack) {
-        setCurrentTrack(firstTrack);
-        globalAudioState.currentTrackId = firstTrack.id;
-        if (globalAudio) {
-          globalAudio.src = firstTrack.src;
-          globalAudio.currentTime = globalAudioState.currentTime;
-        }
+      const firstUnlockedTrack = unlockedTracks[0];
+      console.log('[Radio] No track playing, setting to first unlocked:', firstUnlockedTrack.title);
+      setCurrentTrack(firstUnlockedTrack);
+      globalAudioState.currentTrackId = firstUnlockedTrack.id;
+      if (globalAudio) {
+        globalAudio.src = firstUnlockedTrack.src;
+        globalAudioState.currentTime = 0;
       }
     }
     
@@ -381,39 +398,85 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
 
   // Listen for station unlock events
   useEffect(() => {
-    // Initialize stations
+    console.log('[Radio] Setting up station unlock listeners');
+    
+    // Initialize stations if needed
     stationTracker.initializeStations();
-    console.log('[Radio] Initialized stationTracker');
+    
+    // Function to check for and apply unlocks
+    const checkForUnlocks = () => {
+      console.log('[Radio] Checking for unlocked stations');
+      
+      // Force a refresh from localStorage
+      stationTracker.logUnlockedStations();
+      
+      // Directly check localStorage for unlocked stations
+      try {
+        const stationsJSON = localStorage.getItem('oe-game-unlocked-stations');
+        if (stationsJSON) {
+          const stations = JSON.parse(stationsJSON);
+          console.log('[Radio] Direct localStorage check:', stations);
+          
+          // Check specifically for quantity station
+          if (stations && stations.quantity === true) {
+            console.log('[Radio] Quantity station is unlocked in localStorage!');
+          }
+        }
+      } catch (e) {
+        console.error('[Radio] Error checking localStorage:', e);
+      }
+      
+      // Update current track
+      updateCurrentTrackFromGlobal();
+      
+      // Force re-render playlist
+      setShowPlaylist(prev => !prev);
+      setTimeout(() => setShowPlaylist(prev => !prev), 100);
+    };
     
     // Set up event listener for station unlocks
     const handleStationUnlock = (event: Event) => {
-      console.log('[Radio] Received stationUnlocked event:', (event as CustomEvent).detail);
-      // Force a re-render to update locked/unlocked status in playlist
-      setShowPlaylist(prev => !prev);
-      setShowPlaylist(prev => !prev);
+      const detail = (event as CustomEvent).detail;
+      console.log('[Radio] Received stationUnlocked event:', detail);
+      
+      // If this is the quantity station being unlocked, update aggressively
+      if (detail && detail.stationType === 'quantity') {
+        console.log('[Radio] Quantity station unlocked via event!');
+      }
+      
+      checkForUnlocks();
     };
     
-    window.addEventListener('stationUnlocked', handleStationUnlock);
-    console.log('[Radio] Added stationUnlocked event listener');
+    // Also listen for localStorage changes as a fallback
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key && (
+          event.key === 'oe-game-unlocked-stations' || 
+          event.key === 'oe-game-last-unlock' ||
+          event.key === 'oe-game-unlock-timestamp')) {
+        console.log('[Radio] Detected localStorage change for stations:', event.key, event.newValue);
+        checkForUnlocks();
+      }
+    };
     
-    // Log current station state
-    stationTracker.logUnlockedStations();
+    // Add a periodic check
+    const intervalId = setInterval(checkForUnlocks, 3000);
+    
+    window.addEventListener('stationUnlocked', handleStationUnlock);
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Run a check right away
+    checkForUnlocks();
+    
+    // And another check after a short delay
+    setTimeout(checkForUnlocks, 1000);
     
     // Cleanup
     return () => {
       window.removeEventListener('stationUnlocked', handleStationUnlock);
-      console.log('[Radio] Removed stationUnlocked event listener');
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(intervalId);
     };
   }, []);
-
-  // Testing function to unlock stations manually
-  const debugUnlockStation = (stationType: string) => {
-    console.log(`Manually unlocking station: ${stationType}`);
-    stationTracker.forceUnlock(stationType);
-    // Force re-render playlist
-    setShowPlaylist(prev => !prev);
-    setShowPlaylist(prev => !prev);
-  };
 
   return (
     <>
@@ -435,9 +498,9 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
           </div>
 
           <div className="radio-body">
-            {/* Left side: Controls */}
+            {/* Left side: Controls - made more compact */}
             <div className="radio-controls">
-              {/* Track info */}
+              {/* Track info with more compact layout */}
               <div className="track-info-container">
                 <div className="track-title">{currentTrack.title}</div>
                 <div className="track-artist">{currentTrack.artist}</div>
@@ -451,38 +514,39 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
                 className="progress-container"
                 onClick={handleProgressClick}
               >
-                <div className="progress-bar" style={{ width: `${progress}%` }} />
+                <div 
+                  className="progress-bar"
+                  style={{ width: `${progress}%` }}
+                ></div>
               </div>
 
-              {/* Playback controls */}
+              {/* Playback controls in a more condensed layout */}
               <div className="control-panel">
                 <button 
                   onClick={prevTrack}
                   className="radio-button"
-                  title="Previous Track"
+                  disabled={tracks.findIndex(t => t.id === currentTrack.id) === 0}
                 >
-                  ⏮️
+                  ⏮
                 </button>
                 <button 
                   onClick={togglePlay}
                   className="radio-button radio-button-primary"
-                  title={isPlaying ? "Pause" : "Play"}
                 >
-                  {isPlaying ? '⏸️' : '▶️'}
-                </button>
-                <button 
-                  onClick={nextTrack}
-                  className="radio-button"
-                  title="Next Track"
-                >
-                  ⏭️
+                  {isPlaying ? '⏸' : '▶'}
                 </button>
                 <button 
                   onClick={stopPlayback}
                   className="radio-button"
-                  title="Stop"
                 >
-                  ⏹️
+                  ⏹
+                </button>
+                <button 
+                  onClick={nextTrack}
+                  className="radio-button"
+                  disabled={tracks.findIndex(t => t.id === currentTrack.id) === tracks.filter(t => stationTracker.isStationUnlocked(t.stationType)).length - 1}
+                >
+                  ⏭
                 </button>
               </div>
 
@@ -497,35 +561,12 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
                   value={volume}
                   onChange={handleVolumeChange}
                   className="pixel-slider"
-                  style={{ flex: 1 }}
                 />
               </div>
+            </div>
 
-              {/* Debug buttons */}
-              <div style={{ marginTop: '10px' }}>
-                <button 
-                  onClick={() => stationTracker.logUnlockedStations()}
-                  className="radio-button"
-                  style={{ marginRight: '5px', fontSize: '8px' }}
-                >
-                  Log Stations
-                </button>
-                <button 
-                  onClick={() => debugUnlockStation('quantity')}
-                  className="radio-button"
-                  style={{ marginRight: '5px', fontSize: '8px' }}
-                >
-                  Unlock Quantity
-                </button>
-                <button 
-                  onClick={() => stationTracker.resetStations()}
-                  className="radio-button"
-                  style={{ fontSize: '8px' }}
-                >
-                  Reset
-                </button>
-              </div>
-
+            {/* Right side: Display - playlist/lyrics */}
+            <div className="radio-display">
               {/* Tab buttons */}
               <div className="tab-buttons">
                 <button 
@@ -541,32 +582,34 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
                   LYRICS
                 </button>
               </div>
-            </div>
-
-            {/* Right side: Display (Playlist or Lyrics) */}
-            <div className="radio-display">
+              
               {/* Playlist panel */}
-              {showPlaylist && (
+              {activeTab === 'playlist' && (
                 <div className="playlist-panel">
                   {tracks.map(track => {
-                    const isUnlocked = stationTracker.isStationUnlocked(track.stationType);
+                    const isLocked = !stationTracker.isStationUnlocked(track.stationType);
+                    const isActive = currentTrack?.id === track.id;
+                    
                     return (
                       <div 
                         key={track.id}
-                        onClick={isUnlocked ? () => changeTrack(track) : undefined}
-                        className={`playlist-item ${currentTrack?.id === track.id ? 'active' : ''} ${!isUnlocked ? 'locked' : ''}`}
+                        className={`playlist-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+                        onClick={() => !isLocked && changeTrack(track)}
                       >
+                        {isLocked && <span className="lock-icon">🔒 </span>}
                         {track.title}
                       </div>
                     );
                   })}
                 </div>
               )}
-
+              
               {/* Lyrics panel */}
-              {showLyrics && (
+              {activeTab === 'lyrics' && (
                 <div className="lyrics-panel">
-                  {currentTrack.lyrics}
+                  {currentTrack?.lyrics.split('\n').map((line, index) => (
+                    <p key={index}>{line}</p>
+                  ))}
                 </div>
               )}
             </div>

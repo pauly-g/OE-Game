@@ -263,6 +263,13 @@ export class Level1Scene extends Phaser.Scene {
     try {
       gameDebugger.info('Level1Scene create method started');
       
+      // Reset the state when starting a new game
+      if (!localStorage.getItem('oe-game-reset-done')) {
+        stationTracker.resetStations();
+        localStorage.setItem('oe-game-reset-done', 'true');
+        console.log('[Level1Scene] Forced reset of stations on game start');
+      }
+      
       // Initialize the station tracker
       stationTracker.initializeStations();
       console.log('Initialized stationTracker in Level1Scene');
@@ -2310,7 +2317,29 @@ export class Level1Scene extends Phaser.Scene {
     // Add logs and error handling
     try {
       console.log(`Calling stationTracker.unlockStation with type: ${nextStation.type}`);
+      
+      // First unlock attempt
       stationTracker.unlockStation(nextStation.type);
+      
+      // Update localStorage directly as a backup
+      try {
+        const stationsJSON = localStorage.getItem('oe-game-unlocked-stations');
+        if (stationsJSON) {
+          const stations = JSON.parse(stationsJSON);
+          stations[nextStation.type] = true;
+          localStorage.setItem('oe-game-unlocked-stations', JSON.stringify(stations));
+          console.log(`Direct localStorage update for ${nextStation.type}`);
+        }
+      } catch (e) {
+        console.error('Error updating localStorage directly:', e);
+      }
+      
+      // Trigger again after a short delay
+      setTimeout(() => {
+        console.log(`Re-triggering unlock for ${nextStation.type}`);
+        stationTracker.unlockStation(nextStation.type);
+      }, 100);
+      
     } catch (error) {
       console.error(`Error updating station tracker for ${nextStation.type}:`, error);
     }

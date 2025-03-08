@@ -114,10 +114,11 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-start p-4">
       <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
       
-      <div id="game-container" className="relative w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+      {/* Game container at full size regardless of radio player status */}
+      <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden">
         {!game && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
@@ -136,25 +137,28 @@ function App() {
         <RadioButton onClick={toggleRadio} showRadio={showRadio} />
       </div>
 
-      {showInstructions && (
-        <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-2xl">
-          <h2 className="text-xl font-bold mb-2">How to Play:</h2>
-          <ul className="list-disc list-inside space-y-2">
-            <li>Use arrow keys to move your character</li>
-            <li>Press SPACE to pick up and drop edits</li>
-            <li>Collect edits from stations and apply them to orders on the conveyor belt</li>
-            <li>Complete orders to score points</li>
-            <li>You have 3 lives - don't let too many orders fail!</li>
-            <li>New stations unlock after every 5 successful edits</li>
-          </ul>
-        </div>
-      )}
-      
-      {/* Always render the Radio component, but toggle its isOpen prop */}
-      <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />
+      {/* Instructions and Radio are placed below the game without affecting its size */}
+      <div className="w-full max-w-6xl">
+        {showInstructions && (
+          <div className="mt-4 p-4 bg-gray-800 rounded-lg">
+            <h2 className="text-xl font-bold mb-2">How to Play:</h2>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Use arrow keys to move your character</li>
+              <li>Press SPACE to pick up and drop edits</li>
+              <li>Collect edits from stations and apply them to orders on the conveyor belt</li>
+              <li>Complete orders to score points</li>
+              <li>You have 3 lives - don't let too many orders fail!</li>
+              <li>New stations unlock after every 5 successful edits</li>
+            </ul>
+          </div>
+        )}
+        
+        {/* Radio component appears below the game */}
+        {showRadio && <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />}
+      </div>
       
       {showDebug && (
-        <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-2xl w-full max-h-60 overflow-auto">
+        <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-6xl w-full max-h-60 overflow-auto">
           <h2 className="text-xl font-bold mb-2">Error Logs:</h2>
           {errorLogs.length === 0 ? (
             <p className="text-green-400">No errors detected 👍</p>
