@@ -124,20 +124,6 @@ function App() {
         >
           {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
         </button>
-        
-        <button
-          onClick={toggleDebug}
-          className="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg transition-colors"
-        >
-          {showDebug ? 'Hide Debug' : 'Show Debug'}
-        </button>
-        
-        <button
-          onClick={downloadLogs}
-          className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
-        >
-          Download Logs
-        </button>
       </div>
 
       {showInstructions && (
