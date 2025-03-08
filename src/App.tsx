@@ -150,6 +150,7 @@ function App() {
         </div>
       )}
       
+      {/* Radio player that doesn't affect game display */}
       {showRadio && <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />}
       
       {showDebug && (

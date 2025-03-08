@@ -11,7 +11,7 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
-  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(true);
   const [volume, setVolume] = useState(0.7);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -177,7 +177,7 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
   const renderEqualizer = () => {
     return (
       <div className="equalizer">
-        {[...Array(10)].map((_, i) => (
+        {[...Array(8)].map((_, i) => (
           <div key={i} className="equalizer-bar" style={{ 
             animationPlayState: isPlaying ? 'running' : 'paused' 
           }} />
@@ -214,109 +214,113 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
           </div>
 
           <div className="radio-body">
-            {/* Track info and time */}
-            <div className="track-info-container">
-              <div>
+            {/* Left side: Controls */}
+            <div className="radio-controls">
+              {/* Track info */}
+              <div className="track-info-container">
                 <div className="track-title">{currentTrack.title}</div>
                 <div className="track-artist">{currentTrack.artist}</div>
+                <div className="time-display">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </div>
               </div>
-              <div className="time-display">
-                {formatTime(currentTime)} / {formatTime(duration)}
+
+              {/* Progress bar */}
+              <div 
+                className="progress-container"
+                onClick={handleProgressClick}
+              >
+                <div className="progress-bar" style={{ width: `${progress}%` }} />
+              </div>
+
+              {/* Playback controls */}
+              <div className="control-panel">
+                <button 
+                  onClick={prevTrack}
+                  className="radio-button"
+                  title="Previous Track"
+                >
+                  ⏮️
+                </button>
+                <button 
+                  onClick={togglePlay}
+                  className="radio-button radio-button-primary"
+                  title={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? '⏸️' : '▶️'}
+                </button>
+                <button 
+                  onClick={nextTrack}
+                  className="radio-button"
+                  title="Next Track"
+                >
+                  ⏭️
+                </button>
+                <button 
+                  onClick={() => setIsPlaying(false)}
+                  className="radio-button"
+                  title="Stop"
+                >
+                  ⏹️
+                </button>
+              </div>
+
+              {/* Volume control */}
+              <div className="volume-control">
+                <span>VOL</span>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="1" 
+                  step="0.01" 
+                  value={volume}
+                  onChange={handleVolumeChange}
+                  className="pixel-slider"
+                  style={{ flex: 1 }}
+                />
+              </div>
+
+              {/* Tab buttons */}
+              <div className="tab-buttons">
+                <button 
+                  className={`tab-button ${activeTab === 'playlist' ? 'active' : ''}`}
+                  onClick={() => setTab('playlist')}
+                >
+                  PLAYLIST
+                </button>
+                <button 
+                  className={`tab-button ${activeTab === 'lyrics' ? 'active' : ''}`}
+                  onClick={() => setTab('lyrics')}
+                >
+                  LYRICS
+                </button>
               </div>
             </div>
 
-            {/* Progress bar */}
-            <div 
-              className="progress-container"
-              onClick={handleProgressClick}
-            >
-              <div className="progress-bar" style={{ width: `${progress}%` }} />
+            {/* Right side: Display (Playlist or Lyrics) */}
+            <div className="radio-display">
+              {/* Playlist panel */}
+              {showPlaylist && (
+                <div className="playlist-panel">
+                  {tracks.map(track => (
+                    <div 
+                      key={track.id}
+                      onClick={() => changeTrack(track)}
+                      className={`playlist-item ${currentTrack?.id === track.id ? 'active' : ''}`}
+                    >
+                      {track.title}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Lyrics panel */}
+              {showLyrics && (
+                <div className="lyrics-panel">
+                  {currentTrack.lyrics}
+                </div>
+              )}
             </div>
-
-            {/* Playback controls */}
-            <div className="control-panel">
-              <button 
-                onClick={prevTrack}
-                className="radio-button"
-                title="Previous Track"
-              >
-                ⏮️
-              </button>
-              <button 
-                onClick={togglePlay}
-                className="radio-button radio-button-primary"
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? '⏸️' : '▶️'}
-              </button>
-              <button 
-                onClick={nextTrack}
-                className="radio-button"
-                title="Next Track"
-              >
-                ⏭️
-              </button>
-              <button 
-                onClick={() => setIsPlaying(false)}
-                className="radio-button"
-                title="Stop"
-              >
-                ⏹️
-              </button>
-            </div>
-
-            {/* Volume control */}
-            <div className="volume-control">
-              <span>VOL</span>
-              <input 
-                type="range" 
-                min="0" 
-                max="1" 
-                step="0.01" 
-                value={volume}
-                onChange={handleVolumeChange}
-                className="pixel-slider"
-                style={{ flex: 1 }}
-              />
-            </div>
-
-            {/* Tab buttons */}
-            <div className="tab-buttons">
-              <button 
-                className={`tab-button ${activeTab === 'playlist' ? 'active' : ''}`}
-                onClick={() => setTab('playlist')}
-              >
-                PLAYLIST
-              </button>
-              <button 
-                className={`tab-button ${activeTab === 'lyrics' ? 'active' : ''}`}
-                onClick={() => setTab('lyrics')}
-              >
-                LYRICS
-              </button>
-            </div>
-
-            {/* Playlist panel */}
-            {showPlaylist && (
-              <div className="playlist-panel">
-                {tracks.map(track => (
-                  <div 
-                    key={track.id}
-                    onClick={() => changeTrack(track)}
-                    className={`playlist-item ${currentTrack?.id === track.id ? 'active' : ''}`}
-                  >
-                    {track.title}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Lyrics panel */}
-            {showLyrics && (
-              <div className="lyrics-panel">
-                {currentTrack.lyrics}
-              </div>
-            )}
           </div>
         </div>
       )}

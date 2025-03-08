@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Radio feature allows players to listen to music while playing the game. It includes a Winamp-inspired music player with playback controls, animated equalizer, progress bar, timer, and a lyrics display. The music continues to play even when the player UI is closed.
+The Radio feature allows players to listen to music while playing the game. It includes a horizontal Winamp-inspired music player with 8-bit styling, playback controls on the left, and a playlist/lyrics display on the right. The music continues to play even when the player UI is closed.
 
 ## Implementation Details
 
@@ -12,7 +12,7 @@ The Radio feature allows players to listen to music while playing the game. It i
 src/
 ├── components/
 │   ├── Radio.tsx         # Main Radio component with player UI and controls
-│   ├── Radio.css         # Custom CSS for Winamp-inspired styling
+│   ├── Radio.css         # Custom CSS for 8-bit Winamp styling
 │   └── RadioButton.tsx   # Toggle button for showing/hiding the radio
 ├── data/
 │   └── musicData.ts      # Track data including titles, artists, and lyrics
@@ -40,13 +40,16 @@ public/
    - Auto-advance to next track when current track ends
    - **Music continues playing when UI is closed**
 
-2. **Track Information**
-   - Displays current track title and artist in Winamp-style LCD display
-   - Playlist with clickable entries to change tracks
+2. **Horizontal Layout**
+   - Controls on the left side (playback controls, volume, track info)
+   - Display panel on the right side (playlist or lyrics)
+   - Tabs to switch between playlist and lyrics view
 
-3. **Tabbed Interface**
-   - PLAYLIST tab for track selection
-   - LYRICS tab for viewing song lyrics
+3. **8-Bit Styling**
+   - "Press Start 2P" pixel font throughout the interface
+   - Pixel-perfect buttons and controls
+   - Retro green-on-black LCD-style displays
+   - 8-bit inspired color scheme
 
 4. **Mini Player**
    - When the main UI is closed but music is playing, a mini-player appears
@@ -54,17 +57,16 @@ public/
 
 5. **UI Integration**
    - Radio button positioned next to the instructions
-   - Winamp-inspired design with retro LCD displays
-   - Continues playing when closed (background audio)
-   - Full-width player with plenty of vertical space to avoid cutoff issues
+   - Player appears below the game without affecting the game's display
+   - Doesn't shrink or resize the main game when open
 
 ## Usage
 
 1. Click the "Warehouse Radio" button next to the game instructions to open the player
-2. Use the playback controls to manage music playback (play/pause/stop/next/previous)
+2. Use the playback controls on the left to manage music playback
 3. The equalizer animation indicates when music is playing
 4. Click the progress bar to seek to different parts of the track
-5. Use the PLAYLIST and LYRICS tabs to switch between views
+5. Use the PLAYLIST and LYRICS tabs to switch between views in the right panel
 6. Adjust volume using the slider
 7. Close the player with the X button - music continues playing
 8. Use the mini-player that appears when the main UI is closed to control playback
@@ -75,9 +77,9 @@ public/
 - Music files are located in the `public/game/Music/OE-Radio` directory
 - Track data and lyrics are stored in `musicData.ts` for easy management
 - The audio element is handled separately from the UI to allow background playback
-- The player features a Winamp-inspired UI with custom styling
-- The 'VT323' Google Font is used for authentic LCD-style text display
+- The player uses the "Press Start 2P" Google Font for authentic 8-bit typography
 - The audio element continues playing even when the UI is closed (background audio)
+- The player's layout is designed to be more horizontal than vertical
 
 ## Future Enhancements
 

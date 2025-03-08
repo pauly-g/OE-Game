@@ -1,21 +1,25 @@
-/* Winamp-inspired Radio Styling */
+/* 8-bit Winamp-inspired Radio Styling */
 
 .radio-container {
   background-color: #232323;
   border: 2px solid #353535;
-  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.3);
   max-width: 100%;
   margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
 }
 
 .radio-header {
-  background: linear-gradient(to right, #2e3a48, #375a7f);
+  background: linear-gradient(90deg, #000000, #333366);
   border-bottom: 2px solid #111;
   color: #c7d0d9;
   padding: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
 }
 
 .radio-header-title {
@@ -27,6 +31,19 @@
 .radio-body {
   padding: 12px;
   background-color: #232323;
+  display: flex;
+  flex-direction: row;
+}
+
+.radio-controls {
+  flex: 0 0 300px;
+  padding-right: 12px;
+}
+
+.radio-display {
+  flex: 1;
+  border-left: 2px solid #444;
+  padding-left: 12px;
 }
 
 /* Control buttons */
@@ -41,13 +58,13 @@
 .equalizer {
   display: flex;
   align-items: flex-end;
-  height: 18px;
+  height: 15px;
   gap: 2px;
   margin: 0 10px;
 }
 
 .equalizer-bar {
-  width: 4px;
+  width: 3px;
   background-color: #33ff33;
   height: 5px;
   animation-name: equalize;
@@ -63,22 +80,22 @@
 .equalizer-bar:nth-child(6) { animation-duration: 1.0s; }
 .equalizer-bar:nth-child(7) { animation-duration: 0.7s; }
 .equalizer-bar:nth-child(8) { animation-duration: 1.3s; }
-.equalizer-bar:nth-child(9) { animation-duration: 0.5s; }
-.equalizer-bar:nth-child(10) { animation-duration: 0.9s; }
 
 @keyframes equalize {
   0% { height: 3px; }
-  100% { height: 18px; }
+  100% { height: 15px; }
 }
 
 .radio-button {
   background-color: #333;
-  border: 1px solid #555;
-  border-radius: 2px;
-  color: #ddd;
+  border: 2px solid #555;
+  border-radius: 0;
+  color: #33ff33;
   cursor: pointer;
   padding: 4px 8px;
   transition: all 0.1s;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
 }
 
 .radio-button:active {
@@ -87,40 +104,39 @@
 }
 
 .radio-button-primary {
-  background-color: #585c7f;
-  border: 1px solid #6e72a4;
+  background-color: #444477;
+  border: 2px solid #5555aa;
 }
 
 .track-info-container {
   background-color: #111;
   color: #33ff33;
-  font-family: 'LCD', monospace;
-  padding: 8px 12px;
+  font-family: 'Press Start 2P', monospace;
+  padding: 8px;
   margin: 8px 0;
   border: 1px inset #444;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .track-title {
-  font-size: 16px;
+  font-size: 12px;
   font-weight: bold;
-  margin-bottom: 2px;
+  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .track-artist {
-  font-size: 12px;
+  font-size: 10px;
   color: #aaa;
 }
 
 .time-display {
-  font-family: 'LCD', monospace;
-  font-size: 14px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
   color: #33ff33;
+  margin-top: 8px;
+  text-align: right;
 }
 
 .progress-container {
@@ -133,7 +149,7 @@
 }
 
 .progress-bar {
-  background-color: #375a7f;
+  background-color: #33ff33;
   height: 100%;
   position: absolute;
   top: 0;
@@ -142,8 +158,8 @@
 
 .tab-buttons {
   display: flex;
-  margin: 12px 0 8px 0;
-  gap: 4px;
+  margin: 0 0 8px 0;
+  gap: 2px;
 }
 
 .tab-button {
@@ -153,19 +169,20 @@
   padding: 4px 8px;
   cursor: pointer;
   border-radius: 0;
-  font-size: 12px;
+  font-size: 10px;
+  font-family: 'Press Start 2P', monospace;
 }
 
 .tab-button.active {
-  background-color: #585c7f;
-  color: white;
+  background-color: #444477;
+  color: #33ff33;
 }
 
 .volume-control {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 8px 0;
+  margin: 12px 0;
 }
 
 .pixel-slider {
@@ -182,23 +199,23 @@
   appearance: none;
   width: 12px;
   height: 16px;
-  background-color: #585c7f;
-  border: 1px solid #6e72a4;
+  background-color: #33ff33;
+  border: 1px solid #00bb00;
   cursor: pointer;
 }
 
 .pixel-slider::-moz-range-thumb {
   width: 12px;
   height: 16px;
-  background-color: #585c7f;
-  border: 1px solid #6e72a4;
+  background-color: #33ff33;
+  border: 1px solid #00bb00;
   cursor: pointer;
 }
 
 .playlist-panel {
   background-color: #111;
   border: 1px inset #444;
-  max-height: 150px;
+  height: 200px;
   overflow-y: auto;
   margin-top: 8px;
 }
@@ -207,7 +224,9 @@
   padding: 6px 8px;
   cursor: pointer;
   border-bottom: 1px solid #333;
-  font-size: 13px;
+  font-size: 10px;
+  font-family: 'Press Start 2P', monospace;
+  color: #ddd;
 }
 
 .playlist-item:hover {
@@ -215,20 +234,22 @@
 }
 
 .playlist-item.active {
-  background-color: #375a7f;
-  color: white;
+  background-color: #444477;
+  color: #33ff33;
 }
 
 .lyrics-panel {
   background-color: #111;
   border: 1px inset #444;
-  max-height: 150px;
+  height: 200px;
   overflow-y: auto;
   margin-top: 8px;
   padding: 10px;
   white-space: pre-line;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 10px;
+  line-height: 1.6;
+  font-family: 'Press Start 2P', monospace;
+  color: #ddd;
 }
 
 .mini-player {
@@ -243,6 +264,8 @@
   gap: 8px;
   z-index: 50;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
 }
 
 .mini-track-info {
@@ -250,6 +273,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #33ff33;
 }
 
 /* Hidden but still working audio player */

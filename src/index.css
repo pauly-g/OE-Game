@@ -38,6 +38,7 @@ body {
 
 .font-pixel {
   font-family: 'Press Start 2P', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 1px;
 }
 
 .font-lcd {
@@ -58,8 +59,12 @@ body {
   object-fit: contain;
 }
 
-/* This style ensures that LCD-like fonts will be used in the Radio component */
+/* This style ensures that 8-bit fonts will be used in the Radio component */
 .radio-container .time-display,
-.radio-container .track-title {
-  font-family: 'VT323', monospace;
+.radio-container .track-title,
+.radio-container .track-artist,
+.radio-container .playlist-item,
+.radio-container .lyrics-panel,
+.mini-player .mini-track-info {
+  font-family: 'Press Start 2P', monospace;
 }
