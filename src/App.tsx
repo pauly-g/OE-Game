@@ -21,8 +21,8 @@
  * - Fixed debugger variable name to avoid using reserved keyword
  * - Added Radio component for music playback
  * - Added radio button wiggle and unlock notifications
- * - Added auto-play functionality to play a random warehouse song when the game starts
- * - Added code to stop the background music when playing unlocked songs
+ * - Auto-play warehouse music when game starts
+ * - Improved audio management to prevent overlapping playback
  */
 import React, { useEffect, useState, useRef } from 'react';
 import Phaser from 'phaser';
@@ -48,8 +48,6 @@ function App() {
     artist: ''
   });
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
-  const [bgMusicPlaying, setBgMusicPlaying] = useState(false);
-  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
 
   // Reset stations on page load
   useEffect(() => {
@@ -69,7 +67,7 @@ function App() {
     };
   }, []);
 
-  // Enable debug mode
+  // Enable debug mode (but don't show in UI)
   useEffect(() => {
     gameDebugger.enable();
     
@@ -85,6 +83,29 @@ function App() {
       gameDebugger.disable();
     };
   }, [showDebug]);
+
+  // Auto-play a random warehouse song when the game starts
+  useEffect(() => {
+    // Wait for radioRef to be available
+    const timer = setTimeout(() => {
+      if (radioRef.current) {
+        // Find all warehouse songs
+        const warehouseSongs = tracks.filter(track => track.stationType === 'warehouse');
+        if (warehouseSongs.length > 0) {
+          // Select a random warehouse song
+          const randomIndex = Math.floor(Math.random() * warehouseSongs.length);
+          const songToPlay = warehouseSongs[randomIndex];
+          
+          console.log(`[App] Auto-playing warehouse song: ${songToPlay.title}`);
+          
+          // Play the track using the Radio component
+          radioRef.current.playTrack(songToPlay.id);
+        }
+      }
+    }, 1500); // Give more time for the component to initialize
+    
+    return () => clearTimeout(timer);
+  }, []); 
 
   // Listen for station unlock events
   useEffect(() => {
@@ -127,53 +148,6 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [radioWiggle]);
-
-  // Auto-play a random warehouse song when the game starts
-  useEffect(() => {
-    const playRandomWarehouseSong = () => {
-      // Find all warehouse songs
-      const warehouseSongs = tracks.filter(track => track.stationType === 'warehouse');
-      if (warehouseSongs.length > 0) {
-        // Select a random warehouse song
-        const randomIndex = Math.floor(Math.random() * warehouseSongs.length);
-        const songToPlay = warehouseSongs[randomIndex];
-        
-        console.log(`[App] Auto-playing warehouse song: ${songToPlay.title}`);
-        
-        // Create audio element if it doesn't exist
-        if (!bgMusicRef.current) {
-          bgMusicRef.current = new Audio(songToPlay.src);
-          bgMusicRef.current.volume = 0.3; // Lower volume for background music
-          bgMusicRef.current.loop = true;
-          
-          // Start playback after a short delay to ensure DOM is fully loaded
-          setTimeout(() => {
-            if (bgMusicRef.current) {
-              bgMusicRef.current.play()
-                .then(() => {
-                  console.log('[App] Background music started successfully');
-                  setBgMusicPlaying(true);
-                })
-                .catch(error => {
-                  console.error('[App] Error playing background music:', error);
-                });
-            }
-          }, 1000);
-        }
-      }
-    };
-    
-    // Start background music
-    playRandomWarehouseSong();
-    
-    // Cleanup on unmount
-    return () => {
-      if (bgMusicRef.current) {
-        bgMusicRef.current.pause();
-        bgMusicRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     // Prevent double initialization
@@ -221,6 +195,7 @@ function App() {
     }
   }, []); // Remove game from dependencies
 
+  // Keep debug functionality but don't expose in UI
   const toggleDebug = () => {
     setShowDebug(!showDebug);
     if (!showDebug) {
@@ -261,13 +236,6 @@ function App() {
       const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType);
       console.log(`[App] Is track ${trackToPlay.title} with type ${trackToPlay.stationType} unlocked: ${isUnlocked}`);
       
-      // Stop background music when playing a notification song
-      if (bgMusicRef.current && bgMusicPlaying) {
-        console.log('[App] Stopping background music for notification song');
-        bgMusicRef.current.pause();
-        setBgMusicPlaying(false);
-      }
-      
       // Call the direct function on the Radio component if it's available
       if (radioRef.current) {
         console.log(`[App] Calling direct playTrack function on Radio component`);
@@ -289,54 +257,17 @@ function App() {
       <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
       
       {/* Game container at full size regardless of radio player status */}
-      <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-        {!game && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        )}
+      <div id="game-container" className="relative rounded-lg overflow-hidden mb-4 w-full max-w-6xl h-[75vh] flex justify-center items-center bg-black">
+        {!gameStarted && <p className="text-white text-xl">Loading game...</p>}
       </div>
-
-      <div className="mt-4 flex gap-2">
+      
+      {/* Simplified Toolbar - just instructions and radio button */}
+      <div className="flex gap-4 mb-4">
         <button
           onClick={() => setShowInstructions(!showInstructions)}
           className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
         >
           {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
-        </button>
-        
-        <button
-          onClick={toggleDebug}
-          className="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg transition-colors"
-        >
-          {showDebug ? 'Hide Debug' : 'Show Debug'}
-        </button>
-        
-        {showDebug && (
-          <button
-            onClick={downloadLogs}
-            className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
-          >
-            Download Logs
-          </button>
-        )}
-        
-        {/* Background music toggle button */}
-        <button
-          onClick={() => {
-            if (bgMusicRef.current) {
-              if (bgMusicPlaying) {
-                bgMusicRef.current.pause();
-                setBgMusicPlaying(false);
-              } else {
-                bgMusicRef.current.play().catch(e => console.error(e));
-                setBgMusicPlaying(true);
-              }
-            }
-          }}
-          className={`px-4 py-2 ${bgMusicPlaying ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} rounded-lg transition-colors`}
-        >
-          {bgMusicPlaying ? 'Pause BG Music' : 'Play BG Music'}
         </button>
         
         <RadioButton onClick={toggleRadio} showRadio={showRadio} wiggle={radioWiggle} />
@@ -391,15 +322,21 @@ function App() {
           {errorLogs.length === 0 ? (
             <p className="text-green-400">No errors detected 👍</p>
           ) : (
-            <ul className="list-none space-y-2 text-red-400">
+            <ul className="list-disc list-inside space-y-1">
               {errorLogs.map((log, index) => (
-                <li key={index} className="border-b border-gray-700 pb-1">
-                  <span className="font-mono">[{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'unknown'}]</span> {log.message}
+                <li key={index} className="text-red-400">
+                  {log.timestamp?.toLocaleTimeString()}: {log.message}
+                  {log.data && <pre className="ml-4 text-xs">{JSON.stringify(log.data, null, 2)}</pre>}
                 </li>
               ))}
             </ul>
           )}
-          <p className="mt-4 text-xs text-gray-400">Press Ctrl+D to download all logs at any time</p>
+          <button
+            onClick={downloadLogs}
+            className="mt-4 px-3 py-1 bg-purple-700 hover:bg-purple-800 rounded"
+          >
+            Download Full Logs
+          </button>
         </div>
       )}
     </div>
