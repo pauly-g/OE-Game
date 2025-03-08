@@ -188,17 +188,17 @@ function App() {
   };
 
   const handleListenNow = () => {
-    // Open the radio if it's not already open
-    if (!showRadio) {
-      setShowRadio(true);
-    }
-    
     // Find the track to play
     const trackToPlay = tracks.find(track => track.title === notification.title);
     if (trackToPlay) {
+      console.log(`[App] Auto-playing track: ${trackToPlay.title} without opening radio`);
+      
       // Dispatch an event for the Radio component to pick up
       const playEvent = new CustomEvent('playTrack', { 
-        detail: { trackId: trackToPlay.id }
+        detail: { 
+          trackId: trackToPlay.id,
+          playWithoutOpening: true // Flag to indicate we want to play without opening the UI
+        }
       });
       window.dispatchEvent(playEvent);
     }

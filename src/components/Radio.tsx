@@ -462,8 +462,8 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     const handlePlayTrack = (event: Event) => {
       const customEvent = event as CustomEvent;
       if (customEvent.detail && customEvent.detail.trackId) {
-        const { trackId } = customEvent.detail;
-        console.log(`[Radio] Received request to play track: ${trackId}`);
+        const { trackId, playWithoutOpening } = customEvent.detail;
+        console.log(`[Radio] Received request to play track: ${trackId}${playWithoutOpening ? ' without opening UI' : ''}`);
         
         // Find the track in our list
         const trackToPlay = tracks.find(track => track.id === trackId);
@@ -471,11 +471,39 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
           // Check if this track is unlocked
           if (stationTracker.isStationUnlocked(trackToPlay.stationType)) {
             console.log(`[Radio] Playing track: ${trackToPlay.title}`);
-            changeTrack(trackToPlay);
             
-            // Start playback if not already playing
-            if (!isPlaying) {
-              togglePlay();
+            // Set the track
+            setCurrentTrack(trackToPlay);
+            
+            // Ensure audio is ready and start playback immediately
+            if (audioRef.current) {
+              audioRef.current.src = trackToPlay.src;
+              audioRef.current.load();
+              globalAudioState.currentTrackId = trackToPlay.id;
+              
+              // Force play after a brief moment to ensure audio is loaded
+              setTimeout(() => {
+                if (audioRef.current) {
+                  const playPromise = audioRef.current.play();
+                  if (playPromise !== undefined) {
+                    playPromise
+                      .then(() => {
+                        console.log(`[Radio] Successfully started playback of ${trackToPlay.title}`);
+                        setIsPlaying(true);
+                        globalAudioState.isPlaying = true;
+                        
+                        // If we're supposed to show the UI (not playWithoutOpening), and it's not already open
+                        if (!playWithoutOpening && !isOpen) {
+                          // Could potentially trigger UI opening here if needed, but we don't for now
+                          console.log('[Radio] Keeping UI closed as requested');
+                        }
+                      })
+                      .catch(error => {
+                        console.error(`[Radio] Error playing ${trackToPlay.title}:`, error);
+                      });
+                  }
+                }
+              }, 100);
             }
           } else {
             console.log(`[Radio] Track ${trackToPlay.title} is not unlocked yet.`);
