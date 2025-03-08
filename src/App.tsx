@@ -21,8 +21,10 @@
  * - Fixed debugger variable name to avoid using reserved keyword
  * - Added Radio component for music playback
  * - Added radio button wiggle and unlock notifications
- * - Auto-play warehouse music when game starts
- * - Improved audio management to prevent overlapping playback
+ * - Added auto-play functionality to play a random background song when the game starts
+ * - Added code to stop the background music when playing unlocked songs
+ * - Removed debug button and BG music button, using Radio for all music playback
+ * - Updated background music to use Chilled, Frantic, and Relaxed songs
  */
 import React, { useEffect, useState, useRef } from 'react';
 import Phaser from 'phaser';
@@ -67,7 +69,7 @@ function App() {
     };
   }, []);
 
-  // Enable debug mode (but don't show in UI)
+  // Enable debug mode
   useEffect(() => {
     gameDebugger.enable();
     
@@ -83,29 +85,6 @@ function App() {
       gameDebugger.disable();
     };
   }, [showDebug]);
-
-  // Auto-play a random warehouse song when the game starts
-  useEffect(() => {
-    // Wait for radioRef to be available
-    const timer = setTimeout(() => {
-      if (radioRef.current) {
-        // Find all warehouse songs
-        const warehouseSongs = tracks.filter(track => track.stationType === 'warehouse');
-        if (warehouseSongs.length > 0) {
-          // Select a random warehouse song
-          const randomIndex = Math.floor(Math.random() * warehouseSongs.length);
-          const songToPlay = warehouseSongs[randomIndex];
-          
-          console.log(`[App] Auto-playing warehouse song: ${songToPlay.title}`);
-          
-          // Play the track using the Radio component
-          radioRef.current.playTrack(songToPlay.id);
-        }
-      }
-    }, 1500); // Give more time for the component to initialize
-    
-    return () => clearTimeout(timer);
-  }, []); 
 
   // Listen for station unlock events
   useEffect(() => {
@@ -148,6 +127,36 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [radioWiggle]);
+
+  // Auto-play a random background song when the game starts
+  useEffect(() => {
+    // Find all background songs
+    const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
+    if (backgroundSongs.length > 0) {
+      // Select a random background song
+      const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
+      const songToPlay = backgroundSongs[randomIndex];
+      
+      console.log(`[App] Auto-playing background song: ${songToPlay.title}`);
+      
+      // Use the radio component to play the background music with a longer delay to ensure it's ready
+      setTimeout(() => {
+        if (radioRef.current) {
+          try {
+            console.log('[App] Attempting to play background music:', songToPlay.title);
+            radioRef.current.playTrack(songToPlay.id);
+            console.log('[App] Background music started through radio component');
+          } catch (error) {
+            console.error('[App] Error playing background music:', error);
+          }
+        } else {
+          console.warn('[App] Radio reference not available for autoplay');
+        }
+      }, 2000); // Increase delay to 2 seconds to ensure component is fully mounted
+    } else {
+      console.warn('[App] No background songs found for autoplay');
+    }
+  }, []);
 
   useEffect(() => {
     // Prevent double initialization
@@ -194,14 +203,6 @@ function App() {
       console.error('Failed to initialize game:', error);
     }
   }, []); // Remove game from dependencies
-
-  // Keep debug functionality but don't expose in UI
-  const toggleDebug = () => {
-    setShowDebug(!showDebug);
-    if (!showDebug) {
-      setErrorLogs(gameDebugger.getLogs().filter(log => log.level === 'ERROR'));
-    }
-  };
 
   const downloadLogs = () => {
     gameDebugger.downloadLogs();
@@ -257,18 +258,30 @@ function App() {
       <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
       
       {/* Game container at full size regardless of radio player status */}
-      <div id="game-container" className="relative rounded-lg overflow-hidden mb-4 w-full max-w-6xl h-[75vh] flex justify-center items-center bg-black">
-        {!gameStarted && <p className="text-white text-xl">Loading game...</p>}
+      <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+        {!game && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        )}
       </div>
-      
-      {/* Simplified Toolbar - just instructions and radio button */}
-      <div className="flex gap-4 mb-4">
+
+      <div className="mt-4 flex gap-2">
         <button
           onClick={() => setShowInstructions(!showInstructions)}
           className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
         >
           {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
         </button>
+        
+        {showDebug && (
+          <button
+            onClick={downloadLogs}
+            className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
+          >
+            Download Logs
+          </button>
+        )}
         
         <RadioButton onClick={toggleRadio} showRadio={showRadio} wiggle={radioWiggle} />
         
@@ -322,21 +335,15 @@ function App() {
           {errorLogs.length === 0 ? (
             <p className="text-green-400">No errors detected 👍</p>
           ) : (
-            <ul className="list-disc list-inside space-y-1">
+            <ul className="list-none space-y-2 text-red-400">
               {errorLogs.map((log, index) => (
-                <li key={index} className="text-red-400">
-                  {log.timestamp?.toLocaleTimeString()}: {log.message}
-                  {log.data && <pre className="ml-4 text-xs">{JSON.stringify(log.data, null, 2)}</pre>}
+                <li key={index} className="border-b border-gray-700 pb-1">
+                  <span className="font-mono">[{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'unknown'}]</span> {log.message}
                 </li>
               ))}
             </ul>
           )}
-          <button
-            onClick={downloadLogs}
-            className="mt-4 px-3 py-1 bg-purple-700 hover:bg-purple-800 rounded"
-          >
-            Download Full Logs
-          </button>
+          <p className="mt-4 text-xs text-gray-400">Press Ctrl+D to download all logs at any time</p>
         </div>
       )}
     </div>

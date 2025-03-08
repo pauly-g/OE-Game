@@ -103,17 +103,10 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
               .catch(error => {
                 // This is normal - browsers require user interaction before playing audio
                 console.log('[Radio] Audio test expected error (browser requires user interaction):', error);
-                // Restore the original volume
-                if (audioRef.current) {
-                  audioRef.current.volume = originalVolume;
-                }
               });
           }
         } catch (error) {
           console.error('[Radio] Error testing audio:', error);
-          if (audioRef.current) {
-            audioRef.current.volume = originalVolume;
-          }
         }
       }
     };
@@ -126,10 +119,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
       console.log('[Radio] Track ended, finding next track');
       
       // Get only unlocked tracks
-      const unlockedTracks = tracks.filter(t => {
-        const isUnlocked = stationTracker.isStationUnlocked(t.stationType) && !t.locked;
-        return isUnlocked;
-      });
+      const unlockedTracks = tracks.filter(t => stationTracker.isStationUnlocked(t.stationType));
       
       if (unlockedTracks.length === 0) {
         console.log('[Radio] No unlocked tracks available');
@@ -191,11 +181,11 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
     const stationStatus = stationTracker.logUnlockedStations();
     console.log('[Radio] Station status during track update:', stationStatus);
     
-    // Get only unlocked tracks - with detailed logging
-    console.log('[Radio] Checking available tracks:');
+    // Get only unlocked tracks - with special debug logging for 'quantity' station
+    console.log('[Radio] Checking if quantity station is unlocked:', stationStatus.quantity);
     
     const unlockedTracks = tracks.filter(t => {
-      const isUnlocked = stationTracker.isStationUnlocked(t.stationType) && !t.locked;
+      const isUnlocked = stationTracker.isStationUnlocked(t.stationType);
       console.log(`[Radio] Track ${t.title} with type ${t.stationType} is unlocked: ${isUnlocked}`);
       return isUnlocked;
     });
@@ -206,7 +196,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
       const track = tracks.find(t => t.id === globalAudioState.currentTrackId);
       if (track) {
         // Double check that the track is unlocked with explicit logging
-        const isUnlocked = stationTracker.isStationUnlocked(track.stationType) && !track.locked;
+        const isUnlocked = stationTracker.isStationUnlocked(track.stationType);
         console.log(`[Radio] Current track ${track.title} with type ${track.stationType} is unlocked: ${isUnlocked}`);
         
         if (isUnlocked) {
@@ -307,15 +297,10 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
   // Handle track change
   const changeTrack = (track: Track) => {
     // Check if this track's station is unlocked
-    if (!stationTracker.isStationUnlocked(track.stationType) || track.locked) {
+    if (!stationTracker.isStationUnlocked(track.stationType)) {
       // Track is locked, don't allow playback
       console.log(`Cannot play locked track: ${track.title}`);
       return;
-    }
-    
-    // Stop current playback
-    if (audioRef.current && isPlaying) {
-      audioRef.current.pause();
     }
     
     setCurrentTrack(track);
@@ -325,7 +310,6 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
     
     if (audioRef.current) {
       audioRef.current.src = track.src;
-      audioRef.current.volume = 1.0; // Full volume
       audioRef.current.load();
       globalAudioState.currentTrackId = track.id;
       
@@ -552,7 +536,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
           
           if (trackToPlay) {
             // Check if this track is unlocked
-            const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType) && !trackToPlay.locked;
+            const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType);
             console.log(`[Radio] Is track "${trackToPlay.title}" unlocked?`, isUnlocked ? 'YES' : 'NO');
             
             if (isUnlocked) {
@@ -665,7 +649,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
       
       if (trackToPlay) {
         // Check if this track is unlocked
-        const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType) && !trackToPlay.locked;
+        const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType);
         console.log(`[Radio Ref] Is track "${trackToPlay.title}" unlocked?`, isUnlocked ? 'YES' : 'NO');
         console.log(`[Radio Ref] Full station status:`, stationTracker.logUnlockedStations());
         
@@ -783,139 +767,167 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
     }
   }));
 
-  // Render the playlist with locked tracks
-  const renderPlaylist = () => {
-    return (
-      <div className="playlist-section">
-        <h3 className="text-lg font-bold mb-2">Playlist</h3>
-        <div className="playlist">
-          {tracks.map(track => {
-            // Check if this track's station is unlocked
-            const isLocked = !stationTracker.isStationUnlocked(track.stationType) || track.locked;
-            const isActive = currentTrack?.id === track.id;
-            
-            return (
-              <div
-                key={track.id}
-                className={`playlist-item p-2 ${isActive ? 'bg-blue-900' : 'hover:bg-gray-700'} cursor-pointer rounded mb-1 transition-colors ${isLocked ? 'opacity-50' : ''}`}
-                onClick={() => !isLocked && changeTrack(track)}
-              >
-                <div className="flex items-center">
-                  {isActive && isPlaying ? (
-                    <div className="w-6 h-6 mr-2 flex-shrink-0">
-                      {renderEqualizer()}
-                    </div>
-                  ) : (
-                    <div className="w-6 h-6 mr-2 flex items-center justify-center text-blue-400 flex-shrink-0">
-                      {isLocked ? <span className="lock-icon">🔒</span> : <span className="music-icon">🎵</span>}
-                    </div>
-                  )}
-                  <div className="overflow-hidden">
-                    <div className="text-sm font-semibold truncate">
-                      {isLocked ? "Fix more orders to unlock this song!" : track.title}
-                    </div>
-                    <div className="text-xs text-gray-400 truncate">{track.artist}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className={`radio-player ${isOpen ? 'open' : ''}`}>
       <div className="radio-content">
         {/* Main player UI - only shown when isOpen is true */}
-        {isOpen && (
-          <div className="player">
+        {isOpen && currentTrack && (
+          <div className="radio-container">
             <div className="radio-header">
-              <h2 className="station-name">OE-Radio</h2>
-              <button className="close-button" onClick={onClose}>×</button>
-            </div>
-            
-            <div className="now-playing">
-              <div className="track-info">
-                <h3 className="track-title">{currentTrack?.title || 'No track selected'}</h3>
-                <p className="track-artist">{currentTrack?.artist || 'Unknown Artist'}</p>
+              <div className="radio-header-title">
+                <span>🎵</span>
+                <span>WAREHOUSE RADIO</span>
+                {isPlaying && renderEqualizer()}
               </div>
-              
-              <div className="player-controls">
-                <button 
-                  className="control-button"
-                  onClick={togglePlay}
+              <button 
+                onClick={onClose}
+                className="radio-button"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="radio-body">
+              {/* Left side: Controls - made more compact */}
+              <div className="radio-controls">
+                {/* Track info with more compact layout */}
+                <div className="track-info-container">
+                  <div className="track-title">{currentTrack.title}</div>
+                  <div className="track-artist">{currentTrack.artist}</div>
+                  <div className="time-display">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div 
+                  className="progress-container"
+                  onClick={handleProgressClick}
                 >
-                  {isPlaying ? '❚❚' : '►'}
-                </button>
+                  <div 
+                    className="progress-bar"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+
+                {/* Playback controls in a more condensed layout */}
+                <div className="control-panel">
+                  <button 
+                    onClick={prevTrack}
+                    className="radio-button"
+                    disabled={tracks.findIndex(t => t.id === currentTrack.id) === 0}
+                  >
+                    ⏮
+                  </button>
+                  <button 
+                    onClick={togglePlay}
+                    className="radio-button radio-button-primary"
+                  >
+                    {isPlaying ? '⏸' : '▶'}
+                  </button>
+                  <button 
+                    onClick={stopPlayback}
+                    className="radio-button"
+                  >
+                    ⏹
+                  </button>
+                  <button 
+                    onClick={nextTrack}
+                    className="radio-button"
+                    disabled={tracks.findIndex(t => t.id === currentTrack.id) === tracks.filter(t => stationTracker.isStationUnlocked(t.stationType)).length - 1}
+                  >
+                    ⏭
+                  </button>
+                </div>
+
                 {/* Volume control */}
                 <div className="volume-control">
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
+                  <span>VOL</span>
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="1" 
+                    step="0.01" 
                     value={volume}
-                    onChange={(e) => {
-                      const newVolume = parseFloat(e.target.value);
-                      setVolume(newVolume);
-                      if (audioRef.current) {
-                        audioRef.current.volume = newVolume;
-                      }
-                    }}
-                    className="volume-slider"
+                    onChange={handleVolumeChange}
+                    className="pixel-slider"
                   />
                 </div>
               </div>
-              
-              <div className="progress-container" onClick={(e) => {
-                if (!audioRef.current || !duration) return;
-                
-                const rect = e.currentTarget.getBoundingClientRect();
-                const pos = (e.clientX - rect.left) / rect.width;
-                const newTime = duration * pos;
-                
-                audioRef.current.currentTime = newTime;
-                setCurrentTime(newTime);
-                setProgress(pos * 100);
-              }}>
-                <div className="progress-bar" style={{ width: `${progress}%` }}></div>
-                <div className="time-display">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{formatTime(duration)}</span>
+
+              {/* Right side: Display - playlist/lyrics */}
+              <div className="radio-display">
+                {/* Tab buttons */}
+                <div className="tab-buttons">
+                  <button 
+                    className={`tab-button ${activeTab === 'playlist' ? 'active' : ''}`}
+                    onClick={() => setTab('playlist')}
+                  >
+                    Playlist
+                  </button>
+                  <button 
+                    className={`tab-button ${activeTab === 'lyrics' ? 'active' : ''}`}
+                    onClick={() => setTab('lyrics')}
+                  >
+                    Lyrics
+                  </button>
                 </div>
-              </div>
-            </div>
-            
-            <div className="radio-display">
-              <div className="tabs">
-                <button 
-                  className={`tab-button ${activeTab === 'playlist' ? 'active' : ''}`}
-                  onClick={() => setTab('playlist')}
-                >
-                  Playlist
-                </button>
-                <button 
-                  className={`tab-button ${activeTab === 'lyrics' ? 'active' : ''}`}
-                  onClick={() => setTab('lyrics')}
-                >
-                  Lyrics
-                </button>
-              </div>
-              
-              <div className="tab-content">
-                {/* Playlist panel */}
-                {activeTab === 'playlist' && renderPlaylist()}
+                
+                {/* Playlist */}
+                {showPlaylist && (
+                  <div className="playlist-panel">
+                    {tracks.map(track => {
+                      // Only use stationTracker to determine if a song is locked, ignore track.locked property
+                      const isLocked = !stationTracker.isStationUnlocked(track.stationType);
+                      const isActive = currentTrack?.id === track.id;
+                      
+                      return (
+                        <div 
+                          key={track.id}
+                          className={`playlist-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+                          onClick={() => !isLocked && changeTrack(track)}
+                        >
+                          {isLocked && <span className="lock-icon">🔒 </span>}
+                          {isLocked ? "Fix more orders to unlock this song!" : track.title}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 
                 {/* Lyrics panel */}
-                {activeTab === 'lyrics' && currentTrack && (
+                {activeTab === 'lyrics' && (
                   <div className="lyrics-panel">
-                    <pre className="lyrics-text">{currentTrack.lyrics || 'No lyrics available.'}</pre>
+                    {currentTrack?.lyrics.split('\n').map((line, index) => (
+                      <p key={index}>{line}</p>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Mini player when main UI is closed but music is playing */}
+        {!isOpen && isPlaying && currentTrack && (
+          <div className="mini-player">
+            <button 
+              onClick={togglePlay}
+              className="radio-button radio-button-primary"
+              title="Pause"
+            >
+              ⏸️
+            </button>
+            <div className="mini-track-info">
+              {currentTrack.title} - {currentTrack.artist}
+            </div>
+            <button
+              onClick={() => onClose()}
+              className="radio-button"
+              title="Open Player"
+            >
+              🔽
+            </button>
           </div>
         )}
       </div>

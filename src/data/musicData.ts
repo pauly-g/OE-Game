@@ -10,28 +10,28 @@ export interface Track {
 
 // Using the actual music files from public/game/Music/OE-Radio
 export const tracks: Track[] = [
-  // Warehouse station songs - available from the beginning
+  // Background music songs - available from the beginning
   {
-    id: 'warehouse1',
-    title: 'The Warehouse',
+    id: 'bg1',
+    title: 'Chilled',
     artist: 'The Order Editors',
-    src: 'game/Music/BG-Music/The Warehouse.mp3',
+    src: 'game/Music/BG-Music/Chilled.mp3',
     stationType: 'warehouse', // Always unlocked from the start
     lyrics: 'www.orderediting.com'
   },
   {
-    id: 'warehouse2',
-    title: 'The Warehouse (1)',
+    id: 'bg2',
+    title: 'Frantic',
     artist: 'The Order Editors',
-    src: 'game/Music/BG-Music/The Warehouse (1).mp3',
+    src: 'game/Music/BG-Music/Frantic.mp3',
     stationType: 'warehouse', // Always unlocked from the start
     lyrics: 'www.orderediting.com'
   },
   {
-    id: 'warehouse3',
-    title: 'The Warehouse (2)',
+    id: 'bg3',
+    title: 'Relaxed',
     artist: 'The Order Editors',
-    src: 'game/Music/BG-Music/The Warehouse (2).mp3',
+    src: 'game/Music/BG-Music/Relaxed.mp3',
     stationType: 'warehouse', // Always unlocked from the start
     lyrics: 'www.orderediting.com'
   },
@@ -42,7 +42,6 @@ export const tracks: Track[] = [
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/A Dress Issue.mp3',
     stationType: 'first_song', // Changed from 'address' to 'first_song' to be unlocked after 2 edits
-    locked: true,
     lyrics: `Lorem ipsum dolor sit amet
 Consectetur adipiscing elit
 Sed do eiusmod tempor incididunt
@@ -59,7 +58,6 @@ Consequat duis aute irure dolor`
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/Quantity Blues.mp3',
     stationType: 'quantity', // Matches the station type in the game
-    locked: true,
     lyrics: `Sed ut perspiciatis unde omnis
 Iste natus error sit voluptatem
 Accusantium doloremque laudantium
