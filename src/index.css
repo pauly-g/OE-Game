@@ -11,6 +11,7 @@
  * - Adjusted color scheme to blue-themed neon glow
  */
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -39,6 +40,10 @@ body {
   font-family: 'Press Start 2P', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+.font-lcd {
+  font-family: 'VT323', monospace;
+}
+
 #game-container {
   display: flex;
   align-items: center;
@@ -51,4 +56,10 @@ body {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* This style ensures that LCD-like fonts will be used in the Radio component */
+.radio-container .time-display,
+.radio-container .track-title {
+  font-family: 'VT323', monospace;
 }
