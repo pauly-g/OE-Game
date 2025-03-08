@@ -38,48 +38,57 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'lyrics' | 'playlist'>('playlist');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressTimerRef = useRef<number | null>(null);
+  const trackChangeListenerRef = useRef<(() => void) | null>(null);
 
   // Initialize global audio element if it doesn't exist
   useEffect(() => {
     if (!globalAudio) {
       globalAudio = new Audio();
       globalAudio.volume = globalAudioState.volume;
-      
-      // Add event listeners to global audio
-      globalAudio.addEventListener('ended', () => {
-        // Find next track
-        if (globalAudioState.currentTrackId) {
-          const currentIndex = tracks.findIndex(t => t.id === globalAudioState.currentTrackId);
-          const nextIndex = (currentIndex + 1) % tracks.length;
-          globalAudioState.currentTrackId = tracks[nextIndex].id;
-          globalAudio!.src = tracks[nextIndex].src;
-          globalAudio!.play().catch(console.error);
-        }
-      });
     }
     
     // Set up the audio reference
     audioRef.current = globalAudio;
     
-    // Synchronize component state with global state
-    if (globalAudioState.currentTrackId) {
-      const track = tracks.find(t => t.id === globalAudioState.currentTrackId);
-      if (track && track !== currentTrack) {
-        setCurrentTrack(track);
+    // Set up current track based on global state
+    updateCurrentTrackFromGlobal();
+    
+    // Set up track change listener
+    const handleTrackEnded = () => {
+      // Find next track
+      if (globalAudioState.currentTrackId) {
+        const currentIndex = tracks.findIndex(t => t.id === globalAudioState.currentTrackId);
+        const nextIndex = (currentIndex + 1) % tracks.length;
+        const nextTrack = tracks[nextIndex];
+        
+        // Update global state
+        globalAudioState.currentTrackId = nextTrack.id;
+        if (globalAudio) {
+          globalAudio.src = nextTrack.src;
+          globalAudio.play().catch(console.error);
+          globalAudioState.isPlaying = true;
+        }
+        
+        // Update component state
+        setCurrentTrack(nextTrack);
+        setIsPlaying(true);
+        setProgress(0);
+        setCurrentTime(0);
       }
-    } else if (tracks.length > 0 && !currentTrack) {
-      // Set default track if none is playing
-      setCurrentTrack(tracks[0]);
-      globalAudioState.currentTrackId = tracks[0].id;
-      if (globalAudio) {
-        globalAudio.src = tracks[0].src;
-      }
+    };
+    
+    // Add event listener for track ended
+    if (globalAudio) {
+      globalAudio.addEventListener('ended', handleTrackEnded);
+      trackChangeListenerRef.current = handleTrackEnded;
     }
     
-    setIsPlaying(globalAudioState.isPlaying);
-    setVolume(globalAudioState.volume);
-    
+    // Clean up on unmount
     return () => {
+      if (globalAudio && trackChangeListenerRef.current) {
+        globalAudio.removeEventListener('ended', trackChangeListenerRef.current);
+      }
+      
       // Save current state when component unmounts
       if (currentTrack) {
         globalAudioState.currentTrackId = currentTrack.id;
@@ -91,6 +100,73 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
       }
     };
   }, []);
+  
+  // Helper function to update component state from global state
+  const updateCurrentTrackFromGlobal = () => {
+    if (globalAudioState.currentTrackId) {
+      const track = tracks.find(t => t.id === globalAudioState.currentTrackId);
+      if (track) {
+        setCurrentTrack(track);
+      }
+    } else if (tracks.length > 0) {
+      // Set default track if none is playing
+      setCurrentTrack(tracks[0]);
+      globalAudioState.currentTrackId = tracks[0].id;
+      if (globalAudio) {
+        globalAudio.src = tracks[0].src;
+        globalAudio.currentTime = globalAudioState.currentTime;
+      }
+    }
+    
+    // Synchronize other state
+    setIsPlaying(globalAudioState.isPlaying);
+    setVolume(globalAudioState.volume);
+    if (globalAudio) {
+      setDuration(globalAudio.duration || 0);
+      setCurrentTime(globalAudio.currentTime);
+      
+      // Add metadata loaded event to update duration
+      const handleMetadataLoaded = () => {
+        setDuration(globalAudio!.duration || 0);
+      };
+      
+      globalAudio.addEventListener('loadedmetadata', handleMetadataLoaded);
+      
+      // Clean up
+      return () => {
+        globalAudio?.removeEventListener('loadedmetadata', handleMetadataLoaded);
+      };
+    }
+  };
+
+  // Poll for updates to ensure UI stays in sync with audio
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      if (globalAudio && globalAudioState.currentTrackId) {
+        // Check if track changed externally
+        const currentTrackId = currentTrack?.id || null;
+        if (globalAudioState.currentTrackId !== currentTrackId) {
+          const newTrack = tracks.find(t => t.id === globalAudioState.currentTrackId);
+          if (newTrack) {
+            setCurrentTrack(newTrack);
+          }
+        }
+        
+        // Update playing state
+        setIsPlaying(globalAudioState.isPlaying);
+        
+        // Update time and progress if playing
+        if (globalAudioState.isPlaying) {
+          setCurrentTime(globalAudio.currentTime);
+          if (globalAudio.duration) {
+            setProgress((globalAudio.currentTime / globalAudio.duration) * 100);
+          }
+        }
+      }
+    }, 500); // Poll every 500ms
+    
+    return () => clearInterval(syncInterval);
+  }, [currentTrack]);
 
   // Handle play/pause
   const togglePlay = () => {
@@ -218,15 +294,6 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     const seconds = Math.floor(timeInSeconds % 60);
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
-
-  // Update audio source when currentTrack changes
-  useEffect(() => {
-    if (audioRef.current && currentTrack) {
-      audioRef.current.src = currentTrack.src;
-      audioRef.current.volume = volume;
-      audioRef.current.load();
-    }
-  }, [currentTrack]);
 
   // Start/stop progress timer based on isPlaying
   useEffect(() => {
