@@ -132,6 +132,8 @@ function App() {
         >
           {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
         </button>
+        
+        <RadioButton onClick={toggleRadio} showRadio={showRadio} />
       </div>
 
       {showInstructions && (
@@ -147,6 +149,8 @@ function App() {
           </ul>
         </div>
       )}
+      
+      {showRadio && <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />}
       
       {showDebug && (
         <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-2xl w-full max-h-60 overflow-auto">
@@ -165,10 +169,6 @@ function App() {
           <p className="mt-4 text-xs text-gray-400">Press Ctrl+D to download all logs at any time</p>
         </div>
       )}
-
-      {/* Radio UI */}
-      <RadioButton onClick={toggleRadio} showRadio={showRadio} />
-      <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />
     </div>
   );
 }
