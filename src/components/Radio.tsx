@@ -383,20 +383,37 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     // Initialize stations
     stationTracker.initializeStations();
+    console.log('[Radio] Initialized stationTracker');
     
     // Set up event listener for station unlocks
-    const handleStationUnlock = () => {
+    const handleStationUnlock = (event: Event) => {
+      console.log('[Radio] Received stationUnlocked event:', (event as CustomEvent).detail);
       // Force a re-render to update locked/unlocked status in playlist
-      setShowPlaylist(prev => prev);
+      setShowPlaylist(prev => !prev);
+      setShowPlaylist(prev => !prev);
     };
     
     window.addEventListener('stationUnlocked', handleStationUnlock);
+    console.log('[Radio] Added stationUnlocked event listener');
+    
+    // Log current station state
+    stationTracker.logUnlockedStations();
     
     // Cleanup
     return () => {
       window.removeEventListener('stationUnlocked', handleStationUnlock);
+      console.log('[Radio] Removed stationUnlocked event listener');
     };
   }, []);
+
+  // Testing function to unlock stations manually
+  const debugUnlockStation = (stationType: string) => {
+    console.log(`Manually unlocking station: ${stationType}`);
+    stationTracker.forceUnlock(stationType);
+    // Force re-render playlist
+    setShowPlaylist(prev => !prev);
+    setShowPlaylist(prev => !prev);
+  };
 
   return (
     <>
@@ -482,6 +499,31 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
                   className="pixel-slider"
                   style={{ flex: 1 }}
                 />
+              </div>
+
+              {/* Debug buttons */}
+              <div style={{ marginTop: '10px' }}>
+                <button 
+                  onClick={() => stationTracker.logUnlockedStations()}
+                  className="radio-button"
+                  style={{ marginRight: '5px', fontSize: '8px' }}
+                >
+                  Log Stations
+                </button>
+                <button 
+                  onClick={() => debugUnlockStation('quantity')}
+                  className="radio-button"
+                  style={{ marginRight: '5px', fontSize: '8px' }}
+                >
+                  Unlock Quantity
+                </button>
+                <button 
+                  onClick={() => stationTracker.resetStations()}
+                  className="radio-button"
+                  style={{ fontSize: '8px' }}
+                >
+                  Reset
+                </button>
               </div>
 
               {/* Tab buttons */}

@@ -258,10 +258,15 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   create() {
-    console.log('Level1Scene create started');
-    gameDebugger.info('Starting create method in Level1Scene');
+    console.log('Level1Scene create called');
     
     try {
+      gameDebugger.info('Level1Scene create method started');
+      
+      // Initialize the station tracker
+      stationTracker.initializeStations();
+      console.log('Initialized stationTracker in Level1Scene');
+    
       // Get screen dimensions
       const width = this.cameras.main.width;
       const height = this.cameras.main.height;
@@ -366,6 +371,9 @@ export class Level1Scene extends Phaser.Scene {
       
       // Verify that all unlocked stations are visible
       this.verifyStationVisibility();
+      
+      // Sync tracker with the initial game state
+      this.syncTrackerWithGameState();
     } catch (error) {
       console.error('Error in create method:', error);
     }
@@ -2299,7 +2307,16 @@ export class Level1Scene extends Phaser.Scene {
     nextStation.isUnlocked = true;
     
     // Update the station tracker to unlock the corresponding music track
-    stationTracker.unlockStation(nextStation.type);
+    // Add logs and error handling
+    try {
+      console.log(`Calling stationTracker.unlockStation with type: ${nextStation.type}`);
+      stationTracker.unlockStation(nextStation.type);
+    } catch (error) {
+      console.error(`Error updating station tracker for ${nextStation.type}:`, error);
+    }
+    
+    // Debug station status
+    this.debugStationStatus();
     
     // Make sure the station is visible
     if (nextStation.container) {
@@ -2927,5 +2944,30 @@ export class Level1Scene extends Phaser.Scene {
     // Update score, ensuring it never goes below 0
     this.score = Math.max(0, this.score + points);
     this.scoreText.setText(`Score: ${this.score}`);
+  }
+
+  // Debug utility to print station unlock status
+  private debugStationStatus() {
+    console.log('==== Station Unlock Status ====');
+    this.stations.forEach(station => {
+      console.log(`${station.type}: ${station.isUnlocked ? 'UNLOCKED' : 'LOCKED'}`);
+    });
+    console.log('============================');
+    
+    // Also log the tracker status
+    console.log('==== Station Tracker Status ====');
+    stationTracker.logUnlockedStations();
+    console.log('============================');
+  }
+
+  // Special debug function to manually update tracker based on current game state
+  private syncTrackerWithGameState() {
+    console.log('Syncing tracker with game state...');
+    this.stations.forEach(station => {
+      if (station.isUnlocked) {
+        stationTracker.unlockStation(station.type);
+      }
+    });
+    console.log('Sync complete.');
   }
 }
