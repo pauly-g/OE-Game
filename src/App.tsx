@@ -19,17 +19,21 @@
  * - Fixed asset loading paths
  * - Integrated debug utility for enhanced error logging
  * - Fixed debugger variable name to avoid using reserved keyword
+ * - Added Radio component for music playback
  */
 import React, { useEffect, useState } from 'react';
 import Phaser from 'phaser';
 import { gameConfig } from './game/config';
 import { gameDebugger } from './game/utils/debug';
+import Radio from './components/Radio';
+import RadioButton from './components/RadioButton';
 
 function App() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [game, setGame] = useState<Phaser.Game | null>(null);
-  const [errorLogs, setErrorLogs] = useState<Array<{level: string, message: string}>>([]);
+  const [errorLogs, setErrorLogs] = useState<Array<{level: string, message: string, timestamp?: Date, data?: any}>>([]);
+  const [showRadio, setShowRadio] = useState(false);
 
   // Enable debug mode
   useEffect(() => {
@@ -105,6 +109,10 @@ function App() {
     gameDebugger.downloadLogs();
   };
 
+  const toggleRadio = () => {
+    setShowRadio(!showRadio);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
       <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
@@ -149,7 +157,7 @@ function App() {
             <ul className="list-none space-y-2 text-red-400">
               {errorLogs.map((log, index) => (
                 <li key={index} className="border-b border-gray-700 pb-1">
-                  <span className="font-mono">[{new Date(log.timestamp).toLocaleTimeString()}]</span> {log.message}
+                  <span className="font-mono">[{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'unknown'}]</span> {log.message}
                 </li>
               ))}
             </ul>
@@ -157,6 +165,10 @@ function App() {
           <p className="mt-4 text-xs text-gray-400">Press Ctrl+D to download all logs at any time</p>
         </div>
       )}
+
+      {/* Radio UI */}
+      <RadioButton onClick={toggleRadio} showRadio={showRadio} />
+      <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />
     </div>
   );
 }
