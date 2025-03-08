@@ -22,7 +22,7 @@
  * - Added Radio component for music playback
  * - Added radio button wiggle and unlock notifications
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Phaser from 'phaser';
 import { gameConfig } from './game/config';
 import { gameDebugger } from './game/utils/debug';
@@ -36,6 +36,7 @@ function App() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [game, setGame] = useState<Phaser.Game | null>(null);
+  const [gameStarted, setGameStarted] = useState(false);
   const [errorLogs, setErrorLogs] = useState<Array<{level: string, message: string, timestamp?: Date, data?: any}>>([]);
   const [showRadio, setShowRadio] = useState(false);
   const [radioWiggle, setRadioWiggle] = useState(false);
@@ -44,6 +45,7 @@ function App() {
     title: '',
     artist: ''
   });
+  const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
 
   // Reset stations on page load
   useEffect(() => {
@@ -188,19 +190,28 @@ function App() {
   };
 
   const handleListenNow = () => {
-    // Find the track to play
-    const trackToPlay = tracks.find(track => track.title === notification.title);
+    // Find the track to play by title
+    const trackTitle = notification.title;
+    console.log(`[App] Looking for track to play: "${trackTitle}"`);
+    
+    // Find the track to play by title
+    const trackToPlay = tracks.find(track => {
+      return track.title.toLowerCase() === trackTitle.toLowerCase();
+    });
+    
     if (trackToPlay) {
-      console.log(`[App] Auto-playing track: ${trackToPlay.title} without opening radio`);
+      console.log(`[App] Found track to play: ${trackToPlay.title} (ID: ${trackToPlay.id})`);
       
-      // Dispatch an event for the Radio component to pick up
-      const playEvent = new CustomEvent('playTrack', { 
-        detail: { 
-          trackId: trackToPlay.id,
-          playWithoutOpening: true // Flag to indicate we want to play without opening the UI
-        }
-      });
-      window.dispatchEvent(playEvent);
+      // Call the direct function on the Radio component if it's available
+      if (radioRef.current) {
+        console.log(`[App] Calling direct playTrack function on Radio component`);
+        radioRef.current.playTrack(trackToPlay.id);
+      } else {
+        console.error('[App] Radio component reference is not available');
+      }
+    } else {
+      console.error(`[App] Could not find track with title: "${trackTitle}"`);
+      console.log('Available tracks:', tracks.map(t => `"${t.title}"`).join(', '));
     }
     
     // Close the notification
@@ -266,8 +277,12 @@ function App() {
           </div>
         )}
         
-        {/* Radio component appears below the game */}
-        {showRadio && <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />}
+        {/* Radio player (initially hidden) */}
+        <Radio 
+          isOpen={showRadio} 
+          onClose={() => setShowRadio(false)} 
+          ref={radioRef} 
+        />
       </div>
       
       {showDebug && (
