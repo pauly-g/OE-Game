@@ -25,6 +25,7 @@
  * - Added code to stop the background music when playing unlocked songs
  * - Removed debug button and BG music button, using Radio for all music playback
  * - Updated background music to use Chilled, Frantic, and Relaxed songs
+ * - Simplified background music autoplay using Radio component's autoplay feature
  */
 import React, { useEffect, useState, useRef } from 'react';
 import Phaser from 'phaser';
@@ -35,13 +36,6 @@ import Radio from './components/Radio';
 import RadioButton from './components/RadioButton';
 import SongNotification from './components/SongNotification';
 import { tracks } from './data/musicData';
-
-// Use this to access the global audio element exposed by Radio component
-declare global {
-  interface Window {
-    globalAudio?: HTMLAudioElement | null;
-  }
-}
 
 function App() {
   const [showInstructions, setShowInstructions] = useState(false);
@@ -57,8 +51,6 @@ function App() {
     artist: ''
   });
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
-  // Reference to keep track of global audio status
-  const globalAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Reset stations on page load
   useEffect(() => {
@@ -137,75 +129,6 @@ function App() {
     }
   }, [radioWiggle]);
 
-  // Auto-play a random background song when the game starts
-  useEffect(() => {
-    // Function to play a random background song
-    const playRandomBackgroundSong = () => {
-      // Find all background songs
-      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
-      if (backgroundSongs.length > 0) {
-        // Select a random background song
-        const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
-        const songToPlay = backgroundSongs[randomIndex];
-        
-        console.log(`[App] Auto-playing background song: ${songToPlay.title}`);
-        
-        // Use the radio component to play the background music with a longer delay to ensure it's ready
-        setTimeout(() => {
-          if (radioRef.current) {
-            try {
-              console.log('[App] Attempting to play background music:', songToPlay.title);
-              radioRef.current.playTrack(songToPlay.id);
-              console.log('[App] Background music started through radio component');
-            } catch (error) {
-              console.error('[App] Error playing background music:', error);
-            }
-          } else {
-            console.warn('[App] Radio reference not available for autoplay');
-          }
-        }, 2000); // Increase delay to 2 seconds to ensure component is fully mounted
-      } else {
-        console.warn('[App] No background songs found for autoplay');
-      }
-    };
-
-    // Play background music on initial load
-    playRandomBackgroundSong();
-    
-    // Handle page visibility changes (including page refresh)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[App] Page became visible, checking if background music is needed');
-        // Check if music is already playing
-        if (!globalAudioRef.current || globalAudioRef.current.paused) {
-          // If no audio is playing, start a new song
-          playRandomBackgroundSong();
-        }
-      }
-    };
-    
-    // Listen for visibility changes
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Clean up
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  // Add a global reference to the audio element to check its status
-  useEffect(() => {
-    // Expose the globalAudio variable from the Radio component to check if music is playing
-    const checkMusicInterval = setInterval(() => {
-      if (typeof window !== 'undefined') {
-        // @ts-ignore - Access the globalAudio from Radio component
-        globalAudioRef.current = window.globalAudio || null;
-      }
-    }, 1000);
-
-    return () => clearInterval(checkMusicInterval);
-  }, []);
-
   useEffect(() => {
     // Prevent double initialization
     if (game) return;
@@ -250,7 +173,7 @@ function App() {
       gameDebugger.error('Failed to initialize game:', error);
       console.error('Failed to initialize game:', error);
     }
-  }, []); // Remove game from dependencies
+  }, []);
 
   const downloadLogs = () => {
     gameDebugger.downloadLogs();
@@ -359,11 +282,12 @@ function App() {
           </div>
         )}
         
-        {/* Radio player (initially hidden) */}
+        {/* Radio player (initially hidden) with autoplay enabled */}
         <Radio 
           isOpen={showRadio} 
           onClose={() => setShowRadio(false)} 
-          ref={radioRef} 
+          ref={radioRef}
+          autoplay={true}
         />
       </div>
       

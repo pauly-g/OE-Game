@@ -22,14 +22,10 @@ const globalAudioState: GlobalAudioState = {
 // Create a global audio element that persists outside of React's lifecycle
 let globalAudio: HTMLAudioElement | null = null;
 
-// Expose globalAudio to window for external access
-if (typeof window !== 'undefined') {
-  (window as any).globalAudio = globalAudio;
-}
-
 interface RadioProps {
   isOpen: boolean;
   onClose: () => void;
+  autoplay?: boolean;  // Add ability to autoplay on mount
 }
 
 // Export the type for the ref
@@ -38,7 +34,7 @@ export interface RadioHandle {
 }
 
 // Convert to use forwardRef
-export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, ref) => {
+export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, autoplay = false }, ref) => {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
@@ -60,11 +56,6 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
       console.log('[Radio] Creating new global audio element');
       globalAudio = new Audio();
       globalAudio.volume = 1.0; // Maximum volume
-      
-      // Expose to window for external access
-      if (typeof window !== 'undefined') {
-        (window as any).globalAudio = globalAudio;
-      }
       
       // Test audio creation
       if (globalAudio) {
@@ -185,6 +176,280 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
     };
   }, []);
   
+  // Set up autoplay function when the component mounts
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps - Intentionally exclude changeTrack to avoid re-renders
+    if (autoplay) {
+      console.log('[Radio] Autoplay enabled, attempting to start background music');
+      // Find all background songs (warehouse type)
+      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
+      
+      if (backgroundSongs.length > 0) {
+        console.log('[Radio] Found background songs for autoplay:', backgroundSongs.map(t => t.title).join(', '));
+        // Delayed start to ensure component is fully initialized
+        setTimeout(() => {
+          try {
+            // Check if music is already playing
+            const isAudioPlaying = globalAudio && 
+                                !globalAudio.paused && 
+                                globalAudio.currentTime > 0 && 
+                                !globalAudio.ended;
+                                
+            if (!isAudioPlaying) {
+              const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
+              const songToPlay = backgroundSongs[randomIndex];
+              console.log('[Radio] Auto-playing background song:', songToPlay.title);
+              
+              // Use changeTrack to properly set up audio
+              changeTrack(songToPlay);
+            } else {
+              console.log('[Radio] Audio already playing, not starting autoplay');
+            }
+          } catch (error) {
+            console.error('[Radio] Error during autoplay:', error);
+          }
+        }, 1500);
+      } else {
+        console.warn('[Radio] No background songs found for autoplay');
+      }
+    }
+  }, [autoplay]);
+
+  // Set up page visibility and load event listeners to handle page refresh
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps - Intentionally exclude changeTrack to avoid re-renders
+    // Function to handle playback of a random background song
+    const playRandomBackgroundSong = () => {
+      console.log('[Radio] Playing random background song after refresh');
+      
+      // Find all background songs
+      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
+      if (backgroundSongs.length > 0) {
+        try {
+          // Select a random background song
+          const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
+          const songToPlay = backgroundSongs[randomIndex];
+          
+          console.log(`[Radio] Selected background song: ${songToPlay.title}`);
+          
+          // Use a timeout to ensure DOM is ready
+          setTimeout(() => {
+            // Check if any music is already playing
+            const isAudioPlaying = globalAudio && 
+                                !globalAudio.paused && 
+                                globalAudio.currentTime > 0 && 
+                                !globalAudio.ended;
+                                
+            if (!isAudioPlaying) {
+              console.log('[Radio] No audio currently playing, starting background song');
+              changeTrack(songToPlay);
+            } else {
+              console.log('[Radio] Audio already playing, not starting new song');
+            }
+          }, 1000);
+        } catch (error) {
+          console.error('[Radio] Error playing random background song:', error);
+        }
+      }
+    };
+    
+    // Handle visibility changes (page refresh)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Radio] Page became visible (possible refresh detected)');
+        
+        // Check if music is currently playing
+        const isAudioPlaying = globalAudio && 
+                            !globalAudio.paused && 
+                            globalAudio.currentTime > 0 && 
+                            !globalAudio.ended;
+                            
+        if (!isAudioPlaying) {
+          console.log('[Radio] No audio playing after visibility change, starting background music');
+          playRandomBackgroundSong();
+        } else {
+          console.log('[Radio] Audio already playing, no need to restart');
+        }
+      }
+    };
+    
+    // Handle window load event
+    const handleLoadEvent = () => {
+      console.log('[Radio] Window load event - checking if we need to start music');
+      setTimeout(() => {
+        const isAudioPlaying = globalAudio && 
+                            !globalAudio.paused && 
+                            globalAudio.currentTime > 0 && 
+                            !globalAudio.ended;
+                            
+        if (!isAudioPlaying) {
+          console.log('[Radio] No audio playing after window load, starting background music');
+          playRandomBackgroundSong();
+        }
+      }, 1000);
+    };
+    
+    // Set up both event listeners
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('load', handleLoadEvent);
+    
+    // Clean up on unmount
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('load', handleLoadEvent);
+    };
+  }, []);
+  
+  // Set up event listeners for station unlocks, storage changes, etc.
+  useEffect(() => {
+    // Check for newly unlocked stations
+    const checkForUnlocks = () => {
+      // Log the current state for debugging
+      const stations = stationTracker.logUnlockedStations();
+      console.log('[Radio] Current stations:', stations);
+      
+      // Check for any newly unlocked stations that need notifications
+      const unlockedStations = Object.entries(stations)
+        .filter(([stationType, isUnlocked]) => isUnlocked)
+        .map(([stationType]) => stationType);
+        
+      console.log('[Radio] Unlocked stations:', unlockedStations);
+    };
+    
+    // Handle station unlock events
+    const handleStationUnlock = (event: Event) => {
+      console.log('[Radio] Station unlock event received');
+      checkForUnlocks();
+      
+      // Force UI update to reflect new unlocked tracks
+      setShowPlaylist(showPlaylist);
+    };
+    
+    // Handle storage changes (for cross-tab sync)
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key && event.key.includes('station-tracker')) {
+        console.log('[Radio] Storage change detected for station-tracker, refreshing state');
+        checkForUnlocks();
+        
+        // Force UI update to reflect new unlocked tracks
+        setShowPlaylist(showPlaylist);
+      }
+    };
+    
+    // Handle playTrack events from outside the component
+    const handlePlayTrack = (event: Event) => {
+      try {
+        const customEvent = event as CustomEvent;
+        console.log('[Radio] Received playTrack event:', customEvent);
+        
+        if (customEvent.detail && customEvent.detail.trackId) {
+          const trackId = customEvent.detail.trackId;
+          const playWithoutOpening = customEvent.detail.playWithoutOpening || false;
+          
+          console.log(`[Radio] Playing track ${trackId}, without opening UI: ${playWithoutOpening}`);
+          
+          // Find the track in our list
+          const trackToPlay = tracks.find(track => track.id === trackId);
+          console.log('[Radio] Found track?', trackToPlay ? 'YES' : 'NO', trackToPlay);
+          
+          if (trackToPlay) {
+            // Check if this track is unlocked
+            const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType);
+            console.log(`[Radio] Is track ${trackToPlay.title} unlocked? ${isUnlocked}`);
+            
+            if (isUnlocked) {
+              console.log(`[Radio] Track ${trackToPlay.title} is unlocked, playing it`);
+              
+              // Stop current playback if necessary
+              if (audioRef.current && isPlaying) {
+                console.log('[Radio] Pausing current playback before switching tracks');
+                audioRef.current.pause();
+              }
+              
+              // Set the track
+              console.log('[Radio] Setting current track to:', trackToPlay.title);
+              setCurrentTrack(trackToPlay);
+              
+              // Ensure audio is ready and start playback immediately
+              if (audioRef.current) {
+                console.log('[Radio] Setting audio source to:', trackToPlay.src);
+                audioRef.current.src = trackToPlay.src;
+                audioRef.current.load();
+                // Set volume to full
+                audioRef.current.volume = 1.0;
+                globalAudioState.volume = 1.0;
+                setVolume(1.0);
+                globalAudioState.currentTrackId = trackToPlay.id;
+                
+                // Force play after a brief moment to ensure audio is loaded
+                console.log('[Radio] Setting up playback timeout');
+                setTimeout(() => {
+                  console.log('[Radio] Timeout triggered, attempting to play');
+                  if (audioRef.current) {
+                    console.log('[Radio] Audio reference still exists, calling play()');
+                    const playPromise = audioRef.current.play();
+                    
+                    if (playPromise !== undefined) {
+                      playPromise
+                        .then(() => {
+                          console.log(`[Radio] Successfully started playback of ${trackToPlay.title}`);
+                          setIsPlaying(true);
+                          globalAudioState.isPlaying = true;
+                          
+                          // If we're supposed to show the UI (not playWithoutOpening), and it's not already open
+                          if (!playWithoutOpening && !isOpen) {
+                            // Could potentially trigger UI opening here if needed, but we don't for now
+                            console.log('[Radio] Keeping UI closed as requested');
+                          }
+                        })
+                        .catch(error => {
+                          console.error(`[Radio] Error playing ${trackToPlay.title}:`, error);
+                        });
+                    } else {
+                      console.log('[Radio] Play promise is undefined, which may indicate a browser restriction');
+                    }
+                  } else {
+                    console.error('[Radio] Audio reference lost during timeout');
+                  }
+                }, 100);
+              } else {
+                console.error('[Radio] No audio reference available');
+              }
+            } else {
+              console.log(`[Radio] Track ${trackToPlay.title} is not unlocked yet.`);
+            }
+          } else {
+            console.error('[Radio] Could not find track with ID:', trackId);
+            console.log('Available tracks:', tracks.map(t => `${t.id}: ${t.title}`).join(', '));
+          }
+        } else {
+          console.error('[Radio] Invalid playTrack event, missing track ID:', customEvent);
+        }
+      } catch (error) {
+        console.error('[Radio] Error handling playTrack event:', error);
+      }
+    };
+    
+    // Set up all event listeners
+    window.addEventListener('stationUnlocked', handleStationUnlock);
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('playTrack', handlePlayTrack);
+    
+    // Check for unlocks immediately
+    checkForUnlocks();
+    
+    // Set up periodic checks for unlocks
+    const intervalId = setInterval(checkForUnlocks, 3000);
+    
+    return () => {
+      // Clean up all event listeners
+      window.removeEventListener('stationUnlocked', handleStationUnlock);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('playTrack', handlePlayTrack);
+      clearInterval(intervalId);
+    };
+  }, [showPlaylist, isOpen, isPlaying]);
+
   // Helper function to update component state from global state
   const updateCurrentTrackFromGlobal = () => {
     // Force log station status to debug
@@ -465,188 +730,6 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
       globalAudioState.isPlaying = false;
     }
   };
-
-  // Listen for station unlock events
-  useEffect(() => {
-    console.log('[Radio] Setting up station unlock listeners');
-    
-    // Initialize stations if needed
-    stationTracker.initializeStations();
-    
-    // Function to check for and apply unlocks
-    const checkForUnlocks = () => {
-      console.log('[Radio] Checking for unlocked stations');
-      
-      // Force a refresh from localStorage
-      stationTracker.logUnlockedStations();
-      
-      // Directly check localStorage for unlocked stations
-      try {
-        const stationsJSON = localStorage.getItem('oe-game-unlocked-stations');
-        if (stationsJSON) {
-          const stations = JSON.parse(stationsJSON);
-          console.log('[Radio] Direct localStorage check:', stations);
-          
-          // Check specifically for quantity station
-          if (stations && stations.quantity === true) {
-            console.log('[Radio] Quantity station is unlocked in localStorage!');
-          }
-        }
-      } catch (e) {
-        console.error('[Radio] Error checking localStorage:', e);
-      }
-      
-      // Update current track
-      updateCurrentTrackFromGlobal();
-      
-      // Force re-render playlist
-      setShowPlaylist(prev => !prev);
-      setTimeout(() => setShowPlaylist(prev => !prev), 100);
-    };
-    
-    // Set up event listener for station unlocks
-    const handleStationUnlock = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      console.log('[Radio] Received stationUnlocked event:', detail);
-      
-      // If this is the quantity station being unlocked, update aggressively
-      if (detail && detail.stationType === 'quantity') {
-        console.log('[Radio] Quantity station unlocked via event!');
-      }
-      
-      checkForUnlocks();
-    };
-    
-    // Also listen for localStorage changes as a fallback
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key && (
-          event.key === 'oe-game-unlocked-stations' || 
-          event.key === 'oe-game-last-unlock' ||
-          event.key === 'oe-game-unlock-timestamp')) {
-        console.log('[Radio] Detected localStorage change for stations:', event.key, event.newValue);
-        checkForUnlocks();
-      }
-    };
-    
-    // Listen for playTrack events from the notification
-    const handlePlayTrack = (event: Event) => {
-      console.log('[Radio] Received playTrack event:', event);
-      
-      try {
-        const customEvent = event as CustomEvent;
-        console.log('[Radio] Event detail:', customEvent.detail);
-        
-        if (customEvent.detail && customEvent.detail.trackId) {
-          const { trackId, playWithoutOpening } = customEvent.detail;
-          console.log(`[Radio] Received request to play track: ${trackId}${playWithoutOpening ? ' without opening UI' : ''}`);
-          
-          // Find the track in our list
-          const trackToPlay = tracks.find(track => track.id === trackId);
-          console.log('[Radio] Found track to play?', trackToPlay ? 'YES' : 'NO', trackToPlay);
-          
-          if (trackToPlay) {
-            // Check if this track is unlocked
-            const isUnlocked = stationTracker.isStationUnlocked(trackToPlay.stationType);
-            console.log(`[Radio] Is track "${trackToPlay.title}" unlocked?`, isUnlocked ? 'YES' : 'NO');
-            
-            if (isUnlocked) {
-              console.log(`[Radio] Playing track: ${trackToPlay.title}`);
-              
-              // Check if we're already playing this track
-              if (currentTrack && currentTrack.id === trackToPlay.id) {
-                console.log(`[Radio] Already playing this track: ${trackToPlay.title}`);
-                return;
-              }
-              
-              // Stop current playback if necessary
-              if (audioRef.current && isPlaying) {
-                console.log('[Radio] Pausing current playback before switching tracks');
-                audioRef.current.pause();
-              }
-              
-              // Set the track
-              console.log('[Radio] Setting current track to:', trackToPlay.title);
-              setCurrentTrack(trackToPlay);
-              
-              // Ensure audio is ready and start playback immediately
-              if (audioRef.current) {
-                console.log('[Radio] Setting audio source to:', trackToPlay.src);
-                audioRef.current.src = trackToPlay.src;
-                audioRef.current.load();
-                // Set volume to full
-                audioRef.current.volume = 1.0;
-                globalAudioState.volume = 1.0;
-                setVolume(1.0);
-                globalAudioState.currentTrackId = trackToPlay.id;
-                
-                // Force play after a brief moment to ensure audio is loaded
-                console.log('[Radio] Setting up playback timeout');
-                setTimeout(() => {
-                  console.log('[Radio] Timeout triggered, attempting to play');
-                  if (audioRef.current) {
-                    console.log('[Radio] Audio reference still exists, calling play()');
-                    const playPromise = audioRef.current.play();
-                    
-                    if (playPromise !== undefined) {
-                      playPromise
-                        .then(() => {
-                          console.log(`[Radio] Successfully started playback of ${trackToPlay.title}`);
-                          setIsPlaying(true);
-                          globalAudioState.isPlaying = true;
-                          
-                          // If we're supposed to show the UI (not playWithoutOpening), and it's not already open
-                          if (!playWithoutOpening && !isOpen) {
-                            // Could potentially trigger UI opening here if needed, but we don't for now
-                            console.log('[Radio] Keeping UI closed as requested');
-                          }
-                        })
-                        .catch(error => {
-                          console.error(`[Radio] Error playing ${trackToPlay.title}:`, error);
-                        });
-                    } else {
-                      console.log('[Radio] Play promise is undefined, which may indicate a browser restriction');
-                    }
-                  } else {
-                    console.error('[Radio] Audio reference lost during timeout');
-                  }
-                }, 100);
-              } else {
-                console.error('[Radio] No audio reference available');
-              }
-            } else {
-              console.log(`[Radio] Track ${trackToPlay.title} is not unlocked yet.`);
-            }
-          } else {
-            console.error('[Radio] Could not find track with ID:', trackId);
-            console.log('Available tracks:', tracks.map(t => `${t.id}: ${t.title}`).join(', '));
-          }
-        } else {
-          console.error('[Radio] Invalid playTrack event, missing track ID:', customEvent);
-        }
-      } catch (error) {
-        console.error('[Radio] Error handling playTrack event:', error);
-      }
-    };
-    
-    // Set up all event listeners
-    window.addEventListener('stationUnlocked', handleStationUnlock);
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('playTrack', handlePlayTrack);
-    
-    // Check for unlocks immediately
-    checkForUnlocks();
-    
-    // Set up periodic checks for unlocks
-    const intervalId = setInterval(checkForUnlocks, 3000);
-    
-    return () => {
-      // Clean up all event listeners
-      window.removeEventListener('stationUnlocked', handleStationUnlock);
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('playTrack', handlePlayTrack);
-      clearInterval(intervalId);
-    };
-  }, []);
 
   // Expose methods to the parent through the ref
   useImperativeHandle(ref, () => ({
