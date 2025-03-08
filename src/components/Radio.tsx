@@ -2,6 +2,25 @@ import React, { useState, useRef, useEffect } from 'react';
 import { tracks, Track } from '../data/musicData';
 import './Radio.css';
 
+// Create a global audio state to persist across component remounts
+interface GlobalAudioState {
+  currentTrackId: string | null;
+  isPlaying: boolean;
+  currentTime: number;
+  volume: number;
+}
+
+// Initialize global state
+const globalAudioState: GlobalAudioState = {
+  currentTrackId: null,
+  isPlaying: false,
+  currentTime: 0,
+  volume: 0.7
+};
+
+// Create a global audio element that persists outside of React's lifecycle
+let globalAudio: HTMLAudioElement | null = null;
+
 interface RadioProps {
   isOpen: boolean;
   onClose: () => void;
@@ -20,11 +39,57 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressTimerRef = useRef<number | null>(null);
 
-  // Set the first track as default when component mounts
+  // Initialize global audio element if it doesn't exist
   useEffect(() => {
-    if (tracks.length > 0 && !currentTrack) {
-      setCurrentTrack(tracks[0]);
+    if (!globalAudio) {
+      globalAudio = new Audio();
+      globalAudio.volume = globalAudioState.volume;
+      
+      // Add event listeners to global audio
+      globalAudio.addEventListener('ended', () => {
+        // Find next track
+        if (globalAudioState.currentTrackId) {
+          const currentIndex = tracks.findIndex(t => t.id === globalAudioState.currentTrackId);
+          const nextIndex = (currentIndex + 1) % tracks.length;
+          globalAudioState.currentTrackId = tracks[nextIndex].id;
+          globalAudio!.src = tracks[nextIndex].src;
+          globalAudio!.play().catch(console.error);
+        }
+      });
     }
+    
+    // Set up the audio reference
+    audioRef.current = globalAudio;
+    
+    // Synchronize component state with global state
+    if (globalAudioState.currentTrackId) {
+      const track = tracks.find(t => t.id === globalAudioState.currentTrackId);
+      if (track && track !== currentTrack) {
+        setCurrentTrack(track);
+      }
+    } else if (tracks.length > 0 && !currentTrack) {
+      // Set default track if none is playing
+      setCurrentTrack(tracks[0]);
+      globalAudioState.currentTrackId = tracks[0].id;
+      if (globalAudio) {
+        globalAudio.src = tracks[0].src;
+      }
+    }
+    
+    setIsPlaying(globalAudioState.isPlaying);
+    setVolume(globalAudioState.volume);
+    
+    return () => {
+      // Save current state when component unmounts
+      if (currentTrack) {
+        globalAudioState.currentTrackId = currentTrack.id;
+      }
+      globalAudioState.isPlaying = isPlaying;
+      globalAudioState.volume = volume;
+      if (audioRef.current) {
+        globalAudioState.currentTime = audioRef.current.currentTime;
+      }
+    };
   }, []);
 
   // Handle play/pause
@@ -33,10 +98,12 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     
     if (isPlaying) {
       audioRef.current.pause();
+      globalAudioState.isPlaying = false;
     } else {
       audioRef.current.play().catch(error => {
         console.error('Error playing audio:', error);
       });
+      globalAudioState.isPlaying = true;
     }
     setIsPlaying(!isPlaying);
   };
@@ -48,15 +115,22 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     setCurrentTime(0);
     setProgress(0);
     
-    // Let the useEffect handle play after source is updated
-    setTimeout(() => {
-      if (audioRef.current) {
-        audioRef.current.play().catch(error => {
-          console.error('Error playing audio:', error);
-        });
-        setIsPlaying(true);
-      }
-    }, 0);
+    if (audioRef.current) {
+      audioRef.current.src = track.src;
+      audioRef.current.load();
+      globalAudioState.currentTrackId = track.id;
+      
+      // Let the useEffect handle play after source is updated
+      setTimeout(() => {
+        if (audioRef.current) {
+          audioRef.current.play().catch(error => {
+            console.error('Error playing audio:', error);
+          });
+          setIsPlaying(true);
+          globalAudioState.isPlaying = true;
+        }
+      }, 0);
+    }
   };
 
   // Handle next track
@@ -84,6 +158,7 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     
     if (audioRef.current) {
       audioRef.current.volume = newVolume;
+      globalAudioState.volume = newVolume;
     }
   };
 
@@ -110,6 +185,7 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     const newTime = clickPercentage * duration;
     
     audioRef.current.currentTime = newTime;
+    globalAudioState.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress(clickPercentage * 100);
   };
@@ -186,16 +262,18 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     );
   };
 
+  // Function to stop music playback
+  const stopPlayback = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setIsPlaying(false);
+      globalAudioState.isPlaying = false;
+    }
+  };
+
   return (
     <>
-      {/* Hidden audio element that continues playing even when UI is closed */}
-      <audio 
-        ref={audioRef} 
-        onEnded={nextTrack}
-        onLoadedMetadata={handleMetadataLoaded}
-        className="hidden-audio-player"
-      />
-
       {/* Main player UI - only shown when isOpen is true */}
       {isOpen && currentTrack && (
         <div className="radio-container">
@@ -257,7 +335,7 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
                   ⏭️
                 </button>
                 <button 
-                  onClick={() => setIsPlaying(false)}
+                  onClick={stopPlayback}
                   className="radio-button"
                   title="Stop"
                 >

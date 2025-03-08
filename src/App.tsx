@@ -150,8 +150,8 @@ function App() {
         </div>
       )}
       
-      {/* Radio player that doesn't affect game display */}
-      {showRadio && <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />}
+      {/* Always render the Radio component, but toggle its isOpen prop */}
+      <Radio isOpen={showRadio} onClose={() => setShowRadio(false)} />
       
       {showDebug && (
         <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-2xl w-full max-h-60 overflow-auto">
