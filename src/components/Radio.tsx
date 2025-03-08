@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { tracks, Track } from '../data/musicData';
+import { stationTracker } from '../game/utils/stationTracker';
 import './Radio.css';
 
 // Create a global audio state to persist across component remounts
@@ -58,8 +59,23 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
       // Find next track
       if (globalAudioState.currentTrackId) {
         const currentIndex = tracks.findIndex(t => t.id === globalAudioState.currentTrackId);
-        const nextIndex = (currentIndex + 1) % tracks.length;
-        const nextTrack = tracks[nextIndex];
+        let nextIndex = (currentIndex + 1) % tracks.length;
+        
+        // Find the next unlocked track
+        let nextTrack = tracks[nextIndex];
+        while (!stationTracker.isStationUnlocked(nextTrack.stationType)) {
+          nextIndex = (nextIndex + 1) % tracks.length;
+          // If we've checked all tracks and none are unlocked (except the current one),
+          // just loop the current track
+          if (nextIndex === currentIndex) {
+            nextIndex = currentIndex;
+            break;
+          }
+          nextTrack = tracks[nextIndex];
+        }
+        
+        // Get the next track (this line was duplicated)
+        nextTrack = tracks[nextIndex];
         
         // Update global state
         globalAudioState.currentTrackId = nextTrack.id;
@@ -106,15 +122,32 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     if (globalAudioState.currentTrackId) {
       const track = tracks.find(t => t.id === globalAudioState.currentTrackId);
       if (track) {
-        setCurrentTrack(track);
+        // Make sure the track is unlocked
+        if (stationTracker.isStationUnlocked(track.stationType)) {
+          setCurrentTrack(track);
+        } else {
+          // If the previously playing track is now locked, switch to the first track
+          const firstTrack = tracks.find(t => stationTracker.isStationUnlocked(t.stationType));
+          if (firstTrack) {
+            setCurrentTrack(firstTrack);
+            globalAudioState.currentTrackId = firstTrack.id;
+            if (globalAudio) {
+              globalAudio.src = firstTrack.src;
+              globalAudio.currentTime = 0;
+            }
+          }
+        }
       }
     } else if (tracks.length > 0) {
-      // Set default track if none is playing
-      setCurrentTrack(tracks[0]);
-      globalAudioState.currentTrackId = tracks[0].id;
-      if (globalAudio) {
-        globalAudio.src = tracks[0].src;
-        globalAudio.currentTime = globalAudioState.currentTime;
+      // Set default track if none is playing (first unlocked track)
+      const firstTrack = tracks.find(t => stationTracker.isStationUnlocked(t.stationType));
+      if (firstTrack) {
+        setCurrentTrack(firstTrack);
+        globalAudioState.currentTrackId = firstTrack.id;
+        if (globalAudio) {
+          globalAudio.src = firstTrack.src;
+          globalAudio.currentTime = globalAudioState.currentTime;
+        }
       }
     }
     
@@ -186,6 +219,13 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
 
   // Handle track change
   const changeTrack = (track: Track) => {
+    // Check if this track's station is unlocked
+    if (!stationTracker.isStationUnlocked(track.stationType)) {
+      // Track is locked, don't allow playback
+      console.log(`Cannot play locked track: ${track.title}`);
+      return;
+    }
+    
     setCurrentTrack(track);
     setIsPlaying(false);
     setCurrentTime(0);
@@ -339,6 +379,25 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
     }
   };
 
+  // Listen for station unlock events
+  useEffect(() => {
+    // Initialize stations
+    stationTracker.initializeStations();
+    
+    // Set up event listener for station unlocks
+    const handleStationUnlock = () => {
+      // Force a re-render to update locked/unlocked status in playlist
+      setShowPlaylist(prev => prev);
+    };
+    
+    window.addEventListener('stationUnlocked', handleStationUnlock);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('stationUnlocked', handleStationUnlock);
+    };
+  }, []);
+
   return (
     <>
       {/* Main player UI - only shown when isOpen is true */}
@@ -447,15 +506,18 @@ export const Radio: React.FC<RadioProps> = ({ isOpen, onClose }) => {
               {/* Playlist panel */}
               {showPlaylist && (
                 <div className="playlist-panel">
-                  {tracks.map(track => (
-                    <div 
-                      key={track.id}
-                      onClick={() => changeTrack(track)}
-                      className={`playlist-item ${currentTrack?.id === track.id ? 'active' : ''}`}
-                    >
-                      {track.title}
-                    </div>
-                  ))}
+                  {tracks.map(track => {
+                    const isUnlocked = stationTracker.isStationUnlocked(track.stationType);
+                    return (
+                      <div 
+                        key={track.id}
+                        onClick={isUnlocked ? () => changeTrack(track) : undefined}
+                        className={`playlist-item ${currentTrack?.id === track.id ? 'active' : ''} ${!isUnlocked ? 'locked' : ''}`}
+                      >
+                        {track.title}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 

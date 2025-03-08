@@ -4,6 +4,7 @@ export interface Track {
   artist: string;
   src: string;
   lyrics: string;
+  stationType: string; // Corresponds to station types in the game
 }
 
 // Using the actual music files from public/game/Music/OE-Radio
@@ -13,6 +14,7 @@ export const tracks: Track[] = [
     title: 'A Dress Issue',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/A Dress Issue.mp3',
+    stationType: 'address', // First station - always unlocked
     lyrics: `Lorem ipsum dolor sit amet
 Consectetur adipiscing elit
 Sed do eiusmod tempor incididunt
@@ -28,6 +30,7 @@ Consequat duis aute irure dolor`
     title: 'Quantity Blues',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/Quantity Blues.mp3',
+    stationType: 'quantity', // Second station to unlock
     lyrics: `Sed ut perspiciatis unde omnis
 Iste natus error sit voluptatem
 Accusantium doloremque laudantium
@@ -43,6 +46,7 @@ Ipsam voluptatem quia voluptas`
     title: 'No Code',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/No Code.mp3',
+    stationType: 'discount', // Third station to unlock
     lyrics: `At vero eos et accusamus et iusto
 Odio dignissimos ducimus qui
 Blanditiis praesentium voluptatum
@@ -58,6 +62,7 @@ Qui officia deserunt mollitia animi`
     title: 'My Extra Large Mistake',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/My Extra Large Mistake.mp3',
+    stationType: 'product', // Fourth station to unlock
     lyrics: `Integer posuere erat a ante venenatis
 Dapibus posuere velit aliquet
 Cras mattis consectetur purus
@@ -73,6 +78,7 @@ In vulputate velit esse consequat`
     title: 'Invoice of My Heart',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/Invoice of My Heart.mp3',
+    stationType: 'invoice', // Fifth station to unlock
     lyrics: `Nullam quis risus eget urna
 Mollis ornare vel eu leo
 Cum sociis natoque penatibus
@@ -88,6 +94,7 @@ Ut fermentum massa justo`
     title: 'Cancel That Order (Please!)',
     artist: 'The Order Editors',
     src: 'game/Music/OE-Radio/Cancel That Order (Please!).mp3',
+    stationType: 'cancel', // Sixth and final station to unlock
     lyrics: `Vestibulum id ligula porta
 Felis euismod semper eget lacinia
 Donec sed odio dui nulla

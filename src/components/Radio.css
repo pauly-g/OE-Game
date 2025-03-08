@@ -238,6 +238,26 @@
   color: #33ff33;
 }
 
+.playlist-item.locked {
+  color: #555;
+  cursor: not-allowed;
+  position: relative;
+  padding-right: 30px; /* Make room for the lock icon */
+}
+
+.playlist-item.locked::after {
+  content: "🔒";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+}
+
+.playlist-item.locked:hover {
+  background-color: transparent;
+}
+
 .lyrics-panel {
   background-color: #111;
   border: 1px inset #444;

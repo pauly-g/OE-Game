@@ -38,6 +38,7 @@ import Phaser from 'phaser';
 import { gameDebugger } from '../utils/debug';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import { regularComments, powerUpComments } from '../data/BuyerComments';
+import { stationTracker } from '../utils/stationTracker';
 
 interface Order {
   id: string;
@@ -2296,6 +2297,9 @@ export class Level1Scene extends Phaser.Scene {
     
     // Unlock the station
     nextStation.isUnlocked = true;
+    
+    // Update the station tracker to unlock the corresponding music track
+    stationTracker.unlockStation(nextStation.type);
     
     // Make sure the station is visible
     if (nextStation.container) {
