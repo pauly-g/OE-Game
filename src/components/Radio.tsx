@@ -22,6 +22,11 @@ const globalAudioState: GlobalAudioState = {
 // Create a global audio element that persists outside of React's lifecycle
 let globalAudio: HTMLAudioElement | null = null;
 
+// Expose globalAudio to window for external access
+if (typeof window !== 'undefined') {
+  (window as any).globalAudio = globalAudio;
+}
+
 interface RadioProps {
   isOpen: boolean;
   onClose: () => void;
@@ -55,6 +60,11 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose }, r
       console.log('[Radio] Creating new global audio element');
       globalAudio = new Audio();
       globalAudio.volume = 1.0; // Maximum volume
+      
+      // Expose to window for external access
+      if (typeof window !== 'undefined') {
+        (window as any).globalAudio = globalAudio;
+      }
       
       // Test audio creation
       if (globalAudio) {
