@@ -218,7 +218,6 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
 
   // Set up page visibility and load event listeners to handle page refresh
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps - Intentionally exclude changeTrack to avoid re-renders
     // Function to handle playback of a random background song
     const playRandomBackgroundSong = () => {
       console.log('[Radio] Playing random background song after refresh');
@@ -235,20 +234,14 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           
           // Use a timeout to ensure DOM is ready
           setTimeout(() => {
-            // Check if music is currently playing
-            const isAudioPlaying = globalAudio && 
-                                  !globalAudio.paused && 
-                                  globalAudio.currentTime > 0 && 
-                                  !globalAudio.ended &&
-                                  globalAudio.src !== '';
-                                  
-            if (!isAudioPlaying) {
-              console.log('[Radio] No audio currently playing, starting background song');
-              changeTrack(songToPlay);
-            } else {
-              console.log('[Radio] Audio already playing, no need to restart');
+            console.log('[Radio] Starting background song');
+            // Stop any currently playing audio first
+            if (globalAudio && !globalAudio.paused) {
+              globalAudio.pause();
             }
-          }, 1000);
+            // Always play the song - don't check if audio is playing
+            changeTrack(songToPlay);
+          }, 500);
         } catch (error) {
           console.error('[Radio] Error playing random background song:', error);
         }
@@ -260,19 +253,11 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       if (document.visibilityState === 'visible') {
         console.log('[Radio] Page became visible (possible refresh detected)');
         
-        // Check if music is currently playing
-        const isAudioPlaying = globalAudio && 
-                            !globalAudio.paused && 
-                            globalAudio.currentTime > 0 && 
-                            !globalAudio.ended &&
-                            globalAudio.src !== '';
-                            
-        if (!isAudioPlaying) {
-          console.log('[Radio] No audio playing after visibility change, starting background music');
+        // More aggressive check - if document just became visible, play music
+        setTimeout(() => {
+          // Always try to play music when page visibility changes
           playRandomBackgroundSong();
-        } else {
-          console.log('[Radio] Audio already playing, no need to restart');
-        }
+        }, 500);
       }
     };
     
@@ -280,27 +265,26 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     const handleLoadEvent = () => {
       console.log('[Radio] Window load event - checking if we need to start music');
       setTimeout(() => {
-        const isAudioPlaying = globalAudio && 
-                            !globalAudio.paused && 
-                            globalAudio.currentTime > 0 && 
-                            !globalAudio.ended &&
-                            globalAudio.src !== '';
-                            
-        if (!isAudioPlaying) {
-          console.log('[Radio] No audio playing after window load, starting background music');
-          playRandomBackgroundSong();
-        }
+        playRandomBackgroundSong();
       }, 1000);
     };
     
-    // Set up both event listeners
+    // Handle page refreshed event
+    const handlePageRefreshed = () => {
+      console.log('[Radio] Received pageRefreshed event, playing background music');
+      playRandomBackgroundSong();
+    };
+    
+    // Set up event listeners for refresh scenarios
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('load', handleLoadEvent);
+    window.addEventListener('pageRefreshed', handlePageRefreshed);
     
     // Clean up on unmount
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('load', handleLoadEvent);
+      window.removeEventListener('pageRefreshed', handlePageRefreshed);
     };
   }, []);
   

@@ -191,6 +191,41 @@ function App() {
     };
   }, [game]);
 
+  // Ensure music plays after page load/refresh
+  useEffect(() => {
+    const handlePageLoad = () => {
+      console.log('[App] Page loaded or refreshed, ensuring music plays');
+      // Create and dispatch a custom event to trigger music playback
+      const event = new CustomEvent('pageRefreshed');
+      window.dispatchEvent(event);
+    };
+
+    // Add listener for the load event
+    window.addEventListener('load', handlePageLoad);
+    
+    // Also handle when the visibility changes (another way to detect refresh)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[App] Page visibility changed to visible');
+        const event = new CustomEvent('pageRefreshed');
+        window.dispatchEvent(event);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibility);
+    
+    // Run once on mount too
+    setTimeout(() => {
+      const event = new CustomEvent('pageRefreshed');
+      window.dispatchEvent(event);
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('load', handlePageLoad);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
   const downloadLogs = () => {
     gameDebugger.downloadLogs();
   };
