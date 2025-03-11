@@ -191,10 +191,11 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           try {
             // Check if music is already playing
             const isAudioPlaying = globalAudio && 
-                                !globalAudio.paused && 
-                                globalAudio.currentTime > 0 && 
-                                !globalAudio.ended;
-                                
+                                  !globalAudio.paused && 
+                                  globalAudio.currentTime > 0 && 
+                                  !globalAudio.ended &&
+                                  globalAudio.src !== '';
+                                  
             if (!isAudioPlaying) {
               const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
               const songToPlay = backgroundSongs[randomIndex];
@@ -234,17 +235,18 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           
           // Use a timeout to ensure DOM is ready
           setTimeout(() => {
-            // Check if any music is already playing
+            // Check if music is currently playing
             const isAudioPlaying = globalAudio && 
-                                !globalAudio.paused && 
-                                globalAudio.currentTime > 0 && 
-                                !globalAudio.ended;
-                                
+                                  !globalAudio.paused && 
+                                  globalAudio.currentTime > 0 && 
+                                  !globalAudio.ended &&
+                                  globalAudio.src !== '';
+                                  
             if (!isAudioPlaying) {
               console.log('[Radio] No audio currently playing, starting background song');
               changeTrack(songToPlay);
             } else {
-              console.log('[Radio] Audio already playing, not starting new song');
+              console.log('[Radio] Audio already playing, no need to restart');
             }
           }, 1000);
         } catch (error) {
@@ -262,7 +264,8 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
         const isAudioPlaying = globalAudio && 
                             !globalAudio.paused && 
                             globalAudio.currentTime > 0 && 
-                            !globalAudio.ended;
+                            !globalAudio.ended &&
+                            globalAudio.src !== '';
                             
         if (!isAudioPlaying) {
           console.log('[Radio] No audio playing after visibility change, starting background music');
@@ -280,7 +283,8 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
         const isAudioPlaying = globalAudio && 
                             !globalAudio.paused && 
                             globalAudio.currentTime > 0 && 
-                            !globalAudio.ended;
+                            !globalAudio.ended &&
+                            globalAudio.src !== '';
                             
         if (!isAudioPlaying) {
           console.log('[Radio] No audio playing after window load, starting background music');
@@ -333,6 +337,34 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
         
         // Force UI update to reflect new unlocked tracks
         setShowPlaylist(showPlaylist);
+      }
+    };
+    
+    // Handle game restart event (for when player dies and restarts)
+    const handleGameRestart = (event: Event) => {
+      console.log('[Radio] Game restart detected');
+      
+      // Find all background songs
+      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
+      if (backgroundSongs.length > 0) {
+        try {
+          // Check if music is playing
+          const isAudioPlaying = globalAudio && 
+                              !globalAudio.paused && 
+                              globalAudio.currentTime > 0 && 
+                              !globalAudio.ended &&
+                              globalAudio.src !== '';
+          
+          // If no music is playing, start a random background song
+          if (!isAudioPlaying) {
+            const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
+            const songToPlay = backgroundSongs[randomIndex];
+            console.log('[Radio] Playing background music after game restart:', songToPlay.title);
+            changeTrack(songToPlay);
+          }
+        } catch (error) {
+          console.error('[Radio] Error handling game restart:', error);
+        }
       }
     };
     
@@ -434,6 +466,17 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     window.addEventListener('stationUnlocked', handleStationUnlock);
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('playTrack', handlePlayTrack);
+    window.addEventListener('gameRestart', handleGameRestart);
+    
+    // Also listen for keydown events to detect space bar press for game restart
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && document.activeElement === document.body) {
+        // This is a potential game restart via space key
+        console.log('[Radio] Space key pressed, checking if music needs to restart');
+        handleGameRestart(new Event('gameRestart'));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
     
     // Check for unlocks immediately
     checkForUnlocks();
@@ -446,6 +489,8 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       window.removeEventListener('stationUnlocked', handleStationUnlock);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('playTrack', handlePlayTrack);
+      window.removeEventListener('gameRestart', handleGameRestart);
+      window.removeEventListener('keydown', handleKeyDown);
       clearInterval(intervalId);
     };
   }, [showPlaylist, isOpen, isPlaying]);

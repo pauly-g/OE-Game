@@ -175,6 +175,22 @@ function App() {
     }
   }, []);
 
+  // Listen for game events to manage background music
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && !game) {
+        // If space is pressed and game is not initialized, might be a game restart
+        window.dispatchEvent(new CustomEvent('gameRestart'));
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [game]);
+
   const downloadLogs = () => {
     gameDebugger.downloadLogs();
   };
