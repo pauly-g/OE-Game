@@ -276,6 +276,17 @@ export class Level1Scene extends Phaser.Scene {
       // Initialize the station tracker
       stationTracker.initializeStations();
       console.log('Initialized stationTracker in Level1Scene');
+      
+      // Force background music to play when scene is created
+      try {
+        gameDebugger.info('Level1Scene: Dispatching forcePlayMusic event');
+        const musicEvent = new CustomEvent('forcePlayMusic', { 
+          detail: { source: 'level1SceneCreate' } 
+        });
+        window.dispatchEvent(musicEvent);
+      } catch (err) {
+        gameDebugger.error('Error dispatching forcePlayMusic event:', err);
+      }
     
       // Get screen dimensions
       const width = this.cameras.main.width;
@@ -1250,6 +1261,18 @@ export class Level1Scene extends Phaser.Scene {
     
     // Clean up any active timers
     this.orderGenerationTimer?.remove();
+    
+    // Stop music playback when game is over
+    try {
+      // Create and dispatch a custom event to stop music
+      const stopMusicEvent = new CustomEvent('stopMusic', {
+        detail: { source: 'gameOver' }
+      });
+      window.dispatchEvent(stopMusicEvent);
+      console.log('Game over - music stop event dispatched');
+    } catch (error) {
+      console.error('Error stopping music on game over:', error);
+    }
     
     // Transition to the GameOverScene with the final score
     this.scene.start('GameOverScene', { score: this.score });

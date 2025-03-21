@@ -197,6 +197,13 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
                                   globalAudio.src !== '';
                                   
             if (!isAudioPlaying) {
+              // First stop any existing playback to prevent duplicated audio
+              if (globalAudio && !globalAudio.paused) {
+                console.log('[Radio] Stopping any current audio before autoplay');
+                globalAudio.pause();
+                globalAudio.currentTime = 0;
+              }
+              
               const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
               const songToPlay = backgroundSongs[randomIndex];
               console.log('[Radio] Auto-playing background song:', songToPlay.title);
@@ -226,6 +233,13 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
       if (backgroundSongs.length > 0) {
         try {
+          // Stop any currently playing audio first to prevent duplicate playback
+          if (globalAudio && !globalAudio.paused) {
+            console.log('[Radio] Stopping current playback before playing new background song');
+            globalAudio.pause();
+            globalAudio.currentTime = 0;
+          }
+          
           // Select a random background song
           const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
           const songToPlay = backgroundSongs[randomIndex];
@@ -235,10 +249,6 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           // Use a timeout to ensure DOM is ready
           setTimeout(() => {
             console.log('[Radio] Starting background song');
-            // Stop any currently playing audio first
-            if (globalAudio && !globalAudio.paused) {
-              globalAudio.pause();
-            }
             // Always play the song - don't check if audio is playing
             changeTrack(songToPlay);
           }, 500);
@@ -321,34 +331,6 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
         
         // Force UI update to reflect new unlocked tracks
         setShowPlaylist(showPlaylist);
-      }
-    };
-    
-    // Handle game restart event (for when player dies and restarts)
-    const handleGameRestart = (event: Event) => {
-      console.log('[Radio] Game restart detected');
-      
-      // Find all background songs
-      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
-      if (backgroundSongs.length > 0) {
-        try {
-          // Check if music is playing
-          const isAudioPlaying = globalAudio && 
-                              !globalAudio.paused && 
-                              globalAudio.currentTime > 0 && 
-                              !globalAudio.ended &&
-                              globalAudio.src !== '';
-          
-          // If no music is playing, start a random background song
-          if (!isAudioPlaying) {
-            const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
-            const songToPlay = backgroundSongs[randomIndex];
-            console.log('[Radio] Playing background music after game restart:', songToPlay.title);
-            changeTrack(songToPlay);
-          }
-        } catch (error) {
-          console.error('[Radio] Error handling game restart:', error);
-        }
       }
     };
     
@@ -446,21 +428,115 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       }
     };
     
+    // Force play music handler - this is the most direct way to ensure music plays
+    const handleForcePlayMusic = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[Radio] Received forcePlayMusic event, source:', 
+                 customEvent.detail?.source || 'unknown');
+      
+      // Find all background songs (warehouse type)
+      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
+      
+      if (backgroundSongs.length > 0) {
+        try {
+          // First stop any current audio if playing to prevent duplicated music
+          if (globalAudio) {
+            if (!globalAudio.paused) {
+              console.log('[Radio] Stopping any current audio before playing new track');
+              globalAudio.pause();
+              globalAudio.currentTime = 0;
+            }
+            
+            // Select a random background song from the warehouse type
+            const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
+            const songToPlay = backgroundSongs[randomIndex];
+            
+            console.log('[Radio] Force playing warehouse song:', songToPlay.title);
+            
+            // Set the source and prepare the audio
+            globalAudio.src = songToPlay.src;
+            globalAudio.load();
+            
+            // Play with a delay to ensure the audio context is ready
+            setTimeout(() => {
+              if (globalAudio) {
+                console.log('[Radio] Attempting to directly play audio');
+                
+                // Set global state and component state
+                globalAudioState.currentTrackId = songToPlay.id;
+                setCurrentTrack(songToPlay);
+                
+                // Play with high volume
+                globalAudio.volume = 1.0;
+                
+                const playPromise = globalAudio.play();
+                if (playPromise !== undefined) {
+                  playPromise
+                    .then(() => {
+                      console.log('[Radio] Successfully force played audio');
+                      setIsPlaying(true);
+                      globalAudioState.isPlaying = true;
+                    })
+                    .catch(error => {
+                      console.error('[Radio] Error playing forced audio:', error);
+                    });
+                }
+              }
+            }, 100);
+          }
+        } catch (error) {
+          console.error('[Radio] Error in forcePlayMusic handler:', error);
+        }
+      }
+    };
+    
+    // Handle game restart that needs stations to appear correctly
+    const handleGameRestartWithStations = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[Radio] Received gameRestartWithStations event');
+      
+      // Force stations to be re-initialized from storage
+      stationTracker.initializeStations();
+      
+      // Force UI updates for playlist
+      setShowPlaylist(false);
+      setTimeout(() => setShowPlaylist(true), 50);
+      
+      // Update the current track
+      updateCurrentTrackFromGlobal();
+      
+      // Re-check for unlocks to make sure everything is in sync
+      const stations = stationTracker.logUnlockedStations();
+      console.log('[Radio] Stations after game restart:', stations);
+    };
+    
+    // Handle stop music event (from game over or other sources)
+    const handleStopMusic = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[Radio] Received stopMusic event, source:', 
+                 customEvent.detail?.source || 'unknown');
+                 
+      // Stop any currently playing audio
+      if (globalAudio) {
+        if (!globalAudio.paused) {
+          console.log('[Radio] Stopping music playback');
+          globalAudio.pause();
+          globalAudio.currentTime = 0;
+        }
+        
+        // Update state
+        globalAudioState.isPlaying = false;
+        setIsPlaying(false);
+      }
+    };
+    
     // Set up all event listeners
     window.addEventListener('stationUnlocked', handleStationUnlock);
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('playTrack', handlePlayTrack);
-    window.addEventListener('gameRestart', handleGameRestart);
-    
-    // Also listen for keydown events to detect space bar press for game restart
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === 'Space' && document.activeElement === document.body) {
-        // This is a potential game restart via space key
-        console.log('[Radio] Space key pressed, checking if music needs to restart');
-        handleGameRestart(new Event('gameRestart'));
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('forcePlayMusic', handleForcePlayMusic);
+    window.addEventListener('gameRestartWithStations', handleGameRestartWithStations);
+    window.addEventListener('stopMusic', handleStopMusic);
     
     // Check for unlocks immediately
     checkForUnlocks();
@@ -468,13 +544,15 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     // Set up periodic checks for unlocks
     const intervalId = setInterval(checkForUnlocks, 3000);
     
+    // Return cleanup function
     return () => {
       // Clean up all event listeners
       window.removeEventListener('stationUnlocked', handleStationUnlock);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('playTrack', handlePlayTrack);
-      window.removeEventListener('gameRestart', handleGameRestart);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('forcePlayMusic', handleForcePlayMusic);
+      window.removeEventListener('gameRestartWithStations', handleGameRestartWithStations);
+      window.removeEventListener('stopMusic', handleStopMusic);
       clearInterval(intervalId);
     };
   }, [showPlaylist, isOpen, isPlaying]);
