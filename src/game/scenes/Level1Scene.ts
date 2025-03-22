@@ -114,6 +114,8 @@ export class Level1Scene extends Phaser.Scene {
   private animationFrameDuration: number = 125; // 8 frames per second = 125ms per frame
   private powerUpSwitchBounds!: Phaser.Geom.Rectangle;
   private powerUpReadyText!: Phaser.GameObjects.Text;
+  private powerUpCircularText: Phaser.GameObjects.Container | null = null;
+  private circularTextAngle: number = 0;
   private lastFrameTime = 0;
   private buttonFlashTimer: number = 0;
   private buttonFlashInterval: number = 1000; // 1 second interval
@@ -982,6 +984,9 @@ export class Level1Scene extends Phaser.Scene {
       
       // Handle button flashing when power-up is available
       this.updateButtonFlashing(delta);
+      
+      // Update circular text animation if it exists
+      this.updateCircularText(delta);
       
       // Check for 'd' key to activate powerup (cheat)
       if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
@@ -2210,9 +2215,24 @@ export class Level1Scene extends Phaser.Scene {
     
     console.log("Power-up is now available!");
     
-    // Show the "POWER UP READY" text
+    // Create the circular text around the button (replacing the standard text)
     if (this.powerUpReadyText) {
-      this.powerUpReadyText.setVisible(true);
+      this.powerUpReadyText.setVisible(false); // Hide the regular text
+    }
+    
+    // If we already have a circular text, destroy it first
+    if (this.powerUpCircularText) {
+      this.powerUpCircularText.destroy();
+    }
+    
+    // Create new circular text
+    if (this.powerUpButtonSprite) {
+      this.powerUpCircularText = this.createCircularText(
+        'Order Editing Power',
+        this.powerUpButtonSprite.x,
+        this.powerUpButtonSprite.y,
+        70 // Radius around the button
+      );
     }
     
     // Start power-up button flashing/animation
@@ -2238,6 +2258,12 @@ export class Level1Scene extends Phaser.Scene {
     // Hide the "POWER UP READY" text when activated
     if (this.powerUpReadyText) {
       this.powerUpReadyText.setVisible(false);
+    }
+    
+    // Hide the circular text
+    if (this.powerUpCircularText) {
+      this.powerUpCircularText.destroy();
+      this.powerUpCircularText = null;
     }
     
     console.log("Power-up activated!");
@@ -3325,5 +3351,79 @@ export class Level1Scene extends Phaser.Scene {
       }
     });
     console.log('Sync complete.');
+  }
+
+  private createCircularText(text: string, centerX: number, centerY: number, radius: number): Phaser.GameObjects.Container {
+    // Create main container
+    const container = this.add.container(centerX, centerY);
+    container.setDepth(11);
+    
+    // Use shorter text
+    const displayText = 'Order Editing Power';
+    const characters = displayText.split('');
+    
+    // Calculate angle step - distribute only around 80% of the circle to create a gap
+    const angleStep = (Math.PI * 1.6) / characters.length;
+    // Start from the top, but offset to center the text arc
+    const startAngle = -Math.PI/2 - (angleStep * characters.length / 2) + (Math.PI * 0.2);
+    
+    characters.forEach((char, index) => {
+      const angle = startAngle + (index * angleStep);
+      const x = radius * Math.cos(angle);
+      const y = radius * Math.sin(angle);
+      
+      const charText = this.add.text(x, y, char, {
+        fontSize: '22px', // Slightly larger
+        fontStyle: 'bold',
+        color: '#00ff00',
+        stroke: '#000000',
+        strokeThickness: 3
+      }).setOrigin(0.5);
+      
+      // Add glow effect with shadow
+      charText.setShadow(0, 0, '#00ff00', 8, true, true);
+      
+      // Rotate each character to align with the curve
+      charText.setRotation(angle + Math.PI/2);
+      container.add(charText);
+    });
+    
+    return container;
+  }
+
+  private updateCircularText(delta: number) {
+    if (this.powerUpCircularText) {
+      // Use a consistent, smooth rotation speed that's frame-rate independent
+      // Slower rotation for a more elegant effect (0.0002 instead of 0.0005)
+      this.circularTextAngle += 0.0002 * delta;
+      
+      // Get all text objects in the container
+      const textObjects = this.powerUpCircularText.getAll();
+      const displayText = 'Order Editing Power';
+      const characters = displayText.length;
+      
+      // Calculate angle step with the gap - to match creation logic
+      const angleStep = (Math.PI * 1.6) / characters;
+      const startAngle = -Math.PI/2 - (angleStep * characters / 2) + (Math.PI * 0.2);
+      
+      const radius = 70; // Same radius used when creating
+      
+      // Update each character's position with smoother interpolation
+      textObjects.forEach((obj, index) => {
+        const text = obj as Phaser.GameObjects.Text;
+        const angle = this.circularTextAngle + startAngle + (index * angleStep);
+        
+        // Use Math.round to prevent subpixel positioning (reduces flickering)
+        const x = Math.round(radius * Math.cos(angle) * 10) / 10;
+        const y = Math.round(radius * Math.sin(angle) * 10) / 10;
+        
+        text.setPosition(x, y);
+        text.setRotation(angle + Math.PI/2);
+        
+        // Pulse the glow slightly based on position
+        const glowIntensity = (Math.sin(this.circularTextAngle * 2 + index * 0.2) + 1) * 4 + 5; // Range 5-13
+        text.setShadowBlur(glowIntensity);
+      });
+    }
   }
 }
