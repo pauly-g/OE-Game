@@ -100,6 +100,7 @@ export class Level1Scene extends Phaser.Scene {
   private powerUpDuration: number = 30000; // 30 seconds of power-up time
   private powerUpText!: Phaser.GameObjects.Text;
   private stationUnlockText!: Phaser.GameObjects.Text;
+  private stationUnlockContainer!: Phaser.GameObjects.Container;
   private powerUpSwitch!: Phaser.GameObjects.Container;
   private powerUpLight!: Phaser.GameObjects.Rectangle;
   private powerUpLever!: Phaser.GameObjects.Rectangle;
@@ -132,6 +133,36 @@ export class Level1Scene extends Phaser.Scene {
 
   private totalEditsCompleted: number = 0;
   private firstSongUnlocked: boolean = false;
+  
+  // Add a function to create confetti particle effect
+  private createConfettiEffect(x: number, y: number) {
+    // Create a particle emitter for the confetti effect
+    const emitter = this.add.particles(0, 0, 'pixel', {
+      x: x,
+      y: y,
+      speed: { min: 200, max: 300 },
+      angle: { min: 250, max: 290 },
+      scale: { start: 1, end: 0 },
+      blendMode: 'ADD',
+      lifespan: 2000,
+      gravityY: 300,
+      quantity: 1,
+      frequency: 50, // ms between particles
+      tint: [ 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF ]
+    });
+    
+    // Stop emission after 1 second
+    this.time.delayedCall(1000, () => {
+      emitter.stop();
+      
+      // Remove the emitter after particles fade
+      this.time.delayedCall(2000, () => {
+        emitter.destroy();
+      });
+    });
+    
+    return emitter;
+  }
 
   constructor() {
     super({ key: 'Level1Scene' });
@@ -224,6 +255,13 @@ export class Level1Scene extends Phaser.Scene {
       this.load.image('button active-flash', 'game/Button/button active-flash.png');
       this.load.image('button-flash', 'game/Button/button-flash.png');
       this.load.image('button-flash2', 'game/Button/button-flash2.png');
+      
+      // Create a pixel texture for particles
+      this.textures.generate('pixel', {
+        data: ['1'],
+        pixelWidth: 2,
+        pixelHeight: 2
+      });
       
       gameDebugger.info('Level1Scene preload completed');
     } catch (error) {
@@ -420,12 +458,48 @@ export class Level1Scene extends Phaser.Scene {
       strokeThickness: 3
     }).setOrigin(0.5).setVisible(false);
 
-    this.stationUnlockText = this.add.text(width * 0.5, height * 0.4, '', {
-      fontSize: '32px',
-      color: '#ffff00',
+    // Create a container for the station unlock notification
+    this.stationUnlockContainer = this.add.container(width * 0.5, height * 0.4);
+    this.stationUnlockContainer.setVisible(false);
+    
+    // Create pixel-art wood sign style notification (similar to station signs)
+    // Create shadow for depth
+    const signShadow = this.add.rectangle(4, 4, 500, 60, 0x000000, 0.4).setOrigin(0.5);
+    
+    // Create dark wood background
+    const signBackground = this.add.rectangle(0, 0, 500, 60, 0x3A2921).setOrigin(0.5);
+    
+    // Create wood border (top, right, bottom, left)
+    const borderTop = this.add.rectangle(0, -30, 500, 4, 0x6B4C3B).setOrigin(0.5, 0.5);
+    const borderBottom = this.add.rectangle(0, 30, 500, 4, 0x6B4C3B).setOrigin(0.5, 0.5);
+    const borderLeft = this.add.rectangle(-250, 0, 4, 60, 0x6B4C3B).setOrigin(0.5, 0.5);
+    const borderRight = this.add.rectangle(250, 0, 4, 60, 0x6B4C3B).setOrigin(0.5, 0.5);
+    
+    // Create simple end caps for the wooden sign
+    const leftCap = this.add.rectangle(-250, 0, 12, 40, 0x5C3C2E).setOrigin(0.5, 0.5);
+    const rightCap = this.add.rectangle(250, 0, 12, 40, 0x5C3C2E).setOrigin(0.5, 0.5);
+    
+    // Create the text with proper setup
+    this.stationUnlockText = this.add.text(0, 0, '', {
+      fontSize: '22px', // Slightly smaller font
+      color: '#ffffff',
       stroke: '#000000',
-      strokeThickness: 3
-    }).setOrigin(0.5).setVisible(false);
+      strokeThickness: 2,
+      align: 'center'
+    }).setOrigin(0.5);
+    
+    // Add all elements to container in correct layering order
+    this.stationUnlockContainer.add([
+      signShadow,
+      signBackground,
+      borderTop,
+      borderBottom,
+      borderLeft,
+      borderRight,
+      leftCap,
+      rightCap,
+      this.stationUnlockText
+    ]);
 
     // Create power-up button (positioned to the right side of the screen)
     const buttonX = width * 0.76; // 76% from the left (removed the +100px)
@@ -2491,19 +2565,25 @@ export class Level1Scene extends Phaser.Scene {
         });
       });
       
-      // Display an announcement text about the new station
-      this.stationUnlockText.setText(`${this.getStationIcon(nextStation.type)} New station unlocked! ${this.getStationIcon(nextStation.type)}`);
-      this.stationUnlockText.setVisible(true);
+      // Display an announcement with the container instead of just text
+      const stationName = this.getStationName(nextStation.type);
+      const stationIcon = this.getStationIcon(nextStation.type);
       
-      // Fade out the announcement after a delay
-      this.time.delayedCall(3000, () => {
+      // Set text with more compact spacing so icons stay inside the board
+      this.stationUnlockText.setText(`${stationIcon} New Station: "${stationName}" ${stationIcon}`);
+      
+      // Make notification visible
+      this.stationUnlockContainer.setVisible(true);
+      
+      // Fade out the announcement after 5 seconds (extended time for screenshots)
+      this.time.delayedCall(5000, () => {
         this.tweens.add({
-          targets: this.stationUnlockText,
+          targets: this.stationUnlockContainer,
           alpha: 0,
           duration: 500,
           onComplete: () => {
-            this.stationUnlockText.setVisible(false);
-            this.stationUnlockText.setAlpha(1);
+            this.stationUnlockContainer.setVisible(false);
+            this.stationUnlockContainer.setAlpha(1);
           }
         });
       });
@@ -2874,20 +2954,23 @@ export class Level1Scene extends Phaser.Scene {
     // Update the count of when stations were last unlocked
     this.lastUnlockedAtEditCount = this.totalEditsApplied;
     
-    // Show notification
-    this.stationUnlockText.setText('🔓 All stations unlocked! 🔓');
-    this.stationUnlockText.setVisible(true);
+    // Show notification with the container with compact spacing
+    this.stationUnlockText.setText(`🔓 All Stations Unlocked! 🔓`);
     
-    // Fade out the notification after a delay
-    this.tweens.add({
-      targets: this.stationUnlockText,
-      alpha: 0,
-      duration: 2000,
-      delay: 1500,
-      onComplete: () => {
-        this.stationUnlockText.setVisible(false);
-        this.stationUnlockText.setAlpha(1);
-      }
+    // Make notification visible
+    this.stationUnlockContainer.setVisible(true);
+    
+    // Fade out the notification after 5 seconds
+    this.time.delayedCall(5000, () => {
+      this.tweens.add({
+        targets: this.stationUnlockContainer,
+        alpha: 0,
+        duration: 500,
+        onComplete: () => {
+          this.stationUnlockContainer.setVisible(false);
+          this.stationUnlockContainer.setAlpha(1);
+        }
+      });
     });
     
     // Verify that all stations are visible
