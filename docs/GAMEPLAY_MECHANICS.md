@@ -4,6 +4,23 @@
 
 "Order Editing - The Game" is a fast-paced arcade-style game where players handle customer order edits on a virtual conveyor belt. As a warehouse worker, your job is to collect various edits from stations around the warehouse and apply them to orders before they leave the conveyor belt.
 
+## Technology Stack
+
+### Current Implementation
+- **Frontend Framework**: React.js 18
+- **Game Engine**: Phaser 3.60
+- **Programming Languages**: TypeScript 5.0, JavaScript (ES6+)
+- **Build System**: Vite 5.4
+- **Styling**: Tailwind CSS 3.3
+- **Version Control**: Git
+
+### Planned Future Integrations
+- **Database**: Firebase Firestore for user data, leaderboards, and game state persistence
+- **Authentication**: Firebase Authentication for user login and profile management
+- **Hosting**: Vercel for automated deployments and global edge network distribution
+- **Security**: Vercel Edge Functions and Firebase Security Rules for backend protection
+- **Analytics**: Firebase Analytics for player behavior insights and game performance metrics
+
 ## Game Objectives
 
 - Apply the correct edits to each order box on the conveyor belt
