@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import ReactDOM from 'react-dom';
 import { tracks, Track } from '../data/musicData';
 import { stationTracker } from '../game/utils/stationTracker';
 import './Radio.css';
@@ -47,7 +48,10 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressTimerRef = useRef<number | null>(null);
   const trackChangeListenerRef = useRef<(() => void) | null>(null);
-
+  
+  // Keep track of game container for mini-player
+  const [gameContainer, setGameContainer] = useState<HTMLElement | null>(null);
+  
   // Initialize global audio element if it doesn't exist
   useEffect(() => {
     console.log('[Radio] Initializing audio element, global audio exists?', globalAudio ? 'YES' : 'NO');
@@ -1159,6 +1163,14 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     }
   }));
 
+  // Find game container on mount
+  useEffect(() => {
+    const container = document.getElementById('game-container');
+    if (container) {
+      setGameContainer(container);
+    }
+  }, []);
+
   return (
     <div className={`radio-player ${isOpen ? 'open' : ''}`}>
       <div className="radio-content">
@@ -1312,9 +1324,14 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
             </div>
           </div>
         )}
+      </div>
 
-        {/* Mini player when main UI is closed but music is playing */}
-        {!isOpen && isPlaying && currentTrack && (
+      {/* 
+        Mini player is only rendered when not open and a track is playing
+        We use React's portal API to render it into the button container
+      */}
+      {!isOpen && isPlaying && currentTrack && document.querySelector('.mt-4.flex.gap-2') && 
+        ReactDOM.createPortal(
           <div className="mini-player">
             <button 
               onClick={togglePlay}
@@ -1323,19 +1340,23 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
             >
               ⏸️
             </button>
-            <div className="mini-track-info">
-              {currentTrack.title} - {currentTrack.artist}
-            </div>
-            <button
-              onClick={() => onClose()}
-              className="radio-button"
+            <div 
+              className="mini-track-info"
+              onClick={() => onClose()}  
               title="Open Player"
+              style={{ cursor: 'pointer' }}
             >
-              🔽
-            </button>
-          </div>
-        )}
-      </div>
+              <div className="scrolling-text-container">
+                <div className="scrolling-text">
+                  {currentTrack.title} - {currentTrack.artist} &nbsp;&nbsp;&nbsp;&nbsp;
+                  {currentTrack.title} - {currentTrack.artist}
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.querySelector('.mt-4.flex.gap-2') as Element
+        )
+      }
     </div>
   );
 });

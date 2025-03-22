@@ -283,28 +283,80 @@
   max-height: 200px; /* Limit height for better vertical space usage */
 }
 
+.radio-player {
+  position: relative;
+  z-index: 100;
+}
+
+/* For the main radio UI */
+.radio-content {
+  position: relative;
+}
+
 .mini-player {
-  position: fixed;
-  bottom: 10px;
-  right: 10px;
-  background-color: #232323;
-  border: 2px solid #353535;
-  padding: 8px;
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  z-index: 50;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  background-color: #6d28d9;  /* Match indigo-700 from RadioButton */
+  border-radius: 0.5rem;      /* Match other buttons */
+  padding: 0.5rem 1rem;       /* Match other buttons */
+  color: white;
+  cursor: pointer;
+  transition: background-color 300ms;
   font-family: 'Press Start 2P', monospace;
   font-size: 10px;
+  min-width: 200px;
+  max-width: 300px;
+  border: 2px solid #5b21b6; /* Add border to match RadioButton */
+  box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 0.3); /* Match RadioButton shadow */
+  height: 40px; /* Match the RadioButton height */
+}
+
+.mini-player:hover {
+  background-color: #5b21b6;  /* Match indigo-600 hover state */
+}
+
+.mini-player .radio-button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
 }
 
 .mini-track-info {
   max-width: 200px;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  color: #33ff33;
+  color: white;
+  flex: 1;
+  position: relative;
+}
+
+/* Remove the before pseudo-element with the emoji */
+
+.scrolling-text-container {
+  overflow: hidden;
+  width: 100%;
+  white-space: nowrap;
+}
+
+/* Improved infinite scrolling with better keyframes */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); } /* Only move half way to loop seamlessly */
+}
+
+.scrolling-text {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 25s linear infinite; /* Slowed down from 15s to 25s */
+  animation-delay: 5s; /* Hold for 5 seconds before starting animation */
+  width: max-content;
 }
 
 /* Hidden but still working audio player */

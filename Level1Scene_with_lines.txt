@@ -1,0 +1,2990 @@
+     1	/**
+     2	 * Level 1 Scene - Main Game Logic
+     3	 * 
+     4	 * Changes:
+     5	 * - Initial setup: Basic game mechanics and UI
+     6	 * - Added animations for stations and improved their positioning
+     7	 * - Updated player pick up and drop edit logic
+     8	 * - Enhanced station interactions with new functionality
+     9	 * - Enhanced UI for edit handling including text, outline, and popup messages
+    10	 * - Enhanced station graphics with standardized dimensions and centering
+    11	 * - Fixed power-up switch interaction which couldn't be triggered due to typo
+    12	 * - Improved conveyer belt physics that pushes player towards right
+    13	 * - Added helper functions and dynamic text for clearer UI feedback
+    14	 * - Updated order generation logic with improved handling
+    15	 * - Adjusted collision detection for more precise interactions
+    16	 * - Enhanced unlockNextStation with an improved animation, announcement, and reset of count
+    17	 * - Flipped conveyor belt arrows to point to the right instead of left
+    18	 * - Added conveyor belt push physics to move player rightward
+    19	 * - Improved station collision handling to prevent walking through stations and fix sliding issues
+    20	 * - Centered stations across the screen with better visibility
+    21	 * - Fixed the issue with edits being destroyed by only destroying them when successfully applied to an order
+    22	 * - Added visual feedback for invalid edits
+    23	 * - Implemented a cleaner discard edit effect with particle animations
+    24	 * - Fixed space bar handling to properly pick up edits with a press and carry them until released
+    25	 * - Enhanced tryApplyEditToOrder and discardEdit methods to properly handle dropping edits
+    26	 * - Enhanced pickupEdit method with better visual feedback and logging
+    27	 * - Fixed player movement: added screen boundaries, improved station interaction, and prevented sliding
+    28	 * - Fixed the movement code to allow the player to move when carrying an edit and when near stations
+    29	 * - IMPORTANT: Player must always be able to move when carrying an edit and near stations
+    30	 * - IMPORTANT: Character animations depend on tracking the lastDirection and lastMoving properties
+    31	 * - IMPORTANT: Proper collision detection with stations prevents walking through and sliding issues
+    32	 * - Fixed station unlocking to only reveal one station at a time, every 5 completed edits
+    33	 * - Added tracking of previous player position to properly handle collisions
+    34	 * - Fixed collision handling to prevent both sliding and walking through stations
+    35	 * - Fixed conveyor belt collision to prevent player from walking onto it
+    36	 */
+    37	import Phaser from 'phaser';
+    38	import { gameDebugger } from '../utils/debug';
+    39	import { SpeechBubble } from '../ui/SpeechBubble';
+    40	import { regularComments, powerUpComments } from '../data/BuyerComments';
+    41	
+    42	interface Order {
+    43	  id: string;
+    44	  types: string[];
+    45	  completedEdits: string[];
+    46	  x: number;
+    47	  y: number;
+    48	  container: Phaser.GameObjects.Container;
+    49	  isComplete: boolean;
+    50	  width: number;
+    51	  height: number;
+    52	  icons?: Phaser.GameObjects.Text[]; // Add icons property
+    53	  createdDuringPowerUp?: boolean; // Add createdDuringPowerUp property
+    54	  hasComment?: boolean; // Tracks if a comment has been shown for this order
+    55	}
+    56	
+    57	interface Station {
+    58	  type: string;
+    59	  container: Phaser.GameObjects.Container;
+    60	  isUnlocked: boolean;
+    61	  bounds: Phaser.Geom.Rectangle | null;
+    62	  sign: Phaser.GameObjects.Container;
+    63	}
+    64	
+    65	export class Level1Scene extends Phaser.Scene {
+    66	  private player!: Phaser.GameObjects.Sprite;
+    67	  private orders: Order[] = [];
+    68	  private stations: Station[] = [];
+    69	  private score: number = 0;
+    70	  private scoreText!: Phaser.GameObjects.Text;
+    71	  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    72	  private spaceKey!: Phaser.Input.Keyboard.Key;
+    73	  private dKey!: Phaser.Input.Keyboard.Key;
+    74	  private cKey!: Phaser.Input.Keyboard.Key;
+    75	  private fKey!: Phaser.Input.Keyboard.Key; // New f key for cheat code
+    76	  private playerSpeed: number = 4; // Reduce from 8 to 4 for slower movement
+    77	  private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
+    78	  private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
+    79	  private ordersCompleted: number = 0;
+    80	  private totalEditsApplied: number = 0;
+    81	  private manualOrdersCompleted: number = 0; // Track manually completed orders
+    82	  private lastUnlockedAtEditCount: number = 0;
+    83	  private lives: number = 3;
+    84	  private livesContainer!: Phaser.GameObjects.Container;
+    85	  private failedOrders: number = 0;
+    86	  private lastSpaceState: boolean = false;
+    87	  private orderGenerationTimer: Phaser.Time.TimerEvent | null = null;
+    88	  private nextOrderDelay: number = 5000; // Longer initial delay (was 3000)
+    89	  private hamishSprite: Phaser.GameObjects.Sprite;
+    90	  private kirilSprite: Phaser.GameObjects.Sprite;
+    91	  private oeLogoSprite: Phaser.GameObjects.Sprite; // Add oeLogoSprite property
+    92	  private orderSpeedMultiplier: number = 1.0;
+    93	  private maxOrderSpeedMultiplier: number = 2.0;
+    94	  private conveyorSpeed: number = 0.5; // Much slower initial speed (was 2)
+    95	  private maxConveyorSpeed: number = 3; // Lower max speed (was 4)
+    96	  private debug: boolean = false;
+    97	  private powerUpActive: boolean = false;
+    98	  private powerUpTimer: number = 0;
+    99	  private powerUpDuration: number = 30000; // 30 seconds of power-up time
+   100	  private powerUpText!: Phaser.GameObjects.Text;
+   101	  private stationUnlockText!: Phaser.GameObjects.Text;
+   102	  private powerUpSwitch!: Phaser.GameObjects.Container;
+   103	  private powerUpLight!: Phaser.GameObjects.Rectangle;
+   104	  private powerUpLever!: Phaser.GameObjects.Rectangle;
+   105	  private powerUpAvailable: boolean = false;
+   106	  private powerUpCountdownText!: Phaser.GameObjects.Text;
+   107	  private conveyorBelt!: Phaser.GameObjects.Rectangle;
+   108	  private lastDirection: string = 'down';
+   109	  private lastMoving: boolean = false;
+   110	  private animationTime: number = 0;
+   111	  private currentAnimationFrame: number = 0; // Match the main branch value
+   112	  private animationFrameDuration: number = 125; // 8 frames per second = 125ms per frame
+   113	  private powerUpSwitchBounds!: Phaser.Geom.Rectangle;
+   114	  private lastFrameTime = 0;
+   115	  private buttonFlashTimer: number = 0;
+   116	  private buttonFlashInterval: number = 1000; // 1 second interval
+   117	  private buttonFlashState: boolean = false;
+   118	  private playerOnButton: boolean = false;
+   119	  private warningShowing: boolean = false;
+   120	  private orderMinSpacing: number = 40; // Minimum space between orders
+   121	  private playerCollisionVisualizer?: Phaser.GameObjects.Rectangle;
+   122	  private showDebugCollisions: boolean = false; // Set to true to see collision boundaries
+   123	
+   124	  // Speech bubble related properties
+   125	  private activeBubbles: Map<string, SpeechBubble> = new Map();
+   126	  private screenWidthThreshold: number = 0; // Will be set in create method
+   127	  private commentsEnabled: boolean = true;
+   128	  private recentComments: string[] = []; // Track recently shown comments
+   129	  private maxRecentComments: number = 5; // How many recent comments to track
+   130	
+   131	  constructor() {
+   132	    super({ key: 'Level1Scene' });
+   133	    console.log('Level1Scene constructor called');
+   134	    this.powerUpDuration = 30000; // 30 seconds of power-up time
+   135	    this.lives = 3;
+   136	  }
+   137	
+   138	  init(data?: { reset: boolean }) {
+   139	    console.log('Level1Scene init called', data);
+   140	    if (data?.reset) {
+   141	      this.reset();
+   142	    }
+   143	  }
+   144	
+   145	  preload() {
+   146	    console.log('Level1Scene preload started');
+   147	    try {
+   148	      gameDebugger.info('Starting to load player animations');
+   149	      // Load player animations
+   150	      const directions = ['up', 'down', 'left', 'right'];
+   151	      directions.forEach(direction => {
+   152	        // Load all 6 frames for each animation
+   153	        for (let i = 1; i <= 6; i++) {
+   154	          // Load idle animations with proper spaces in filenames
+   155	          const idleKey = `idle ${direction} ${i}`;
+   156	          this.load.image(idleKey, `game/Sprite Images/idle ${direction} ${i}.png`)
+   157	            .on('filecomplete', () => {
+   158	              gameDebugger.info(`Loaded ${idleKey}`);
+   159	            })
+   160	            .on('loaderror', (key: string, _file: string, error: Error) => {
+   161	              console.error(`Failed to load ${key}: ${error.message}`);
+   162	              // Load fallback sprite if main sprite fails
+   163	              this.load.image(idleKey, 'game/Sprite Images/fallback.png');
+   164	            });
+   165	          
+   166	          // Load walk animations with proper spaces in filenames
+   167	          const walkKey = `walk ${direction} ${i}`;
+   168	          this.load.image(walkKey, `game/Sprite Images/walk ${direction} ${i}.png`)
+   169	            .on('filecomplete', () => {
+   170	              gameDebugger.info(`Loaded ${walkKey}`);
+   171	            })
+   172	            .on('loaderror', (key: string, _file: string, error: Error) => {
+   173	              console.error(`Failed to load ${key}: ${error.message}`);
+   174	              // Load fallback sprite if main sprite fails
+   175	              this.load.image(walkKey, 'game/Sprite Images/fallback.png');
+   176	            });
+   177	        }
+   178	      });
+   179	
+   180	      // Load background
+   181	      this.load.image('background', 'game/Background/Background.webp')
+   182	        .on('filecomplete', () => {
+   183	          gameDebugger.info('Background loaded');
+   184	        })
+   185	        .on('loaderror', (_key: string, _file: string, error: Error) => {
+   186	          console.error(`Failed to load background: ${error.message}`);
+   187	        });
+   188	        
+   189	      // Load conveyor belt assets
+   190	      this.load.image('conveyor-belt-tile', 'game/ConveyorBelt/conveyor-belt-tile.svg')
+   191	        .on('filecomplete', () => {
+   192	          gameDebugger.info('Conveyor belt tile loaded');
+   193	        })
+   194	        .on('loaderror', (_key: string, _file: string, error: Error) => {
+   195	          console.error(`Failed to load conveyor belt tile: ${error.message}`);
+   196	        });
+   197	        
+   198	      this.load.image('conveyor-arrow', 'game/ConveyorBelt/conveyor-arrow.svg')
+   199	        .on('filecomplete', () => {
+   200	          gameDebugger.info('Conveyor arrow loaded');
+   201	        })
+   202	        .on('loaderror', (_key: string, _file: string, error: Error) => {
+   203	          console.error(`Failed to load conveyor arrow: ${error.message}`);
+   204	        });
+   205	
+   206	      // Load power-up and cheat sounds
+   207	      this.sound.add('powerup');
+   208	      this.sound.add('powerdown');
+   209	      
+   210	      // Load Hamish and Kiril images
+   211	      this.load.image('hamish', 'game/Hamish and Kiril/Hamish.png');
+   212	      this.load.image('kiril', 'game/Hamish and Kiril/Kiril.png');
+   213	      this.load.image('oelogo', 'game/Hamish and Kiril/OELogoHiRes.png');
+   214	      
+   215	      // Load power-up button images
+   216	      this.load.image('button-idle', 'game/Button/button.png');
+   217	      this.load.image('button-pressed', 'game/Button/button pressed.png');
+   218	      this.load.image('button-active', 'game/Button/button-active.png');
+   219	      this.load.image('button active-flash', 'game/Button/button active-flash.png');
+   220	      this.load.image('button-flash', 'game/Button/button-flash.png');
+   221	      this.load.image('button-flash2', 'game/Button/button-flash2.png');
+   222	      
+   223	      gameDebugger.info('Level1Scene preload completed');
+   224	    } catch (error) {
+   225	      console.error('Error in preload:', error);
+   226	    }
+   227	  }
+   228	
+   229	  private createPlayerAnimations() {
+   230	    try {
+   231	      console.log('Creating player animations');
+   232	      const directions = ['up', 'down', 'left', 'right'];
+   233	      
+   234	      // Clear any existing animations first
+   235	      this.anims.getAnimationNames().forEach(key => {
+   236	        if (key.startsWith('idle') || key.startsWith('walk')) {
+   237	          this.anims.remove(key);
+   238	          console.log(`Removed existing animation: ${key}`);
+   239	        }
+   240	      });
+   241	      
+   242	      // Log all available texture keys to verify they're loaded properly
+   243	      const textureKeys = this.textures.getTextureKeys();
+   244	      console.log(`Available textures (${textureKeys.length} total)`);
+   245	      
+   246	      // Log the first few textures to confirm they're named correctly
+   247	      textureKeys.slice(0, 20).forEach(key => {
+   248	        console.log(`- Texture: ${key}`);
+   249	      });
+   250	      
+   251	      // We're no longer creating animations since we're manually cycling through textures
+   252	      console.log('Using manual texture animation instead of Phaser animations');
+   253	      
+   254	    } catch (error) {
+   255	      console.error('Error in animation setup:', error);
+   256	    }
+   257	  }
+   258	
+   259	  create() {
+   260	    console.log('Level1Scene create started');
+   261	    gameDebugger.info('Starting create method in Level1Scene');
+   262	    
+   263	    try {
+   264	      // Get screen dimensions
+   265	      const width = this.cameras.main.width;
+   266	      const height = this.cameras.main.height;
+   267	      
+   268	      // Calculate screen width threshold for comments (1/3 of the screen width)
+   269	      this.screenWidthThreshold = width / 3;
+   270	      
+   271	      // Initialize game state
+   272	      this.score = 0;
+   273	      this.lives = 3;
+   274	      
+   275	      // Add background image if loaded
+   276	      if (this.textures.exists('background')) {
+   277	        const background = this.add.image(width / 2, height / 2, 'background');
+   278	        background.setDisplaySize(width, height);
+   279	        background.setDepth(-1);
+   280	      } else {
+   281	        console.warn('Background texture not loaded, using fallback color');
+   282	        this.cameras.main.setBackgroundColor('#1a202c');
+   283	      }
+   284	
+   285	      // Create full-width conveyor belt
+   286	      const conveyorWidth = width * 0.95;
+   287	      const conveyorX = width * 0.5;
+   288	      const conveyorY = height * 0.85;
+   289	      
+   290	      // Create the conveyor belt using the tileable texture
+   291	      if (this.textures.exists('conveyor-belt-tile')) {
+   292	        // Create a tiled sprite for the conveyor belt
+   293	        this.conveyorBelt = this.add.tileSprite(conveyorX, conveyorY, conveyorWidth, 40, 'conveyor-belt-tile') as any;
+   294	        this.conveyorBelt.setDepth(5);
+   295	        
+   296	        // Store the conveyor belt bounds for collision detection
+   297	        this.conveyorBounds = {
+   298	          top: conveyorY - 20,    // Top of conveyor
+   299	          bottom: conveyorY + 20, // Bottom of conveyor
+   300	          left: conveyorX - conveyorWidth/2,   // Left edge
+   301	          right: conveyorX + conveyorWidth/2   // Right edge
+   302	        };
+   303	      } else {
+   304	        // Fallback to the original rectangle implementation
+   305	        console.warn('Conveyor belt texture not loaded, using fallback rectangle');
+   306	        this.conveyorBelt = this.add.rectangle(conveyorX, conveyorY, conveyorWidth, 40, 0x444444)
+   307	          .setStrokeStyle(2, 0x666666);
+   308	      }
+   309	      
+   310	      this.createConveyorArrows(conveyorWidth, conveyorX, conveyorY);
+   311	
+   312	      // Create player animations first
+   313	      this.createPlayerAnimations();
+   314	
+   315	      // Create player sprite after ensuring textures exist
+   316	      if (this.textures.exists('idle down 1')) {
+   317	        this.player = this.add.sprite(width * 0.5, height * 0.55, 'idle down 1');
+   318	        this.player.setScale(4.0); // Increase the player scale to be taller than orders
+   319	        this.player.setDepth(20); // Set depth to be behind orders but in front of most elements
+   320	        
+   321	        this.lastDirection = 'down'; // Set initial direction
+   322	        this.lastMoving = false;
+   323	        this.currentAnimationFrame = 1;
+   324	        this.animationTime = 0;
+   325	        
+   326	        // Log available textures for debugging
+   327	        const textureKeys = this.textures.getTextureKeys();
+   328	        console.log(`Available textures: ${textureKeys.length} textures loaded`);
+   329	        
+   330	        console.log(`Initial sprite texture set to: idle down 1`);
+   331	        
+   332	        // Play idle animation
+   333	        this.player.anims.play(`idle-${this.lastDirection}`);
+   334	      } else {
+   335	        console.error('Player sprite texture "idle down 1" not loaded');
+   336	        // Create a fallback rectangle for the player
+   337	        this.player = this.add.rectangle(width * 0.5, height * 0.5, 32, 32, 0xff0000) as unknown as Phaser.GameObjects.Sprite;
+   338	        this.player.setScale(4.0); // Increase fallback player size too
+   339	        this.player.setDepth(20); // Set consistent depth
+   340	      }
+   341	
+   342	      // Create stations before UI elements
+   343	      this.createStations();
+   344	
+   345	      // Set up input
+   346	      this.cursors = this.input.keyboard.createCursorKeys();
+   347	      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+   348	      this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+   349	      this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+   350	      this.fKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F); // Initialize f key
+   351	      this.lastSpaceState = false;
+   352	      
+   353	      // Create UI elements
+   354	      this.createUI(width, height);
+   355	
+   356	      // Start order generation
+   357	      this.orderGenerationTimer = this.time.addEvent({
+   358	        delay: this.nextOrderDelay,
+   359	        callback: this.generateOrder,
+   360	        callbackScope: this,
+   361	        loop: true
+   362	      });
+   363	
+   364	      console.log('Level1Scene create completed');
+   365	      
+   366	      // Verify that all unlocked stations are visible
+   367	      this.verifyStationVisibility();
+   368	    } catch (error) {
+   369	      console.error('Error in create method:', error);
+   370	    }
+   371	  }
+   372	
+   373	  private createUI(width: number, height: number) {
+   374	    this.scoreText = this.add.text(width - 20, 16, 'Score: 0', {
+   375	      fontSize: '24px',
+   376	      color: '#ffffff',
+   377	      stroke: '#000000',
+   378	      strokeThickness: 3
+   379	    }).setOrigin(1, 0);
+   380	
+   381	    // Create heart icons for lives instead of text
+   382	    this.livesContainer = this.add.container(25, 16);
+   383	    this.updateLivesDisplay();
+   384	
+   385	    this.powerUpText = this.add.text(width * 0.5, 50, '', {
+   386	      fontSize: '24px',
+   387	      color: '#00ff00',
+   388	      stroke: '#000000',
+   389	      strokeThickness: 3
+   390	    }).setOrigin(0.5).setVisible(false);
+   391	
+   392	    this.stationUnlockText = this.add.text(width * 0.5, height * 0.4, '', {
+   393	      fontSize: '32px',
+   394	      color: '#ffff00',
+   395	      stroke: '#000000',
+   396	      strokeThickness: 3
+   397	    }).setOrigin(0.5).setVisible(false);
+   398	
+   399	    // Create power-up button (positioned to the right side of the screen)
+   400	    const buttonX = width * 0.76; // 76% from the left (right side)
+   401	    const buttonY = height * 0.52; // 52% from the top (middle-ish)
+   402	    this.createPowerUpSwitch(buttonX, buttonY);
+   403	  }
+   404	
+   405	  private createPowerUpSwitch(x: number, y: number) {
+   406	    // Create power-up button sprite with correct scale and depth
+   407	    this.powerUpButtonSprite = this.add.sprite(x, y, 'button-idle');
+   408	    this.powerUpButtonSprite.setScale(0.15); // Make it much smaller - 1/3 of original size
+   409	    this.powerUpButtonSprite.setDepth(10);
+   410	    
+   411	    // Add input event handlers
+   412	    this.powerUpButtonSprite.setInteractive();
+   413	    
+   414	    // Create text for countdown (positioned properly)
+   415	    this.powerUpCountdownText = this.add.text(x, y - 30, '', {
+   416	      fontSize: '24px',
+   417	      fontStyle: 'bold',
+   418	      color: '#ffffff',
+   419	      stroke: '#000000',
+   420	      strokeThickness: 3
+   421	    }).setOrigin(0.5).setDepth(11);
+   422	    
+   423	    // Create warning text (initially invisible)
+   424	    this.powerUpWarningText = this.add.text(x, y - 80, '', {
+   425	      fontSize: '18px',
+   426	      color: '#ff0000',
+   427	      fontStyle: 'bold',
+   428	      stroke: '#000000',
+   429	      strokeThickness: 2
+   430	    }).setOrigin(0.5).setAlpha(0).setDepth(11);
+   431	    
+   432	    // Add button click handlers
+   433	    this.powerUpButtonSprite.on('pointerdown', this.handlePowerUpButtonClick, this);
+   434	  }
+   435	  private createConveyorArrows(width: number, centerX: number, centerY: number) {
+   436	    // Simply return without creating any arrows
+   437	    return;
+   438	  }
+   439	// 
+   440	//   private createConveyorArrows(width: number, centerX: number, centerY: number) {
+   441	//     // Use pixel art arrows if the texture is loaded
+   442	//     if (this.textures.exists('conveyor-arrow')) {
+   443	//       const arrowSpacing = 80; // Slightly increased spacing for the new arrows
+   444	//       const numArrows = Math.floor(width / arrowSpacing);
+   445	//       const startX = centerX - width/2 + arrowSpacing/2;
+   446	//       
+   447	//       // Create arrows using the arrow sprite
+   448	//       for (let i = 0; i < numArrows; i++) {
+   449	//         const arrow = this.add.sprite(
+   450	//           startX + i * arrowSpacing, 
+   451	//           centerY, 
+   452	//           'conveyor-arrow'
+   453	//         );
+   454	//         
+   455	//         // Set proper depth to appear above the conveyor belt
+   456	//         arrow.setDepth(6);
+   457	//         
+   458	//         // Add animation to make the arrows move
+   459	//         this.tweens.add({
+   460	//           targets: arrow,
+   461	//           x: arrow.x + arrowSpacing,
+   462	//           duration: 1000,
+   463	//           ease: 'Linear',
+   464	//           repeat: -1,
+   465	//           onRepeat: () => {
+   466	//             arrow.x = startX + i * arrowSpacing;
+   467	//           }
+   468	//         });
+   469	//       }
+   470	//     } else {
+   471	//       // Fallback to triangle arrows if texture not loaded
+   472	//       const arrowWidth = 30;
+   473	//       const arrowHeight = 20;
+   474	//       const arrowSpacing = 60;
+   475	//       const numArrows = Math.floor(width / arrowSpacing);
+   476	//       const startX = centerX - width/2 + arrowSpacing/2;
+   477	// 
+   478	//       for (let i = 0; i < numArrows; i++) {
+   479	//         const arrow = this.add.triangle(
+   480	//           startX + i * arrowSpacing, 
+   481	//           centerY, 
+   482	//           0, arrowHeight/2, 
+   483	//           arrowWidth, 0,     
+   484	//           0, -arrowHeight/2, 
+   485	//           0x666666
+   486	//         );
+   487	// 
+   488	//         this.tweens.add({
+   489	//           targets: arrow,
+   490	//           x: arrow.x + arrowSpacing,
+   491	//           duration: 1000,
+   492	//           ease: 'Linear',
+   493	//           repeat: -1,
+   494	//           onRepeat: () => {
+   495	//             arrow.x = startX + i * arrowSpacing;
+   496	//           }
+   497	        });
+   498	      }
+   499	    }
+   500	  }
+   501	
+   502	  private createStations() {
+   503	    const stationTypes = ['address', 'quantity', 'discount', 'product', 'invoice', 'cancel'];
+   504	    
+   505	    // Calculate total width for all stations
+   506	    const spacing = 200; // Increased space between stations
+   507	    const totalWidth = (stationTypes.length - 1) * spacing;
+   508	    
+   509	    // Calculate starting X position to center all stations
+   510	    const startX = (this.cameras.main.width - totalWidth) / 2;
+   511	    const y = this.cameras.main.height * 0.2;
+   512	
+   513	    // Define consistent size for all stations
+   514	    const tableSize = 120; // Size of the table
+   515	    const iconScale = 1.2; // Make emoji slightly larger
+   516	
+   517	    stationTypes.forEach((type, index) => {
+   518	      const stationX = startX + (index * spacing);
+   519	      const station: Station = {
+   520	        type,
+   521	        container: this.add.container(stationX, y),
+   522	        isUnlocked: index === 0, // Only first station starts unlocked
+   523	        bounds: null,
+   524	        sign: null // Initialize sign property
+   525	      };
+   526	
+   527	      // Create table top with a nicer appearance - will be the same for all stations
+   528	      // 1. Create the main tabletop with rounded corners and a light wood color
+   529	      const tableTop = this.add.rectangle(0, 0, tableSize, tableSize, 0xDEB887)
+   530	        .setStrokeStyle(3, 0xA0522D)
+   531	        .setOrigin(0.5)
+   532	        .setAlpha(0.9);
+   533	      
+   534	      // 2. Add some texture/detail to make it look more like a table
+   535	      const tableEdge = this.add.rectangle(0, 0, tableSize - 14, tableSize - 14, 0xB8860B)
+   536	        .setStrokeStyle(2, 0x8B4513)
+   537	        .setOrigin(0.5)
+   538	        .setAlpha(0.7);
+   539	      
+   540	      // 3. Add a small shadow underneath
+   541	      const tableShadow = this.add.rectangle(4, 4, tableSize, tableSize, 0x000000)
+   542	        .setOrigin(0.5)
+   543	        .setAlpha(0.2);
+   544	
+   545	      // Create the station icon (emoji) with enhanced visibility
+   546	      const icon = this.add.text(0, 0, this.getStationIcon(type), {
+   547	        fontSize: '48px',
+   548	        fontStyle: 'bold',
+   549	        stroke: '#000000',
+   550	        strokeThickness: 3,
+   551	        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 5, stroke: true, fill: true }
+   552	      }).setOrigin(0.5).setScale(iconScale);
+   553	
+   554	      // Add everything to the container - order matters for layering
+   555	      station.container.add([tableShadow, tableTop, tableEdge, icon]);
+   556	      
+   557	      // Create bounds for collision detection
+   558	      station.bounds = new Phaser.Geom.Rectangle(
+   559	        station.container.x - tableSize/2,
+   560	        station.container.y - tableSize/2,
+   561	        tableSize, 
+   562	        tableSize
+   563	      );
+   564	      
+   565	      // Create and add the station sign
+   566	      const sign = this.createStationSign(stationX, y, type);
+   567	      
+   568	      // Hide locked stations completely (alpha 0)
+   569	      if (!station.isUnlocked) {
+   570	        station.container.setAlpha(0);
+   571	        sign.setAlpha(0); // Also hide the sign
+   572	      }
+   573	      
+   574	      // Store the sign in the station object for later reference
+   575	      station.sign = sign;
+   576	
+   577	      this.stations.push(station);
+   578	    });
+   579	  }
+   580	
+   581	  private getStationIcon(type: string): string {
+   582	    switch (type) {
+   583	      case 'address': return '🏠'; // House for address
+   584	      case 'quantity': return '🔢'; // Numbers for quantity
+   585	      case 'discount': return '🏷️'; // Tag for discount
+   586	      case 'product': return '🔄'; // Change symbol for product change
+   587	      case 'invoice': return '📄'; // Document/paper for invoice
+   588	      case 'cancel': return '❌'; // X for cancel
+   589	      default: return '❓'; // Question mark as fallback
+   590	    }
+   591	  }
+   592	
+   593	  private getStationName(type: string): string {
+   594	    switch (type) {
+   595	      case 'address': return 'Address Edit';
+   596	      case 'quantity': return 'Quantity Edit';
+   597	      case 'discount': return 'Add Discount';
+   598	      case 'product': return 'Change Product';
+   599	      case 'invoice': return 'Invoice Edit';
+   600	      case 'cancel': return 'Cancel Order';
+   601	      default: return 'Unknown Station';
+   602	    }
+   603	  }
+   604	
+   605	  private removeOrder(index: number) {
+   606	    const order = this.orders[index];
+   607	    order.container.destroy();
+   608	    this.orders.splice(index, 1);
+   609	  }
+   610	
+   611	  update(time: number, delta: number) {
+   612	    try {
+   613	      if (!this.player) return;
+   614	
+   615	      // Add check for cursors
+   616	      if (!this.cursors) {
+   617	        console.error('Cursors not initialized in update method');
+   618	        return;
+   619	      }
+   620	
+   621	      // Process power-up status
+   622	      if (this.powerUpActive) {
+   623	        this.updatePowerUp(delta);
+   624	      }
+   625	      
+   626	      // Animate the conveyor belt texture to make it look like it's moving
+   627	      if (this.conveyorBelt && 'tilePositionX' in this.conveyorBelt) {
+   628	        // Scroll the texture horizontally to create a movement effect
+   629	        this.conveyorBelt.tilePositionX -= this.conveyorSpeed; // Adjust speed as needed
+   630	      }
+   631	
+   632	      // Activate power-up after 10 edits
+   633	      if (!this.powerUpAvailable && !this.powerUpActive && this.manualOrdersCompleted >= 10) {
+   634	        console.log(`Power-up now available after ${this.manualOrdersCompleted} manual orders completed`);
+   635	        this.powerUpAvailable = true;
+   636	        this.setButtonColor(0x00ff00);
+   637	      }
+   638	
+   639	      // Process player movement
+   640	      let isMoving = false;
+   641	      let direction = this.lastDirection;
+   642	
+   643	      // Only check if near station for spacebar interactions, not to restrict movement
+   644	      let nearStation = this.isNearStation();
+   645	      
+   646	      // Save the previous player position before any movement
+   647	      const prevX = this.player.x;
+   648	      const prevY = this.player.y;
+   649	      
+   650	      // Create a buffer zone around the conveyor belt
+   651	      const conveyorBufferTop = this.conveyorBelt.y - 90; // Significantly increased buffer to keep player's shadow from touching
+   652	      const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
+   653	      
+   654	      // Check for movement keys and update player position
+   655	      // But don't allow movement onto the conveyor belt
+   656	      let newX = this.player.x;
+   657	      let newY = this.player.y;
+   658	      let movementBlocked = false;
+   659	      
+   660	      if (this.cursors.left.isDown) {
+   661	        newX -= this.playerSpeed;
+   662	        direction = 'left';
+   663	        isMoving = true;
+   664	      } else if (this.cursors.right.isDown) {
+   665	        newX += this.playerSpeed;
+   666	        direction = 'right';
+   667	        isMoving = true;
+   668	      }
+   669	      
+   670	      if (this.cursors.up.isDown) {
+   671	        newY -= this.playerSpeed;
+   672	        direction = 'up';
+   673	        isMoving = true;
+   674	      } else if (this.cursors.down.isDown) {
+   675	        newY += this.playerSpeed; 
+   676	        direction = 'down';
+   677	        isMoving = true;
+   678	      }
+   679	      
+   680	      // Check if the player's new position would put them on the conveyor belt
+   681	      const futurePlayerY = newY;
+   682	      
+   683	      // Block movement if player would cross the conveyor buffer zone
+   684	      if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
+   685	        // Player trying to move up onto conveyor belt - block it
+   686	        newY = conveyorBufferTop + 1; // Keep them just below the buffer
+   687	        movementBlocked = true;
+   688	      } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
+   689	        // Player trying to move down onto conveyor belt - block it
+   690	        newY = conveyorBufferBottom - 1; // Keep them just above the buffer
+   691	        movementBlocked = true;
+   692	      }
+   693	      
+   694	      // If the player is already within the forbidden zone, push them out
+   695	      if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
+   696	        // Determine which side they're closer to
+   697	        if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
+   698	          newY = conveyorBufferTop + 1; // Put them just below the top buffer
+   699	        } else {
+   700	          newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
+   701	        }
+   702	        movementBlocked = true;
+   703	      }
+   704	      
+   705	      // Update player position
+   706	      this.player.x = newX;
+   707	      this.player.y = newY;
+   708	      
+   709	      // Keep player within bounds
+   710	      if (this.player.x < 30) this.player.x = 30;
+   711	      if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
+   712	      if (this.player.y < 30) this.player.y = 30;
+   713	      if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
+   714	
+   715	      // Check collisions with stations
+   716	      this.stations.forEach(station => {
+   717	        if (station.isUnlocked) {
+   718	          const stationBounds = new Phaser.Geom.Rectangle(
+   719	            station.container.x - 50,
+   720	            station.container.y - 50,
+   721	            100, 
+   722	            100
+   723	          );
+   724	          
+   725	          const playerBounds = new Phaser.Geom.Rectangle(
+   726	            this.player!.x - 20,
+   727	            this.player!.y - 30,
+   728	            40, 
+   729	            60
+   730	          );
+   731	          
+   732	          if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+   733	            // Determine which side of the station the player is coming from
+   734	            const dx = this.player!.x - station.container.x;
+   735	            const dy = this.player!.y - station.container.y;
+   736	            
+   737	            // Calculate distances to each edge of the station
+   738	            const distToLeft = Math.abs(dx + 50);
+   739	            const distToRight = Math.abs(dx - 50);
+   740	            const distToTop = Math.abs(dy + 50);
+   741	            const distToBottom = Math.abs(dy - 50);
+   742	            
+   743	            // Find the minimum distance to determine which side the player is on
+   744	            const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+   745	            
+   746	            // Add a small buffer to prevent sticking/sliding
+   747	            const buffer = 5;
+   748	            
+   749	            // Apply appropriate displacement with increased push distance
+   750	            if (minDist === distToLeft) {
+   751	              this.player!.x = station.container.x - 80; // Increased push distance to 80
+   752	            } else if (minDist === distToRight) {
+   753	              this.player!.x = station.container.x + 80; // Increased push distance to 80
+   754	            } else if (minDist === distToTop) {
+   755	              this.player!.y = station.container.y - 80; // Increased push distance to 80
+   756	            } else if (minDist === distToBottom) {
+   757	              this.player!.y = station.container.y + 80; // Increased push distance to 80
+   758	              
+   759	              // Add additional check for bottom collision to prevent sliding
+   760	              if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
+   761	                // If player is trying to move horizontally while colliding with bottom,
+   762	                // push them slightly further down to avoid the collision zone
+   763	                this.player!.y += buffer;
+   764	              }
+   765	            }
+   766	            
+   767	            // Add extra push when trying to move directly into a station
+   768	            if (minDist === distToLeft && this.cursors.right.isDown) {
+   769	              this.player!.x -= buffer; // Push little extra left when trying to move right
+   770	            } else if (minDist === distToRight && this.cursors.left.isDown) {
+   771	              this.player!.x += buffer; // Push little extra right when trying to move left
+   772	            } else if (minDist === distToTop && this.cursors.down.isDown) {
+   773	              this.player!.y -= buffer; // Push little extra up when trying to move down
+   774	            } else if (minDist === distToBottom && this.cursors.up.isDown) {
+   775	              this.player!.y += buffer; // Push little extra down when trying to move up
+   776	            }
+   777	          }
+   778	        }
+   779	      });
+   780	      
+   781	      // Update animation based on direction and movement
+   782	      if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
+   783	        this.lastDirection = direction;
+   784	        this.lastMoving = isMoving;
+   785	      }
+   786	
+   787	      // Update player animation manually
+   788	      this.updatePlayerAnimation(time, delta);
+   789	
+   790	      // Update current carrying edit position
+   791	      if (this.carriedEdits.length > 0) {
+   792	        this.updateCarriedEditsPosition();
+   793	      }
+   794	
+   795	      // Handle conveyor belt movement for orders
+   796	      this.updateOrderPositions(delta);
+   797	
+   798	      // Handle space bar for edit actions
+   799	      if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+   800	        console.log("Spacebar pressed. Near station:", nearStation?.type);
+   801	        console.log("Current carried edits:", this.carriedEdits.length);
+   802	        
+   803	        // First check if we're trying to apply an edit to an order
+   804	        if (this.carriedEdits.length > 0 && this.tryApplyEditsToOrder()) {
+   805	          // Successfully applied, do nothing else
+   806	          console.log("Applied edit to order");
+   807	        }
+   808	        // Then check if we're near a station to collect an edit
+   809	        else if (nearStation) {
+   810	          console.log("Near station and spacebar pressed");
+   811	          // Always try to pick up an edit when near a station
+   812	          this.pickupEdit(nearStation);
+   813	        }
+   814	        // Then check if we're near the power-up switch
+   815	        else if (this.isNearPowerUpSwitch()) {
+   816	          console.log("Near power switch");
+   817	          // Near power-up switch, activate it
+   818	          this.activatePowerUpSwitch();
+   819	        }
+   820	        // Otherwise, if we have edits, discard the first one
+   821	        else if (this.carriedEdits.length > 0) {
+   822	          console.log("Discarding first edit");
+   823	          // Not near a station or order, discard the first edit
+   824	          this.removeFirstEdit();
+   825	        }
+   826	      }
+   827	      
+   828	      // Handle player movement and animation
+   829	      this.handlePlayerMovement(delta);
+   830	      
+   831	      // Check if player is stepping on the button
+   832	      this.checkPlayerOnButton();
+   833	      
+   834	      // Handle button flashing when power-up is available
+   835	      this.updateButtonFlashing(delta);
+   836	      
+   837	      // Check for 'd' key to activate powerup (cheat)
+   838	      if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
+   839	        console.log('Cheat code activated: Power-Up!');
+   840	        this.activatePowerUpCheat();
+   841	      }
+   842	
+   843	      // Check for 'c' key to activate powerup cheat
+   844	      if (Phaser.Input.Keyboard.JustDown(this.cKey)) {
+   845	        console.log('Cheat code activated: Power-Up!');
+   846	        this.activatePowerUpCheat();
+   847	      }
+   848	      
+   849	      // Check for 'f' key to unlock all stations (cheat)
+   850	      if (Phaser.Input.Keyboard.JustDown(this.fKey)) {
+   851	        console.log('Cheat code activated: Unlock All Stations!');
+   852	        this.unlockAllStationsCheat();
+   853	      }
+   854	    } catch (error) {
+   855	      console.error('Error in update:', error);
+   856	    }
+   857	  }
+   858	
+   859	  private isNearStation(): Station | null {
+   860	    if (!this.player) return null;
+   861	    
+   862	    // Create a larger detection area around the player for easier interaction
+   863	    const playerBounds = new Phaser.Geom.Rectangle(
+   864	      this.player.x - 50, // Larger detection area
+   865	      this.player.y - 50, // Larger detection area
+   866	      100, 100           // Increased from 60, 60
+   867	    );
+   868	    
+   869	    // Check each unlocked station
+   870	    for (const station of this.stations) {
+   871	      if (station.isUnlocked) {
+   872	        const stationBounds = new Phaser.Geom.Rectangle(
+   873	          station.container.x - 60,
+   874	          station.container.y - 60,
+   875	          120, 120
+   876	        );
+   877	        
+   878	        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+   879	          // Log that we're near a station for debugging
+   880	          console.log(`Near station: ${station.type}`);
+   881	          return station;
+   882	        }
+   883	      }
+   884	    }
+   885	    
+   886	    return null;
+   887	  }
+   888	
+   889	  private isNearPowerUpSwitch(): boolean {
+   890	    if (!this.player || !this.powerUpSwitchBounds) return false;
+   891	    
+   892	    const playerBounds = new Phaser.Geom.Rectangle(
+   893	      this.player.x - 20,
+   894	      this.player.y - 30,
+   895	      40, 
+   896	      60
+   897	    );
+   898	    
+   899	    return Phaser.Geom.Rectangle.Overlaps(playerBounds, this.powerUpSwitchBounds);
+   900	  }
+   901	
+   902	  private updatePlayerAnimation(time: number, delta: number) {
+   903	    if (!this.player) return;
+   904	    
+   905	    // Add time to the animation timer
+   906	    this.animationTime += delta;
+   907	    
+   908	    // When we reach the frame duration, advance to the next frame
+   909	    if (this.animationTime >= this.animationFrameDuration) {
+   910	      // Reset the timer
+   911	      this.animationTime = 0;
+   912	      
+   913	      // Advance to the next frame
+   914	      this.currentAnimationFrame++;
+   915	      if (this.currentAnimationFrame > 6) {
+   916	        this.currentAnimationFrame = 1;
+   917	      }
+   918	      
+   919	      // Get the current animation prefix (idle or walk)
+   920	      const prefix = this.lastMoving ? 'walk' : 'idle';
+   921	      
+   922	      // Set the texture based on the current frame
+   923	      const textureKey = `${prefix} ${this.lastDirection} ${this.currentAnimationFrame}`;
+   924	      
+   925	      if (this.textures.exists(textureKey)) {
+   926	        this.player.setTexture(textureKey);
+   927	        console.log(`Manual animation: ${textureKey}`);
+   928	      } else {
+   929	        console.warn(`Texture not found: ${textureKey}, using fallback`);
+   930	        // Fall back to frame 1
+   931	        const fallbackKey = `${prefix} ${this.lastDirection} 1`;
+   932	        if (this.textures.exists(fallbackKey)) {
+   933	          this.player.setTexture(fallbackKey);
+   934	        }
+   935	      }
+   936	    }
+   937	  }
+   938	
+   939	  private pickupEdit(station: Station) {
+   940	    console.log(`Picking up edit from station: ${station.type}`);
+   941	    console.log(`Current carried edits: ${this.carriedEdits.length}`);
+   942	    
+   943	    // Check if we're already carrying this type of edit
+   944	    if (this.carriedEdits.some(edit => edit.type === station.type)) {
+   945	      // Show message that duplicate edits aren't allowed
+   946	      const duplicateEditMessage = this.add.text(
+   947	        this.player.x, 
+   948	        this.player.y - 40, 
+   949	        `Already have ${station.type}!`, 
+   950	        {
+   951	          fontSize: '16px',
+   952	          color: '#FF0000',
+   953	          stroke: '#000000',
+   954	          strokeThickness: 2
+   955	        }
+   956	      ).setOrigin(0.5).setDepth(110);
+   957	      
+   958	      // Fade out and remove the message
+   959	      this.tweens.add({
+   960	        targets: duplicateEditMessage,
+   961	        alpha: 0,
+   962	        y: duplicateEditMessage.y - 20,
+   963	        duration: 1000,
+   964	        onComplete: () => duplicateEditMessage.destroy()
+   965	      });
+   966	      
+   967	      return;
+   968	    }
+   969	    
+   970	    // Check if we're already at max capacity
+   971	    if (this.carriedEdits.length >= this.maxCarriedEdits) {
+   972	      // Show message to user that they can't pick up more edits
+   973	      const maxEditMessage = this.add.text(
+   974	        this.player.x, 
+   975	        this.player.y - 40, 
+   976	        `Max ${this.maxCarriedEdits} edits!`, 
+   977	        {
+   978	          fontSize: '16px',
+   979	          color: '#FF0000',
+   980	          stroke: '#000000',
+   981	          strokeThickness: 2
+   982	        }
+   983	      ).setOrigin(0.5).setDepth(110);
+   984	      
+   985	      // Fade out and remove the message
+   986	      this.tweens.add({
+   987	        targets: maxEditMessage,
+   988	        alpha: 0,
+   989	        y: maxEditMessage.y - 20,
+   990	        duration: 1000,
+   991	        onComplete: () => maxEditMessage.destroy()
+   992	      });
+   993	      
+   994	      return;
+   995	    }
+   996	    
+   997	    // Create an icon representing the edit type
+   998	    const editIcon = this.add.text(
+   999	      this.player.x,
+  1000	      this.player.y - 30,
+  1001	      this.getStationIcon(station.type),
+  1002	      {
+  1003	        fontSize: '24px',
+  1004	        stroke: '#000000',
+  1005	        strokeThickness: 2
+  1006	      }
+  1007	    ).setOrigin(0.5).setDepth(100);
+  1008	    
+  1009	    // Save the carried edit
+  1010	    this.carriedEdits.push({
+  1011	      type: station.type,
+  1012	      icon: editIcon
+  1013	    });
+  1014	    
+  1015	    console.log(`After pickup, carried edits: ${this.carriedEdits.length}`);
+  1016	    
+  1017	    // Position the edit icons correctly
+  1018	    this.updateCarriedEditsPosition();
+  1019	    
+  1020	    // Add an animation for the pickup
+  1021	    this.tweens.add({
+  1022	      targets: editIcon,
+  1023	      scale: { from: 0, to: 1 },
+  1024	      duration: 200,
+  1025	      ease: 'Bounce.Out'
+  1026	    });
+  1027	    
+  1028	    // Add sound effect if sound system exists
+  1029	    if (this.sound && this.sound.add) {
+  1030	      try {
+  1031	        const pickupSound = this.sound.add('pickup', { volume: 0.5 });
+  1032	        pickupSound.play();
+  1033	      } catch (error) {
+  1034	        console.error('Could not play pickup sound:', error);
+  1035	      }
+  1036	    }
+  1037	  }
+  1038	
+  1039	  private discardEdits() {
+  1040	    if (this.carriedEdits.length === 0) return;
+  1041	    
+  1042	    // Create a quick fade-out effect
+  1043	    this.tweens.add({
+  1044	      targets: this.carriedEdits.map(edit => edit.icon),
+  1045	      alpha: 0,
+  1046	      duration: 300,
+  1047	      onComplete: () => {
+  1048	        this.carriedEdits.forEach(edit => edit.icon.destroy());
+  1049	        this.carriedEdits = [];
+  1050	      }
+  1051	    });
+  1052	  }
+  1053	
+  1054	  private tryApplyEditsToOrder(): boolean {
+  1055	    if (this.carriedEdits.length === 0) return false;
+  1056	    
+  1057	    console.log('Trying to apply edit to order');
+  1058	    
+  1059	    // Increase detection range for player-order overlap
+  1060	    const playerBounds = new Phaser.Geom.Rectangle(
+  1061	      this.player.x - 60, // Increased from 40
+  1062	      this.player.y - 60, // Increased from 40
+  1063	      120, 120           // Increased from 80, 80
+  1064	    );
+  1065	    
+  1066	    let applied = false;
+  1067	    
+  1068	    // Loop through all orders to check for overlap
+  1069	    for (const order of this.orders) {
+  1070	      // Also increase order bounds
+  1071	      const orderBounds = new Phaser.Geom.Rectangle(
+  1072	        order.x - 60,    // Increased from 50
+  1073	        order.y - 60,    // Increased from 50
+  1074	        120, 120        // Increased from 100, 100
+  1075	      );
+  1076	      
+  1077	      if (Phaser.Geom.Rectangle.Overlaps(playerBounds, orderBounds)) {
+  1078	        console.log('Found overlapping order, applying edit');
+  1079	        this.applyEditToOrder(order);
+  1080	        applied = true;
+  1081	        break;
+  1082	      }
+  1083	    }
+  1084	    
+  1085	    return applied;
+  1086	  }
+  1087	
+  1088	  private applyEditToOrder(order: Order) {
+  1089	    if (this.carriedEdits.length === 0) return false;
+  1090	    
+  1091	    // Get the first edit in the queue
+  1092	    const edit = this.carriedEdits[0];
+  1093	    
+  1094	    // Add debugging to see what's happening
+  1095	    console.log(`Attempting to apply edit ${edit.type} to order requiring: ${order.types.join(', ')}`);
+  1096	    console.log(`Order completed edits: ${order.completedEdits.join(', ')}`);
+  1097	    
+  1098	    // Check if the order requires this edit type and it hasn't been applied yet
+  1099	    if (order.types.includes(edit.type) && !order.completedEdits.includes(edit.type)) {
+  1100	      // Success! Apply the edit
+  1101	      order.completedEdits.push(edit.type);
+  1102	      
+  1103	      // Create a checkmark to show this edit has been applied
+  1104	      this.markEditAsApplied(order, edit.type);
+  1105	      
+  1106	      console.log(`Successfully applied ${edit.type} edit to order ${order.id}`);
+  1107	      
+  1108	      // Increment total edits applied (for unlocking stations)
+  1109	      this.totalEditsApplied++;
+  1110	      console.log(`Total edits applied: ${this.totalEditsApplied}, Last unlocked at: ${this.lastUnlockedAtEditCount}`);
+  1111	      
+  1112	      // Check if we should unlock a new station (every 5 edits)
+  1113	      if (this.totalEditsApplied >= 5 && (this.totalEditsApplied - this.lastUnlockedAtEditCount) >= 5) {
+  1114	        console.log('Unlocking next station');
+  1115	        this.unlockNextStation();
+  1116	      }
+  1117	      
+  1118	      // Increase score
+  1119	      this.updateScore(10);
+  1120	      
+  1121	      // Check if order is now complete
+  1122	      if (order.completedEdits.length === order.types.length) {
+  1123	        this.completeOrder(order);
+  1124	      }
+  1125	      
+  1126	      // Remove the used edit
+  1127	      this.removeFirstEdit();
+  1128	      
+  1129	      return true;
+  1130	    } else {
+  1131	      // Failure - wrong edit type
+  1132	      console.log('Wrong edit type!');
+  1133	      console.log(`Edit type: ${edit.type}`);
+  1134	      console.log(`Order requires: ${order.types.join(', ')}`);
+  1135	      console.log(`Already completed: ${order.completedEdits.join(', ')}`);
+  1136	      
+  1137	      // Show a red X or failure indicator
+  1138	      const failureText = this.add.text(
+  1139	        this.player.x, 
+  1140	        this.player.y - 50, 
+  1141	        edit.type + ' ❌', 
+  1142	        { fontSize: '24px', color: '#ff0000', stroke: '#000000', strokeThickness: 3 }
+  1143	      ).setOrigin(0.5);
+  1144	      
+  1145	      // Shake the order briefly
+  1146	      this.tweens.add({
+  1147	        targets: order.container,
+  1148	        x: { from: order.x, to: order.x + 5 },
+  1149	        duration: 50,
+  1150	        yoyo: true,
+  1151	        repeat: 3
+  1152	      });
+  1153	      
+  1154	      // Fade out and remove the failure text
+  1155	      this.tweens.add({
+  1156	        targets: failureText,
+  1157	        alpha: 0,
+  1158	        y: failureText.y - 30,
+  1159	        duration: 800,
+  1160	        onComplete: () => failureText.destroy()
+  1161	      });
+  1162	      
+  1163	      return false;
+  1164	    }
+  1165	  }
+  1166	  
+  1167	  // New method to remove just the first edit
+  1168	  private removeFirstEdit() {
+  1169	    if (this.carriedEdits.length === 0) return;
+  1170	    
+  1171	    const editToRemove = this.carriedEdits.shift();
+  1172	    
+  1173	    // Create a quick fade-out effect
+  1174	    this.tweens.add({
+  1175	      targets: editToRemove.icon,
+  1176	      alpha: 0,
+  1177	      scale: { from: 1, to: 0 },
+  1178	      duration: 300,
+  1179	      onComplete: () => {
+  1180	        editToRemove.icon.destroy();
+  1181	        // Update positions of remaining edits
+  1182	        this.updateCarriedEditsPosition();
+  1183	      }
+  1184	    });
+  1185	  }
+  1186	
+  1187	  private markEditAsApplied(order: Order, editType: string) {
+  1188	    if (!order || !order.container) return;
+  1189	    
+  1190	    // Find the index of this edit type in the order's types array
+  1191	    const index = order.types.indexOf(editType);
+  1192	    if (index === -1) return;
+  1193	    
+  1194	    // Create a checkmark to show this edit has been applied
+  1195	    const checkmark = this.add.text(0, 0, '✓', {
+  1196	      fontSize: '32px', // Increased from 24px
+  1197	      color: '#00ff00', // Keep the same bright green
+  1198	      stroke: '#000000',
+  1199	      strokeThickness: 3, // Increased from 2
+  1200	      fontStyle: 'bold', // Added bold style
+  1201	      shadow: { // Added shadow for better visibility
+  1202	        offsetX: 2,
+  1203	        offsetY: 2,
+  1204	        color: '#000',
+  1205	        blur: 3,
+  1206	        stroke: true,
+  1207	        fill: true
+  1208	      }
+  1209	    }).setOrigin(0.5);
+  1210	    
+  1211	    // Get the corresponding icon for positioning if available
+  1212	    if (order.icons && order.icons[index]) {
+  1213	      // Position the checkmark directly on top of the icon
+  1214	      checkmark.x = order.icons[index].x;
+  1215	      checkmark.y = order.icons[index].y - 20; // Position slightly higher above the icon (adjusted for larger size)
+  1216	    } else {
+  1217	      // Position based on layout (horizontal or grid)
+  1218	      if (order.types.length <= 3) {
+  1219	        // Horizontal layout
+  1220	        if (order.types.length === 1) {
+  1221	          // Single icon centered
+  1222	          checkmark.x = 0;
+  1223	        } else {
+  1224	          // Multiple icons spaced evenly
+  1225	          const totalSpace = 80; // Total space to distribute icons
+  1226	          const spacing = totalSpace / (order.types.length - 1);
+  1227	          checkmark.x = -totalSpace/2 + index * spacing;
+  1228	          checkmark.y = 0; // Centered vertically
+  1229	        }
+  1230	      } else {
+  1231	        // Grid layout
+  1232	        const row = Math.floor(index / 2);
+  1233	        const col = index % 2;
+  1234	        const spacing = 40;
+  1235	        
+  1236	        // Calculate positions to center the grid
+  1237	        // For first row (0, 1, 2)
+  1238	        if (row === 0) {
+  1239	          checkmark.x = (col - 1) * spacing; // -spacing, 0, +spacing
+  1240	          checkmark.y = -spacing/2; // Add vertical positioning
+  1241	        } else {
+  1242	          // For second row (centers 1 or 2 items)
+  1243	          const itemsInLastRow = order.types.length - 3;
+  1244	          if (itemsInLastRow === 1) {
+  1245	            checkmark.x = 0; // Center the single item
+  1246	          } else {
+  1247	            checkmark.x = (col - 0.5) * spacing; // Center 2 items (-20, +20)
+  1248	          }
+  1249	          checkmark.y = (row - 0.5) * spacing; // -20 for first row, +20 for second row
+  1250	        }
+  1251	      }
+  1252	    }
+  1253	    
+  1254	    // Add to container
+  1255	    order.container.add(checkmark);
+  1256	    
+  1257	    // Add a little animation
+  1258	    this.add.tween({
+  1259	      targets: checkmark,
+  1260	      scale: { from: 0, to: 1 },
+  1261	      duration: 200,
+  1262	      ease: 'Back.Out'
+  1263	    });
+  1264	  }
+  1265	
+  1266	  private updateLivesDisplay() {
+  1267	    // Clear any existing heart icons
+  1268	    this.livesContainer.removeAll(true);
+  1269	    
+  1270	    // Add heart icons based on current lives
+  1271	    for (let i = 0; i < this.lives; i++) {
+  1272	      const heart = this.add.text(
+  1273	        i * 30, // Space hearts horizontally
+  1274	        0,
+  1275	        '❤️',
+  1276	        { fontSize: '24px' }
+  1277	      );
+  1278	      this.livesContainer.add(heart);
+  1279	    }
+  1280	  }
+  1281	
+  1282	  private gameOver() {
+  1283	    console.log('Game over!');
+  1284	    
+  1285	    // Clean up any active timers
+  1286	    this.orderGenerationTimer?.remove();
+  1287	    
+  1288	    // Transition to the GameOverScene with the final score
+  1289	    this.scene.start('GameOverScene', { score: this.score });
+  1290	  }
+  1291	
+  1292	  private reset() {
+  1293	    console.log('Resetting Level1Scene');
+  1294	    
+  1295	    // Reset game state
+  1296	    this.orders = [];
+  1297	    this.score = 0;
+  1298	    this.lives = 3;
+  1299	    this.ordersCompleted = 0;
+  1300	    this.totalEditsApplied = 0;
+  1301	    this.manualOrdersCompleted = 0;
+  1302	    this.failedOrders = 0;
+  1303	    this.carriedEdits = [];
+  1304	    
+  1305	    // Reset difficulty settings
+  1306	    this.orderSpeedMultiplier = 1.0;
+  1307	    this.conveyorSpeed = 0.5;
+  1308	    this.nextOrderDelay = 5000;
+  1309	    
+  1310	    // Reset powerups
+  1311	    this.powerUpActive = false;
+  1312	    this.powerUpTimer = 0;
+  1313	    this.powerUpAvailable = false;
+  1314	    
+  1315	    // Reset station unlocking
+  1316	    this.lastUnlockedAtEditCount = 0;
+  1317	    
+  1318	    // Reset stations (except the first one)
+  1319	    if (this.stations && this.stations.length > 0) {
+  1320	      this.stations.forEach((station, index) => {
+  1321	        station.isUnlocked = index === 0; // Only first station starts unlocked
+  1322	        station.container.setAlpha(index === 0 ? 1 : 0);
+  1323	        station.sign.setAlpha(index === 0 ? 1 : 0); // Also reset the sign
+  1324	      });
+  1325	    }
+  1326	    
+  1327	    // Clean up any existing orders
+  1328	    this.children.getAll().forEach(child => {
+  1329	      if (child instanceof Phaser.GameObjects.Container && child !== this.livesContainer) {
+  1330	        child.destroy();
+  1331	      }
+  1332	    });
+  1333	    
+  1334	    console.log('Level1Scene reset completed');
+  1335	  }
+  1336	
+  1337	  private completeOrder(order: Order) {
+  1338	    if (!order) return;
+  1339	    
+  1340	    console.log(`Completed order ${order.id} - Created during power-up: ${order.createdDuringPowerUp ? 'YES' : 'NO'}`);
+  1341	    
+  1342	    // Update counters
+  1343	    this.ordersCompleted++;
+  1344	    
+  1345	    // Only increment manual orders if this wasn't created during a power-up
+  1346	    if (!order.createdDuringPowerUp) {
+  1347	      this.manualOrdersCompleted++;
+  1348	      console.log(`Manual order completed: ${this.manualOrdersCompleted}/10 needed for power-up`);
+  1349	      
+  1350	      // Add a tiny jump animation for manually completed orders
+  1351	      this.tweens.add({
+  1352	        targets: order.container,
+  1353	        y: order.container.y - 10,
+  1354	        duration: 100,
+  1355	        ease: 'Sine.Out',
+  1356	        yoyo: true,
+  1357	        onComplete: () => {
+  1358	          // Reset position to normal after animation completes
+  1359	          order.container.y = order.y;
+  1360	        }
+  1361	      });
+  1362	    } else {
+  1363	      console.log(`Power-up auto-completed order (not counting towards manual total)`);
+  1364	    }
+  1365	    
+  1366	    // Mark order as complete but don't remove it
+  1367	    order.isComplete = true;
+  1368	    
+  1369	    // Show completion indicator above the order
+  1370	    const completionEmoji = this.add.text(
+  1371	      order.container.x,
+  1372	      order.container.y - 40,
+  1373	      '✅',
+  1374	      { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+  1375	    ).setOrigin(0.5);
+  1376	    
+  1377	    // Add it to the container so it moves with the order
+  1378	    order.container.add(completionEmoji);
+  1379	    
+  1380	    // Add a little animation to the emoji
+  1381	    this.tweens.add({
+  1382	      targets: completionEmoji,
+  1383	      y: '-=20',
+  1384	      alpha: { from: 1, to: 0.8 },
+  1385	      scale: { from: 1, to: 1.3 },
+  1386	      duration: 1000,
+  1387	      yoyo: true,
+  1388	      repeat: -1
+  1389	    });
+  1390	    
+  1391	    // Only count manually completed orders (not created during power-up) towards power-up progress
+  1392	    // This ensures that power-ups only apply to new orders and players earn power-ups through manual edits
+  1393	    if (!order.createdDuringPowerUp && this.manualOrdersCompleted % 5 === 0 && !this.powerUpActive && !this.powerUpAvailable) {
+  1394	      this.makePowerUpAvailable();
+  1395	    }
+  1396	  }
+  1397	
+  1398	  // Update the order positions function to show comments
+  1399	  private updateOrderPositions(delta: number) {
+  1400	    // Move orders along conveyor belt
+  1401	    for (let i = this.orders.length - 1; i >= 0; i--) {
+  1402	      const order = this.orders[i];
+  1403	      
+  1404	      // Move all orders to the right (including completed ones)
+  1405	      order.x += this.conveyorSpeed;
+  1406	      
+  1407	      // Update container position
+  1408	      if (order.container) {
+  1409	        order.container.x = order.x;
+  1410	      }
+  1411	      
+  1412	      // Try-catch block to handle any speech bubble errors
+  1413	      try {
+  1414	        // Check if order has crossed the threshold to show comment and doesn't already have a comment
+  1415	        if (this.commentsEnabled && !order.hasComment && 
+  1416	            order.x > this.screenWidthThreshold && 
+  1417	            !this.activeBubbles.has(order.id)) {
+  1418	          // Set hasComment before showing to prevent multiple attempts if showing fails
+  1419	          order.hasComment = true;
+  1420	          this.showOrderComment(order);
+  1421	        }
+  1422	        
+  1423	        // Update existing bubble positions if we have the speech bubble
+  1424	        if (this.activeBubbles.has(order.id)) {
+  1425	          const bubble = this.activeBubbles.get(order.id);
+  1426	          if (bubble) {
+  1427	            try {
+  1428	              bubble.update(order.x, order.y + 80); // Position below the order
+  1429	            } catch (err) {
+  1430	              console.error("Error updating bubble position:", err);
+  1431	              // If update fails, try to remove the bubble safely
+  1432	              this.activeBubbles.delete(order.id);
+  1433	            }
+  1434	          }
+  1435	        }
+  1436	      } catch (error) {
+  1437	        console.error("Error handling speech bubbles in updateOrderPositions:", error);
+  1438	      }
+  1439	      
+  1440	      // Check if order went off screen
+  1441	      if (order.x > this.cameras.main.width + 50) {
+  1442	        // Try-catch to handle any errors during cleanup
+  1443	        try {
+  1444	          // Remove any active speech bubbles for this order
+  1445	          if (this.activeBubbles.has(order.id)) {
+  1446	            const bubble = this.activeBubbles.get(order.id);
+  1447	            if (bubble) {
+  1448	              bubble.destroy();
+  1449	            }
+  1450	            this.activeBubbles.delete(order.id);
+  1451	          }
+  1452	          
+  1453	          // Additional logging to help debug
+  1454	          console.log(`Order ${order.id} went off screen, removing...`);
+  1455	          
+  1456	          // Rest of the existing off-screen handling code
+  1457	          if (!order.isComplete && this.lives > 0) {
+  1458	            // Incomplete order - remove a life
+  1459	            this.lives--;
+  1460	            this.failedOrders++;
+  1461	            
+  1462	            // Penalize the player for an incomplete order
+  1463	            this.updateScore(-50);
+  1464	            
+  1465	            // Update life indicators
+  1466	            this.updateLivesDisplay();
+  1467	            
+  1468	            // Visual feedback for failed order - angry emoji floating up
+  1469	            const failEmoji = this.add.text(
+  1470	              order.x - 100,
+  1471	              order.y,
+  1472	              '😡',
+  1473	              { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+  1474	            ).setOrigin(0.5);
+  1475	            
+  1476	            // Animate the angry emoji floating up
+  1477	            this.tweens.add({
+  1478	              targets: failEmoji,
+  1479	              y: '-=150',
+  1480	              alpha: { from: 1, to: 0 },
+  1481	              scale: { from: 1, to: 1.5 },
+  1482	              duration: 1500,
+  1483	              ease: 'Sine.Out',
+  1484	              onComplete: () => failEmoji.destroy()
+  1485	            });
+  1486	            
+  1487	            // If all lives are gone, it's game over
+  1488	            if (this.lives <= 0) {
+  1489	              this.gameOver();
+  1490	            }
+  1491	          } else if (order.isComplete) {
+  1492	            // Completed order - just animate a heart emoji floating away
+  1493	            const heartEmoji = this.add.text(
+  1494	              order.x - 100,
+  1495	              order.y,
+  1496	              '❤️',
+  1497	              { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+  1498	            ).setOrigin(0.5);
+  1499	            
+  1500	            // Animate the heart emoji floating up
+  1501	            this.tweens.add({
+  1502	              targets: heartEmoji,
+  1503	              y: '-=150',
+  1504	              alpha: { from: 1, to: 0 },
+  1505	              scale: { from: 1, to: 1.5 },
+  1506	              duration: 1500,
+  1507	              ease: 'Sine.Out',
+  1508	              onComplete: () => {
+  1509	                heartEmoji.destroy();
+  1510	                this.updateScore(5); // Flat 5 points for completing an order
+  1511	              }
+  1512	            });
+  1513	          }
+  1514	          
+  1515	          // Remove the order in both cases
+  1516	          this.removeOrder(i);
+  1517	        } catch (error) {
+  1518	          console.error("Error handling order removal:", error);
+  1519	        }
+  1520	      }
+  1521	    }
+  1522	  }
+  1523	
+  1524	  // Power-up methods
+  1525	
+  1526	  private deactivatePowerUp() {
+  1527	    console.log('Deactivating power-up');
+  1528	    
+  1529	    // Reset power-up state
+  1530	    this.powerUpActive = false;
+  1531	    this.setButtonTexture('button-idle');
+  1532	    this.powerUpCountdownText.setText('');
+  1533	    
+  1534	    // Reset the manual orders counter after power-up ends
+  1535	    this.manualOrdersCompleted = 0;
+  1536	    console.log('Reset manual orders counter to 0 after power-up ended');
+  1537	    
+  1538	    console.log('Debug sprite state before animations:');
+  1539	    console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
+  1540	    console.log(`Kiril exists: ${!!this.kirilSprite}, active: ${this.kirilSprite?.active}`);
+  1541	    console.log(`OE Logo exists: ${!!this.oeLogoSprite}, active: ${this.oeLogoSprite?.active}`);
+  1542	    
+  1543	    // Animate Hamish and Kiril sliding out
+  1544	    if (this.hamishSprite && this.hamishSprite.active) {
+  1545	      console.log('Animating Hamish out to the right');
+  1546	      this.tweens.add({
+  1547	        targets: this.hamishSprite,
+  1548	        x: this.cameras.main.width + 100,
+  1549	        duration: 500,
+  1550	        ease: 'Back.in',
+  1551	        onComplete: () => {
+  1552	          console.log('Hamish animation complete, destroying sprite');
+  1553	          if (this.hamishSprite) this.hamishSprite.destroy();
+  1554	          this.hamishSprite = null;
+  1555	        }
+  1556	      });
+  1557	    }
+  1558	    
+  1559	    if (this.kirilSprite && this.kirilSprite.active) {
+  1560	      console.log('Animating Kiril out to the left');
+  1561	      this.tweens.add({
+  1562	        targets: this.kirilSprite,
+  1563	        x: -100,
+  1564	        duration: 500,
+  1565	        ease: 'Back.in',
+  1566	        onComplete: () => {
+  1567	          console.log('Kiril animation complete, destroying sprite');
+  1568	          if (this.kirilSprite) this.kirilSprite.destroy();
+  1569	          this.kirilSprite = null;
+  1570	        }
+  1571	      });
+  1572	    }
+  1573	    
+  1574	    // Animate the OELogo sliding out
+  1575	    if (this.oeLogoSprite && this.oeLogoSprite.active) {
+  1576	      console.log('Animating OE Logo down');
+  1577	      this.tweens.add({
+  1578	        targets: this.oeLogoSprite,
+  1579	        y: this.cameras.main.height + 100,
+  1580	        duration: 800,
+  1581	        ease: 'Back.in',
+  1582	        onComplete: () => {
+  1583	          console.log('OE Logo animation complete, destroying sprite');
+  1584	          if (this.oeLogoSprite) this.oeLogoSprite.destroy();
+  1585	          this.oeLogoSprite = null;
+  1586	        }
+  1587	      });
+  1588	    }
+  1589	  }
+  1590	
+  1591	  private activatePowerUpSwitch() {
+  1592	    if (!this.powerUpAvailable || this.powerUpActive) return;
+  1593	    
+  1594	    console.log('Activating Power-Up!');
+  1595	    
+  1596	    try {
+  1597	      // Set button state
+  1598	      this.powerUpActive = true;
+  1599	      this.powerUpAvailable = false;
+  1600	      this.powerUpTimer = this.powerUpDuration; // 30 seconds of power-up time
+  1601	      
+  1602	      // Visual feedback
+  1603	      this.setButtonColor(0x0000ff); // Blue for active
+  1604	      
+  1605	      // Show countdown
+  1606	      this.powerUpCountdownText.setText('30s');
+  1607	      
+  1608	      // Show Hamish and Kiril images
+  1609	      const width = this.cameras.main.width;
+  1610	      const height = this.cameras.main.height;
+  1611	      
+  1612	      // Create Hamish sprite at bottom right (off-screen)
+  1613	      this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
+  1614	      this.hamishSprite.setScale(0.25); // Make it smaller
+  1615	      this.hamishSprite.setOrigin(1, 1); // Bottom right corner
+  1616	      this.hamishSprite.setDepth(100); // Set high depth to be in foreground
+  1617	      
+  1618	      // Create Kiril sprite at bottom left (off-screen)
+  1619	      this.kirilSprite = this.add.sprite(-100, height, 'kiril');
+  1620	      this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
+  1621	      this.kirilSprite.setOrigin(0, 1); // Bottom left corner
+  1622	      this.kirilSprite.setDepth(100); // Set high depth to be in foreground
+  1623	      
+  1624	      // Add OELogo in the middle
+  1625	      const centerX = width / 2;
+  1626	      
+  1627	      // Create the logo sprite (starts below the screen)
+  1628	      this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
+  1629	      this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
+  1630	      this.oeLogoSprite.setOrigin(0.5, 0.5);
+  1631	      this.oeLogoSprite.setDepth(99); // Just behind Hamish and Kiril
+  1632	      
+  1633	      // First tween: Slide up from below
+  1634	      this.tweens.add({
+  1635	        targets: this.oeLogoSprite,
+  1636	        y: height - 200, // Position it higher to be clearly visible
+  1637	        duration: 800,
+  1638	        ease: 'Back.out',
+  1639	        onComplete: () => {
+  1640	          // Start bouncing animation after sliding up
+  1641	          this.startLogoBouncingAnimation();
+  1642	        }
+  1643	      });
+  1644	      
+  1645	      // Play activation sound
+  1646	      if (this.sound && this.sound.add) {
+  1647	        try {
+  1648	          const activateSound = this.sound.add('powerup', { volume: 0.7 });
+  1649	          activateSound.play();
+  1650	        } catch (error) {
+  1651	          console.error('Could not play power-up sound:', error);
+  1652	        }
+  1653	      }
+  1654	      
+  1655	      // Animate the lever being pulled
+  1656	      this.tweens.add({
+  1657	        targets: this.powerUpLever,
+  1658	        y: 10, // Move lever down
+  1659	        angle: 45, // Rotate lever
+  1660	        duration: 300,
+  1661	        ease: 'Bounce.Out'
+  1662	      });
+  1663	      
+  1664	      // Animate Hamish and Kiril sliding in
+  1665	      this.tweens.add({
+  1666	        targets: this.hamishSprite,
+  1667	        x: width,
+  1668	        duration: 500,
+  1669	        ease: 'Back.out'
+  1670	      });
+  1671	      
+  1672	      this.tweens.add({
+  1673	        targets: this.kirilSprite,
+  1674	        x: 0,
+  1675	        duration: 500,
+  1676	        ease: 'Back.out'
+  1677	      });
+  1678	    } catch (error) {
+  1679	      console.error('Error in activatePowerUpSwitch:', error);
+  1680	      // Reset state in case of error
+  1681	      this.powerUpActive = false;
+  1682	      this.powerUpAvailable = true;
+  1683	    }
+  1684	  }
+  1685	  
+  1686	  private activatePowerUpCheat() {
+  1687	    console.log("CHEAT: Making power-up available");
+  1688	    
+  1689	    // Set manual orders to 10 to trigger power-up availability
+  1690	    this.manualOrdersCompleted = 10;
+  1691	    
+  1692	    // Only activate if power-up is not already available or active
+  1693	    if (!this.powerUpAvailable && !this.powerUpActive) {
+  1694	      this.makePowerUpAvailable();
+  1695	      
+  1696	      // Show a message to indicate cheat was activated
+  1697	      const cheatMessage = this.add.text(
+  1698	        this.cameras.main.width / 2,
+  1699	        100,
+  1700	        "CHEAT: Power-up Available!",
+  1701	        {
+  1702	          fontSize: '20px',
+  1703	          color: '#ffff00',
+  1704	          stroke: '#000000',
+  1705	          strokeThickness: 3
+  1706	        }
+  1707	      ).setOrigin(0.5).setDepth(100);
+  1708	      
+  1709	      // Fade out the message
+  1710	      this.tweens.add({
+  1711	        targets: cheatMessage,
+  1712	        alpha: 0,
+  1713	        y: 80,
+  1714	        duration: 1500,
+  1715	        onComplete: () => cheatMessage.destroy()
+  1716	      });
+  1717	    }
+  1718	  }
+  1719	
+  1720	  private startLogoBouncingAnimation() {
+  1721	    console.log('Starting logo wiggle animation');
+  1722	    
+  1723	    // Safety check
+  1724	    if (!this.oeLogoSprite || !this.oeLogoSprite.active) {
+  1725	      console.error('OE Logo sprite not found or not active');
+  1726	      return;
+  1727	    }
+  1728	    
+  1729	    try {
+  1730	      const width = this.cameras.main.width;
+  1731	      const height = this.cameras.main.height;
+  1732	      
+  1733	      console.log(`Screen dimensions: ${width}x${height}`);
+  1734	      console.log(`Logo current position: ${this.oeLogoSprite.x}, ${this.oeLogoSprite.y}`);
+  1735	      
+  1736	      // Set up a timer to wiggle every 5 seconds
+  1737	      this.time.addEvent({
+  1738	        delay: 10000, // 10 seconds
+  1739	        loop: true,
+  1740	        callback: () => {
+  1741	          // Only wiggle if the power-up is still active
+  1742	          if (this.powerUpActive && this.oeLogoSprite && this.oeLogoSprite.active) {
+  1743	            this.wiggleLogo();
+  1744	          }
+  1745	        }
+  1746	      });
+  1747	      
+  1748	      // Do an initial wiggle right away
+  1749	      this.wiggleLogo();
+  1750	      
+  1751	      console.log('Wiggle timer started successfully');
+  1752	    } catch (error) {
+  1753	      console.error('Error in startLogoBouncingAnimation:', error);
+  1754	    }
+  1755	  }
+  1756	  
+  1757	  private wiggleLogo() {
+  1758	    if (!this.oeLogoSprite || !this.oeLogoSprite.active) return;
+  1759	    
+  1760	    // Create a short wiggle animation
+  1761	    this.tweens.add({
+  1762	      targets: this.oeLogoSprite,
+  1763	      angle: { from: -2, to: 2 },
+  1764	      duration: 100,
+  1765	      yoyo: true,
+  1766	      repeat: 3,
+  1767	      ease: 'Sine.InOut',
+  1768	      onComplete: () => {
+  1769	        // Reset rotation at the end
+  1770	        if (this.oeLogoSprite && this.oeLogoSprite.active) {
+  1771	          this.oeLogoSprite.setAngle(0);
+  1772	        }
+  1773	      }
+  1774	    });
+  1775	  }
+  1776	
+  1777	  private updateCarriedEditsPosition() {
+  1778	    if (this.carriedEdits.length === 0) return;
+  1779	    
+  1780	    // Base position offset depending on direction
+  1781	    let baseOffsetX = 0;
+  1782	    let baseOffsetY = -25; 
+  1783	    
+  1784	    // Adjust based on player direction
+  1785	    if (this.lastDirection === 'left') {
+  1786	      baseOffsetX = -20;
+  1787	      baseOffsetY = -5;
+  1788	    } else if (this.lastDirection === 'right') {
+  1789	      baseOffsetX = 20;
+  1790	      baseOffsetY = -5;
+  1791	    } else if (this.lastDirection === 'up') {
+  1792	      baseOffsetX = 0;
+  1793	      baseOffsetY = -20;
+  1794	    } else if (this.lastDirection === 'down') {
+  1795	      baseOffsetX = 0;
+  1796	      baseOffsetY = 20;
+  1797	    }
+  1798	    
+  1799	    // Arrange edits in a small arc above the player
+  1800	    for (let i = 0; i < this.carriedEdits.length; i++) {
+  1801	      const edit = this.carriedEdits[i];
+  1802	      
+  1803	      // Horizontal spread based on how many edits we have
+  1804	      let offsetX = 0;
+  1805	      
+  1806	      // If multiple edits, spread them out
+  1807	      if (this.carriedEdits.length > 1) {
+  1808	        // Calculate spacing based on number of edits
+  1809	        const spacing = 20; // Space between each edit
+  1810	        const totalWidth = (this.carriedEdits.length - 1) * spacing;
+  1811	        offsetX = -totalWidth / 2 + i * spacing;
+  1812	      }
+  1813	      
+  1814	      // Set position
+  1815	      edit.icon.x = this.player.x + baseOffsetX + offsetX;
+  1816	      edit.icon.y = this.player.y + baseOffsetY;
+  1817	      
+  1818	      // First edit in the array (oldest) is slightly bigger and has a highlight to indicate it's next to be used
+  1819	      if (i === 0) {
+  1820	        edit.icon.setScale(1.2);
+  1821	        
+  1822	        // Add a subtle pulsing effect to the next-to-use edit
+  1823	        if (!this.tweens.isTweening(edit.icon)) {
+  1824	          this.tweens.add({
+  1825	            targets: edit.icon,
+  1826	            scale: { from: 1.2, to: 1.3 },
+  1827	            alpha: { from: 1, to: 0.8 },
+  1828	            ease: 'Sine.InOut',
+  1829	            duration: 500,
+  1830	            yoyo: true,
+  1831	            repeat: -1
+  1832	          });
+  1833	        }
+  1834	      } else {
+  1835	        edit.icon.setScale(1.0);
+  1836	        // Remove any existing tweens on non-first edits
+  1837	        this.tweens.killTweensOf(edit.icon);
+  1838	        edit.icon.setAlpha(1.0);
+  1839	      }
+  1840	    }
+  1841	    
+  1842	    // Make sure the edits are always on top
+  1843	    this.carriedEdits.forEach(edit => edit.icon.setDepth(100));
+  1844	  }
+  1845	
+  1846	  private checkMissedOrders(delta: number) {
+  1847	    // Check if any orders have gone off-screen
+  1848	    for (let i = this.orders.length - 1; i >= 0; i--) {
+  1849	      const order = this.orders[i];
+  1850	      
+  1851	      // Check if order has gone off-screen
+  1852	      if (order.x > this.cameras.main.width + 50) {
+  1853	        // Remove the order
+  1854	        this.removeOrder(i);
+  1855	      }
+  1856	    }
+  1857	  }
+  1858	
+  1859	  private checkPlayerOnButton() {
+  1860	    if (!this.player || !this.powerUpButtonSprite) return;
+  1861	    
+  1862	    // Get bounds for pixel-perfect collision detection
+  1863	    const playerBounds = this.player.getBounds();
+  1864	    const buttonBounds = this.powerUpButtonSprite.getBounds();
+  1865	    
+  1866	    // Create a smaller collision area from player's feet
+  1867	    const playerFeetBounds = new Phaser.Geom.Rectangle(
+  1868	      playerBounds.x + playerBounds.width * 0.35, // Center portion of player
+  1869	      playerBounds.y + playerBounds.height * 0.8, // Bottom portion (feet)
+  1870	      playerBounds.width * 0.3, // Narrower than full player
+  1871	      playerBounds.height * 0.2 // Just the feet
+  1872	    );
+  1873	    
+  1874	    // If player's feet overlap with button
+  1875	    const isOverlapping = Phaser.Geom.Rectangle.Overlaps(playerFeetBounds, buttonBounds);
+  1876	    
+  1877	    // Track whether the player has just entered the button area
+  1878	    const wasOverlapping = this.playerOnButton;
+  1879	    this.playerOnButton = isOverlapping;
+  1880	    
+  1881	    // First case: Player just stepped on the button AND power-up is available
+  1882	    if (isOverlapping && !wasOverlapping && this.powerUpAvailable && !this.powerUpActive) {
+  1883	      console.log("Player stepping on button, power-up available - activating!");
+  1884	      // Activate the power-up
+  1885	      this.handlePowerUpButtonClick();
+  1886	      return;
+  1887	    }
+  1888	    
+  1889	    // Visual feedback based on power-up state
+  1890	    if (isOverlapping) {
+  1891	      // Set button to pressed state regardless of power-up availability
+  1892	      this.setButtonTexture('button-pressed');
+  1893	      
+  1894	      // Only show warning if power-up is not available and not active
+  1895	      if (!this.powerUpAvailable && !this.powerUpActive && !this.warningShowing) {
+  1896	        this.warningShowing = true;
+  1897	        this.showPowerUpWarning('Power-up not ready!');
+  1898	        
+  1899	        // Reset warning flag after a short delay
+  1900	        this.time.delayedCall(1000, () => {
+  1901	          this.warningShowing = false;
+  1902	        });
+  1903	      }
+  1904	    } else if (!this.powerUpActive) { 
+  1905	      // Reset to idle or flashing state based on availability
+  1906	      if (this.powerUpAvailable) {
+  1907	        // Don't reset texture here to allow flashing animation to continue
+  1908	      } else {
+  1909	        // Not available, so use idle texture
+  1910	        this.setButtonTexture('button-idle');
+  1911	      }
+  1912	    }
+  1913	  }
+  1914	
+  1915	  private updateButtonFlashing(delta: number) {
+  1916	    if (!this.powerUpButtonSprite) return;
+  1917	    
+  1918	    // Accumulate time for flashing
+  1919	    this.buttonFlashTimer += delta;
+  1920	    
+  1921	    // When we reach the flash interval, toggle the flash state
+  1922	    if (this.buttonFlashTimer >= this.buttonFlashInterval) {
+  1923	      this.buttonFlashTimer = 0; // Reset timer
+  1924	      this.buttonFlashState = !this.buttonFlashState; // Toggle flash state
+  1925	      
+  1926	      // Different flashing states based on power-up status
+  1927	      if (this.powerUpAvailable && !this.powerUpActive) {
+  1928	        // Power-up is available but not active - flash between idle and flash2
+  1929	        this.setButtonTexture(
+  1930	          this.buttonFlashState ? 'button-flash2' : 'button-idle'
+  1931	        );
+  1932	      } else if (this.powerUpActive) {
+  1933	        // Power-up is active - flash between active and active-flash
+  1934	        this.setButtonTexture(
+  1935	          this.buttonFlashState ? 'button active-flash' : 'button-active'
+  1936	        );
+  1937	      }
+  1938	    }
+  1939	  }
+  1940	
+  1941	  private makePowerUpAvailable() {
+  1942	    // Make power-up available to player
+  1943	    this.powerUpAvailable = true;
+  1944	    
+  1945	    // Reset animation state for flashing
+  1946	    this.buttonFlashTimer = 0;
+  1947	    this.buttonFlashState = false;
+  1948	    this.setButtonTexture('button-idle');
+  1949	    
+  1950	    console.log("Power-up is now available!");
+  1951	    
+  1952	    // Start power-up button flashing/animation
+  1953	    if (this.powerUpButtonSprite) {
+  1954	      this.tweens.add({
+  1955	        targets: this.powerUpButtonSprite,
+  1956	        scale: { from: 0.15, to: 0.165 }, // Adjusted scaling for smaller base size
+  1957	        duration: 600,
+  1958	        yoyo: true,
+  1959	        repeat: 2,
+  1960	        ease: 'Sine.easeInOut'
+  1961	      });
+  1962	    }
+  1963	  }
+  1964	
+  1965	  private activatePowerUp() {
+  1966	    // Set power-up to active
+  1967	    this.powerUpActive = true;
+  1968	    this.powerUpAvailable = false;
+  1969	    this.powerUpTimer = 30000; // Extend power-up duration to 30 seconds (30000ms)
+  1970	    this.powerUpFlashTimer = 0;
+  1971	    
+  1972	    console.log("Power-up activated!");
+  1973	    
+  1974	    // Create activation animation
+  1975	    this.tweens.add({
+  1976	      targets: this.powerUpButtonSprite,
+  1977	      scale: { from: 0.15, to: 0.17 }, // Adjusted for smaller button size
+  1978	      duration: 200,
+  1979	      onStart: () => {
+  1980	        this.powerUpButtonSprite.setTexture('button-pressed');
+  1981	      },
+  1982	      onComplete: () => {
+  1983	        this.powerUpButtonSprite.setTexture('button-active');
+  1984	      }
+  1985	    });
+  1986	    
+  1987	    // Show Hamish and Kiril images
+  1988	    const width = this.cameras.main.width;
+  1989	    const height = this.cameras.main.height;
+  1990	    
+  1991	    // Create Hamish sprite at bottom right (off-screen)
+  1992	    this.hamishSprite = this.add.sprite(width + 100, height, 'hamish');
+  1993	    this.hamishSprite.setScale(0.25); // Make it smaller
+  1994	    this.hamishSprite.setOrigin(1, 1); // Bottom right corner
+  1995	    this.hamishSprite.setDepth(100); // Set high depth to be in foreground
+  1996	    
+  1997	    // Create Kiril sprite at bottom left (off-screen)
+  1998	    this.kirilSprite = this.add.sprite(-100, height, 'kiril');
+  1999	    this.kirilSprite.setScale(0.225); // 10% smaller than Hamish
+  2000	    this.kirilSprite.setOrigin(0, 1); // Bottom left corner
+  2001	    this.kirilSprite.setDepth(100); // Set high depth to be in foreground
+  2002	    
+  2003	    // Add OELogo in the middle
+  2004	    const centerX = width / 2;
+  2005	    
+  2006	    // Create the logo sprite (starts below the screen)
+  2007	    this.oeLogoSprite = this.add.sprite(centerX, height + 100, 'oelogo');
+  2008	    this.oeLogoSprite.setScale(0.9); // 300% bigger than before (was 0.3)
+  2009	    this.oeLogoSprite.setOrigin(0.5, 0.5);
+  2010	    this.oeLogoSprite.setDepth(5); // Below Hamish and Kiril but above other elements
+  2011	    
+  2012	    // First tween: Slide up from below
+  2013	    this.tweens.add({
+  2014	      targets: this.oeLogoSprite,
+  2015	      y: height - 200, // Position it higher to be clearly visible
+  2016	      duration: 800,
+  2017	      ease: 'Back.out',
+  2018	      onComplete: () => {
+  2019	        // Start bouncing animation after sliding up
+  2020	        this.startLogoBouncingAnimation();
+  2021	      }
+  2022	    });
+  2023	    
+  2024	    // Play activation sound
+  2025	    if (this.sound && this.sound.add) {
+  2026	      try {
+  2027	        const activateSound = this.sound.add('powerup', { volume: 0.7 });
+  2028	        activateSound.play();
+  2029	      } catch (error) {
+  2030	        console.error('Could not play power-up sound:', error);
+  2031	      }
+  2032	    }
+  2033	    
+  2034	    // Animate Hamish and Kiril sliding in
+  2035	    this.tweens.add({
+  2036	      targets: this.hamishSprite,
+  2037	      x: width,
+  2038	      duration: 500,
+  2039	      ease: 'Back.out'
+  2040	    });
+  2041	    
+  2042	    this.tweens.add({
+  2043	      targets: this.kirilSprite,
+  2044	      x: 0,
+  2045	      duration: 500,
+  2046	      ease: 'Back.out'
+  2047	    });
+  2048	  }
+  2049	  
+  2050	  private updatePowerUp(delta: number) {
+  2051	    if (this.powerUpActive) {
+  2052	      this.powerUpTimer -= delta;
+  2053	      const secondsLeft = Math.ceil(this.powerUpTimer / 1000);
+  2054	      this.powerUpCountdownText.setText(`${secondsLeft}s`);
+  2055	      
+  2056	      // Check if power-up has expired
+  2057	      if (this.powerUpTimer <= 0) {
+  2058	        this.deactivatePowerUp();
+  2059	      }
+  2060	      
+  2061	      // Only auto-complete orders that were created during the power-up
+  2062	      // Do not auto-complete existing orders that were on the belt before power-up activation
+  2063	      for (const order of this.orders) {
+  2064	        if (!order.isComplete && order.createdDuringPowerUp && !order.completedEdits.length) {
+  2065	          // Auto-complete all edit types
+  2066	          for (const editType of order.types) {
+  2067	            order.completedEdits.push(editType);
+  2068	            this.markEditAsApplied(order, editType);
+  2069	            this.totalEditsApplied++;
+  2070	          }
+  2071	          
+  2072	          // Complete the order
+  2073	          this.completeOrder(order);
+  2074	        }
+  2075	      }
+  2076	    }
+  2077	  }
+  2078	
+  2079	  private generateOrder = () => {
+  2080	    try {
+  2081	      console.log('Generating new order');
+  2082	      
+  2083	      // Count how many stations are unlocked
+  2084	      const unlockedStations = this.stations.filter(station => station.isUnlocked);
+  2085	      console.log(`Unlocked stations: ${unlockedStations.map(s => s.type).join(', ')}`);
+  2086	      
+  2087	      if (unlockedStations.length === 0) {
+  2088	        console.log('No unlocked stations available, cannot generate order');
+  2089	        return;
+  2090	      }
+  2091	      
+  2092	      // Check if there's an existing order too close to the spawn point
+  2093	      const orderX = -50; // Start offscreen to the left
+  2094	      const spawnBuffer = 150; // Check area around spawn point
+  2095	      
+  2096	      // Find if there's an order in the spawn buffer zone
+  2097	      const ordersNearSpawn = this.orders.filter(order => 
+  2098	        order.x > orderX - this.orderMinSpacing && order.x < spawnBuffer
+  2099	      );
+  2100	      
+  2101	      if (ordersNearSpawn.length > 0) {
+  2102	        console.log('Order in spawn area, delaying generation');
+  2103	        this.time.delayedCall(500, this.generateOrder, [], this);
+  2104	        return;
+  2105	      }
+  2106	      
+  2107	      // Determine where to place the order on the conveyor belt
+  2108	      const orderY = this.conveyorBelt.y - 40; // Position above the conveyor
+  2109	      
+  2110	      // Determine order complexity based on unlocked stations
+  2111	      const maxPossibleEdits = Math.min(5, unlockedStations.length);
+  2112	      
+  2113	      // Probability table for the number of edits
+  2114	      // Format: [1 edit, 2 edits, 3 edits, 4 edits, 5 edits]
+  2115	      // Adjust probabilities based on progress
+  2116	      let editProbabilities: number[] = [];
+  2117	      
+  2118	      // Start simple, then gradually increase complexity
+  2119	      if (unlockedStations.length === 1) {
+  2120	        // With only 1 station, all orders require 1 edit
+  2121	        editProbabilities = [1.0];
+  2122	      } else if (unlockedStations.length === 2) {
+  2123	        // With 2 stations, 70% chance of 1 edit, 30% chance of 2 edits
+  2124	        editProbabilities = [0.7, 0.3];
+  2125	      } else if (unlockedStations.length === 3) {
+  2126	        // With 3 stations: 50% for 1 edit, 30% for 2 edits, 20% for 3 edits
+  2127	        editProbabilities = [0.5, 0.3, 0.2];
+  2128	      } else if (unlockedStations.length === 4) {
+  2129	        // With 4 stations: 40% for 1 edit, 30% for 2 edits, 20% for 3 edits, 10% for 4 edits
+  2130	        editProbabilities = [0.4, 0.3, 0.2, 0.1];
+  2131	      } else {
+  2132	        // With 5 stations: 30% for 1 edit, 25% for 2 edits, 25% for 3 edits, 15% for 4 edits, 5% for 5 edits
+  2133	        editProbabilities = [0.3, 0.25, 0.25, 0.15, 0.05];
+  2134	      }
+  2135	      
+  2136	      // Determine number of edits using probability table
+  2137	      const random = Math.random();
+  2138	      let cumulativeProbability = 0;
+  2139	      let numEdits = 1;
+  2140	      
+  2141	      for (let i = 0; i < editProbabilities.length; i++) {
+  2142	        cumulativeProbability += editProbabilities[i];
+  2143	        if (random <= cumulativeProbability) {
+  2144	          numEdits = i + 1;
+  2145	          break;
+  2146	        }
+  2147	      }
+  2148	      
+  2149	      // Make sure we don't exceed our max possible edits
+  2150	      numEdits = Math.min(numEdits, maxPossibleEdits);
+  2151	      
+  2152	      // Select random edit types from unlocked stations
+  2153	      // First, ensure we have unique station types
+  2154	      const stationTypesSet = new Set(unlockedStations.map(station => station.type));
+  2155	      const uniqueStationTypes = Array.from(stationTypesSet);
+  2156	      const selectedTypes: string[] = [];
+  2157	      
+  2158	      console.log(`Available unique station types: ${uniqueStationTypes.join(', ')}`);
+  2159	      
+  2160	      // Fisher-Yates shuffle algorithm for true randomness
+  2161	      function fisherYatesShuffle(array: any[]): any[] {
+  2162	        const shuffled = [...array];
+  2163	        for (let i = shuffled.length - 1; i > 0; i--) {
+  2164	          const j = Math.floor(Math.random() * (i + 1));
+  2165	          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  2166	        }
+  2167	        return shuffled;
+  2168	      }
+  2169	      
+  2170	      // Shuffle the types using Fisher-Yates for proper randomization
+  2171	      const shuffledTypes = fisherYatesShuffle(uniqueStationTypes);
+  2172	      console.log(`Shuffled station types: ${shuffledTypes.join(', ')}`);
+  2173	      
+  2174	      // Take the first numEdits types, with explicit duplicate checking
+  2175	      for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
+  2176	        const typeToAdd = shuffledTypes[i];
+  2177	        
+  2178	        // Double-check that we're not adding a duplicate (should never happen with this algorithm, but being safe)
+  2179	        if (!selectedTypes.includes(typeToAdd)) {
+  2180	          selectedTypes.push(typeToAdd);
+  2181	        }
+  2182	      }
+  2183	      
+  2184	      // If we couldn't get enough types (not enough unique stations), 
+  2185	      // reduce the number of edits to match available types
+  2186	      if (selectedTypes.length < numEdits) {
+  2187	        numEdits = selectedTypes.length;
+  2188	      }
+  2189	      
+  2190	      console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
+  2191	      
+  2192	      // Create container for the order
+  2193	      const container = this.add.container(orderX, orderY);
+  2194	      container.setSize(160, 120);
+  2195	      container.setDepth(25); // Set order depth higher than player (20) but lower than Hamish/Kiril (100)
+  2196	      
+  2197	      // Create cardboard box - size depends on number of edits
+  2198	      let bgWidth, bgHeight;
+  2199	      
+  2200	      if (numEdits <= 2) {
+  2201	        // Small boxes for 1-2 edits
+  2202	        bgWidth = 110 + (numEdits * 10);
+  2203	        bgHeight = 70;
+  2204	      } else if (numEdits <= 4) {
+  2205	        // Medium boxes for 3-4 edits
+  2206	        bgWidth = 130 + ((numEdits - 2) * 15);
+  2207	        bgHeight = numEdits === 3 ? 75 : 100;
+  2208	      } else {
+  2209	        // Large boxes for 5-6 edits
+  2210	        bgWidth = 160 + ((numEdits - 4) * 20);
+  2211	        bgHeight = 120;
+  2212	      }
+  2213	      
+  2214	      // Create cardboard box
+  2215	      const bgColor = 0xd9c0a3; // Lighter cardboard brown color
+  2216	      const background = this.add.rectangle(0, 0, bgWidth, bgHeight, bgColor, 1)
+  2217	        .setStrokeStyle(2, 0xa0816c); // Softer brown for the edges
+  2218	      
+  2219	      // Add cardboard box flap at the top - more subtle
+  2220	      const topFlap = this.add.rectangle(0, -bgHeight/2 + 6, bgWidth * 0.7, 10, bgColor)
+  2221	        .setStrokeStyle(1, 0xa0816c);
+  2222	        
+  2223	      // Add box tape - smaller and less visible
+  2224	      const tape = this.add.rectangle(0, 0, bgWidth * 0.3, 4, 0xefefef);
+  2225	      
+  2226	      container.add([background, topFlap, tape]);
+  2227	      
+  2228	      // Create icons for each required edit
+  2229	      const icons = selectedTypes.map((type, index) => {
+  2230	        // Verify that this icon exists
+  2231	        const iconText = this.getStationIcon(type);
+  2232	        console.log(`Using icon '${iconText}' for type '${type}'`);
+  2233	        
+  2234	        const icon = this.add.text(0, 0, iconText, {
+  2235	          fontSize: '28px',
+  2236	          stroke: '#000000',
+  2237	          strokeThickness: 2
+  2238	        }).setOrigin(0.5);
+  2239	        
+  2240	        // Position based on layout (horizontal or grid)
+  2241	        if (numEdits <= 3) {
+  2242	          // Horizontal layout
+  2243	          if (numEdits === 1) {
+  2244	            // Single icon centered
+  2245	            icon.x = 0;
+  2246	          } else {
+  2247	            // Multiple icons spaced evenly
+  2248	            const totalSpace = 80; // Total space to distribute icons
+  2249	            const spacing = totalSpace / (numEdits - 1);
+  2250	            icon.x = -totalSpace/2 + index * spacing;
+  2251	            icon.y = 0; // Centered vertically
+  2252	          }
+  2253	        } else if (numEdits <= 6) {
+  2254	          // Grid layout for 4-6 edits
+  2255	          const itemsPerRow = numEdits <= 4 ? 2 : 3; // For 5-6 edits, use 3 items in top row
+  2256	          const horizontalSpacing = 40;
+  2257	          const verticalSpacing = 40;
+  2258	          
+  2259	          if (numEdits <= 4) {
+  2260	            // 2x2 grid for 4 edits
+  2261	            const row = Math.floor(index / 2);
+  2262	            const col = index % 2;
+  2263	            icon.x = (col - 0.5) * horizontalSpacing; // -20, 0, +20
+  2264	            icon.y = (row - 0.5) * verticalSpacing; // -20, 0, +20
+  2265	          } else {
+  2266	            // 5-6 edits: 3 in top row, remainder in bottom row
+  2267	            const itemsInTopRow = 3;
+  2268	            const itemsInBottomRow = numEdits - itemsInTopRow;
+  2269	            
+  2270	            // Determine if this icon is in the top or bottom row
+  2271	            const isInTopRow = index < itemsInTopRow;
+  2272	            
+  2273	            if (isInTopRow) {
+  2274	              // Top row with 3 items
+  2275	              icon.x = (index - 1) * horizontalSpacing; // -40, 0, +40
+  2276	              icon.y = -verticalSpacing/2; // Add vertical positioning
+  2277	            } else {
+  2278	              // Bottom row with 1-3 items (centered)
+  2279	              let positionInRow = index - itemsInTopRow;
+  2280	              let bottomRowOffset = 0;
+  2281	              
+  2282	              if (itemsInBottomRow === 1) {
+  2283	                bottomRowOffset = 0; // Single item centered
+  2284	              } else if (itemsInBottomRow === 2) {
+  2285	                bottomRowOffset = (positionInRow - 0.5) * horizontalSpacing; // -20, +20
+  2286	              } else {
+  2287	                bottomRowOffset = (positionInRow - 1) * horizontalSpacing; // -40, 0, +40
+  2288	              }
+  2289	              
+  2290	              icon.x = bottomRowOffset;
+  2291	              icon.y = verticalSpacing/2;
+  2292	            }
+  2293	          }
+  2294	        }
+  2295	        
+  2296	        return icon;
+  2297	      });
+  2298	      
+  2299	      // Add all icons to the container
+  2300	      container.add(icons);
+  2301	      
+  2302	      // Create order object
+  2303	      const order: Order = {
+  2304	        id: `order-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+  2305	        types: selectedTypes,
+  2306	        completedEdits: [],
+  2307	        x: orderX,
+  2308	        y: orderY,
+  2309	        container,
+  2310	        isComplete: false,
+  2311	        width: bgWidth,
+  2312	        height: bgHeight,
+  2313	        icons, // Add icons to the order object
+  2314	        hasComment: false // Initialize hasComment property to false
+  2315	      };
+  2316	      
+  2317	      // Add to orders array
+  2318	      this.orders.push(order);
+  2319	      
+  2320	      // If power up is active, mark this order as created during power-up and auto-complete it
+  2321	      if (this.powerUpActive) {
+  2322	        order.createdDuringPowerUp = true;
+  2323	        
+  2324	        // Auto-complete all edit types
+  2325	        for (const editType of order.types) {
+  2326	          order.completedEdits.push(editType);
+  2327	          this.markEditAsApplied(order, editType);
+  2328	          this.totalEditsApplied++;
+  2329	        }
+  2330	        
+  2331	        // Complete the order
+  2332	        this.completeOrder(order);
+  2333	      }
+  2334	      
+  2335	      console.log(`Order created: ${order.id}`);
+  2336	      console.log(`Order requires edits: ${order.types.join(', ')}`);
+  2337	      console.log(`Order icon types: ${order.types.map(type => `${type}: ${this.getStationIcon(type)}`).join(', ')}`);
+  2338	    } catch (error) {
+  2339	      console.error('Error generating order:', error);
+  2340	    }
+  2341	  }
+  2342	
+  2343	  // Power-up methods
+  2344	
+  2345	  private unlockNextStation() {
+  2346	    // Check how many stations are currently unlocked
+  2347	    const unlockedCount = this.stations.filter(station => station.isUnlocked).length;
+  2348	    console.log(`Currently have ${unlockedCount} unlocked stations`);
+  2349	    
+  2350	    // Find the next station to unlock
+  2351	    const nextStation = this.stations.find(station => !station.isUnlocked);
+  2352	    
+  2353	    if (!nextStation) {
+  2354	      console.log('All stations already unlocked!');
+  2355	      return;
+  2356	    }
+  2357	    
+  2358	    console.log(`Unlocking station: ${nextStation.type}`);
+  2359	    
+  2360	    // Unlock the station
+  2361	    nextStation.isUnlocked = true;
+  2362	    
+  2363	    // Make sure the station is visible
+  2364	    if (nextStation.container) {
+  2365	      // Start with alpha 0
+  2366	      nextStation.container.setAlpha(0);
+  2367	      nextStation.sign.setAlpha(0); // Also set sign to invisible
+  2368	      
+  2369	      // Flash the station to draw attention to it
+  2370	      this.tweens.add({
+  2371	        targets: nextStation.container,
+  2372	        alpha: { from: 0, to: 1 },
+  2373	        scale: { from: 0.7, to: 1 },
+  2374	        ease: 'Back.Out',
+  2375	        duration: 600,
+  2376	        yoyo: false,
+  2377	        onComplete: () => {
+  2378	          // Ensure it stays visible after the animation
+  2379	          nextStation.container.setAlpha(1);
+  2380	          console.log(`Animation complete for station: ${nextStation.type}, alpha: ${nextStation.container.alpha}`);
+  2381	        }
+  2382	      });
+  2383	      
+  2384	      // Animate the sign with a slight delay for a more dramatic reveal
+  2385	      this.time.delayedCall(300, () => {
+  2386	        this.tweens.add({
+  2387	          targets: nextStation.sign,
+  2388	          alpha: { from: 0, to: 1 },
+  2389	          scale: { from: 0.8, to: 1 },
+  2390	          ease: 'Back.Out',
+  2391	          duration: 800,
+  2392	          onComplete: () => {
+  2393	            // Ensure sign stays visible
+  2394	            nextStation.sign.setAlpha(1);
+  2395	          }
+  2396	        });
+  2397	      });
+  2398	      
+  2399	      // Display an announcement text about the new station
+  2400	      this.stationUnlockText.setText(`${this.getStationIcon(nextStation.type)} New station unlocked! ${this.getStationIcon(nextStation.type)}`);
+  2401	      this.stationUnlockText.setVisible(true);
+  2402	      
+  2403	      // Fade out the announcement after a delay
+  2404	      this.time.delayedCall(3000, () => {
+  2405	        this.tweens.add({
+  2406	          targets: this.stationUnlockText,
+  2407	          alpha: 0,
+  2408	          duration: 500,
+  2409	          onComplete: () => {
+  2410	            this.stationUnlockText.setVisible(false);
+  2411	            this.stationUnlockText.setAlpha(1);
+  2412	          }
+  2413	        });
+  2414	      });
+  2415	    }
+  2416	    
+  2417	    // Reset the counter
+  2418	    this.lastUnlockedAtEditCount = this.totalEditsApplied;
+  2419	    
+  2420	    // Verify all station visibility after unlocking
+  2421	    this.verifyStationVisibility();
+  2422	  }
+  2423	
+  2424	  // Helper to set button texture while maintaining scale
+  2425	  private setButtonTexture(textureName: string) {
+  2426	    if (!this.powerUpButtonSprite) return;
+  2427	    
+  2428	    // Store current scale
+  2429	    const currentScale = {
+  2430	      x: this.powerUpButtonSprite.scaleX,
+  2431	      y: this.powerUpButtonSprite.scaleY
+  2432	    };
+  2433	    
+  2434	    // Change texture
+  2435	    this.powerUpButtonSprite.setTexture(textureName);
+  2436	    
+  2437	    // Restore scale to maintain same size
+  2438	    this.powerUpButtonSprite.setScale(currentScale.x, currentScale.y);
+  2439	  }
+  2440	
+  2441	  private showPowerUpWarning(message: string) {
+  2442	    // Only show if we have a warning text object
+  2443	    if (!this.powerUpWarningText) return;
+  2444	    
+  2445	    // Set warning message
+  2446	    this.powerUpWarningText.setText(message);
+  2447	    this.powerUpWarningText.setAlpha(1);
+  2448	    
+  2449	    // Fade out the warning after a short delay
+  2450	    this.tweens.add({
+  2451	      targets: this.powerUpWarningText,
+  2452	      alpha: 0,
+  2453	      y: this.powerUpWarningText.y - 20, 
+  2454	      duration: 1500,
+  2455	      onComplete: () => {
+  2456	        // Reset position after fading out
+  2457	        this.powerUpWarningText.y += 20;
+  2458	      }
+  2459	    });
+  2460	  }
+  2461	
+  2462	  private handlePowerUpButtonClick() {
+  2463	    // Only allow pressing the button if a power-up is available
+  2464	    if (!this.powerUpAvailable || this.powerUpActive) {
+  2465	      // Show warning if power-up is not available
+  2466	      this.showPowerUpWarning('Power-up not ready!');
+  2467	      return;
+  2468	    }
+  2469	    
+  2470	    // Show the "Activate Order Editing" notification
+  2471	    this.showActivationNotification();
+  2472	    
+  2473	    // Simply change texture without animation
+  2474	    this.powerUpButtonSprite.setTexture('button-pressed');
+  2475	    
+  2476	    // Short delay before activating power-up
+  2477	    this.time.delayedCall(200, () => {
+  2478	      this.powerUpButtonSprite.setTexture('button-idle');
+  2479	      this.activatePowerUp();
+  2480	    });
+  2481	  }
+  2482	  
+  2483	  private showActivationNotification() {
+  2484	    // Create the notification text
+  2485	    const notification = this.add.text(
+  2486	      this.powerUpButtonSprite.x,
+  2487	      this.powerUpButtonSprite.y - 40, // Position above the button
+  2488	      'Activate Order Editing!', 
+  2489	      { 
+  2490	        fontSize: '18px', 
+  2491	        color: '#FFFFFF',
+  2492	        stroke: '#000000',
+  2493	        strokeThickness: 3,
+  2494	        fontStyle: 'bold'
+  2495	      }
+  2496	    ).setOrigin(0.5).setDepth(110);
+  2497	    
+  2498	    // Add a subtle glow effect
+  2499	    notification.setShadow(0, 0, '#ff9900', 5);
+  2500	    
+  2501	    // Animate the notification floating up and fading out
+  2502	    this.tweens.add({
+  2503	      targets: notification,
+  2504	      y: notification.y - 50, // Float upward
+  2505	      alpha: { from: 1, to: 0 },
+  2506	      scale: { from: 1, to: 1.2 },
+  2507	      duration: 1500,
+  2508	      ease: 'Sine.Out',
+  2509	      onComplete: () => notification.destroy()
+  2510	    });
+  2511	  }
+  2512	
+  2513	  private handlePlayerMovement(delta: number) {
+  2514	    if (!this.player || !this.cursors) return;
+  2515	    
+  2516	    let isMoving = false;
+  2517	    let direction = this.lastDirection;
+  2518	
+  2519	    // Only check if near station for spacebar interactions, not to restrict movement
+  2520	    let nearStation = this.isNearStation();
+  2521	    
+  2522	    // Save the previous player position before any movement
+  2523	    const prevX = this.player.x;
+  2524	    const prevY = this.player.y;
+  2525	    
+  2526	    // Create a buffer zone around the conveyor belt
+  2527	    const conveyorBufferTop = this.conveyorBelt.y - 90; // Significantly increased buffer to keep player's shadow from touching
+  2528	    const conveyorBufferBottom = this.conveyorBelt.y + 20; // 20px buffer below conveyor
+  2529	    
+  2530	    // Check for movement keys and update player position
+  2531	    // But don't allow movement onto the conveyor belt
+  2532	    let newX = this.player.x;
+  2533	    let newY = this.player.y;
+  2534	    let movementBlocked = false;
+  2535	    
+  2536	    if (this.cursors.left?.isDown) {
+  2537	      newX -= this.playerSpeed;
+  2538	      direction = 'left';
+  2539	      isMoving = true;
+  2540	    } else if (this.cursors.right.isDown) {
+  2541	      newX += this.playerSpeed;
+  2542	      direction = 'right';
+  2543	      isMoving = true;
+  2544	    }
+  2545	    
+  2546	    if (this.cursors.up.isDown) {
+  2547	      newY -= this.playerSpeed;
+  2548	      direction = 'up';
+  2549	      isMoving = true;
+  2550	    } else if (this.cursors.down.isDown) {
+  2551	      newY += this.playerSpeed; 
+  2552	      direction = 'down';
+  2553	      isMoving = true;
+  2554	    }
+  2555	    
+  2556	    // Check if the player's new position would put them on the conveyor belt
+  2557	    const futurePlayerY = newY;
+  2558	    
+  2559	    // Block movement if player would cross the conveyor buffer zone
+  2560	    if (futurePlayerY <= conveyorBufferTop && futurePlayerY >= prevY && prevY > conveyorBufferTop) {
+  2561	      // Player trying to move up onto conveyor belt - block it
+  2562	      newY = conveyorBufferTop + 1; // Keep them just below the buffer
+  2563	      movementBlocked = true;
+  2564	    } else if (futurePlayerY >= conveyorBufferBottom && futurePlayerY <= prevY && prevY < conveyorBufferBottom) {
+  2565	      // Player trying to move down onto conveyor belt - block it
+  2566	      newY = conveyorBufferBottom - 1; // Keep them just above the buffer
+  2567	      movementBlocked = true;
+  2568	    }
+  2569	    
+  2570	    // If the player is already within the forbidden zone, push them out
+  2571	    if (futurePlayerY > conveyorBufferTop && futurePlayerY < conveyorBufferBottom) {
+  2572	      // Determine which side they're closer to
+  2573	      if (Math.abs(futurePlayerY - conveyorBufferTop) < Math.abs(futurePlayerY - conveyorBufferBottom)) {
+  2574	        newY = conveyorBufferTop + 1; // Put them just below the top buffer
+  2575	      } else {
+  2576	        newY = conveyorBufferBottom - 1; // Put them just above the bottom buffer
+  2577	      }
+  2578	      movementBlocked = true;
+  2579	    }
+  2580	    
+  2581	    // Update player position
+  2582	    this.player.x = newX;
+  2583	    this.player.y = newY;
+  2584	    
+  2585	    // Keep player within bounds
+  2586	    if (this.player.x < 30) this.player.x = 30;
+  2587	    if (this.player.x > this.cameras.main.width - 30) this.player.x = this.cameras.main.width - 30;
+  2588	    if (this.player.y < 30) this.player.y = 30;
+  2589	    if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
+  2590	
+  2591	    // Check collisions with stations
+  2592	    this.stations.forEach(station => {
+  2593	      if (station.isUnlocked) {
+  2594	        const stationBounds = new Phaser.Geom.Rectangle(
+  2595	          station.container.x - 50,
+  2596	          station.container.y - 50,
+  2597	          100, 
+  2598	          100
+  2599	        );
+  2600	        
+  2601	        const playerBounds = new Phaser.Geom.Rectangle(
+  2602	          this.player!.x - 20,
+  2603	          this.player!.y - 30,
+  2604	          40, 
+  2605	          60
+  2606	        );
+  2607	        
+  2608	        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+  2609	          // Determine which side of the station the player is coming from
+  2610	          const dx = this.player!.x - station.container.x;
+  2611	          const dy = this.player!.y - station.container.y;
+  2612	          
+  2613	          // Calculate distances to each edge of the station
+  2614	          const distToLeft = Math.abs(dx + 50);
+  2615	          const distToRight = Math.abs(dx - 50);
+  2616	          const distToTop = Math.abs(dy + 50);
+  2617	          const distToBottom = Math.abs(dy - 50);
+  2618	          
+  2619	          // Find the minimum distance to determine which side the player is on
+  2620	          const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+  2621	          
+  2622	          // Add a small buffer to prevent sticking/sliding
+  2623	          const buffer = 5;
+  2624	          
+  2625	          // Apply appropriate displacement with increased push distance
+  2626	          if (minDist === distToLeft) {
+  2627	            this.player!.x = station.container.x - 80; // Increased push distance to 80
+  2628	          } else if (minDist === distToRight) {
+  2629	            this.player!.x = station.container.x + 80; // Increased push distance to 80
+  2630	          } else if (minDist === distToTop) {
+  2631	            this.player!.y = station.container.y - 80; // Increased push distance to 80
+  2632	          } else if (minDist === distToBottom) {
+  2633	            this.player!.y = station.container.y + 80; // Increased push distance to 80
+  2634	            
+  2635	            // Add additional check for bottom collision to prevent sliding
+  2636	            if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
+  2637	              // If player is trying to move horizontally while colliding with bottom,
+  2638	              // push them slightly further down to avoid the collision zone
+  2639	              this.player!.y += buffer;
+  2640	            }
+  2641	          }
+  2642	          
+  2643	          // Add extra push when trying to move directly into a station
+  2644	          if (minDist === distToLeft && this.cursors.right.isDown) {
+  2645	            this.player!.x -= buffer; // Push little extra left when trying to move right
+  2646	          } else if (minDist === distToRight && this.cursors.left.isDown) {
+  2647	            this.player!.x += buffer; // Push little extra right when trying to move left
+  2648	          } else if (minDist === distToTop && this.cursors.down.isDown) {
+  2649	            this.player!.y -= buffer; // Push little extra up when trying to move down
+  2650	          } else if (minDist === distToBottom && this.cursors.up.isDown) {
+  2651	            this.player!.y += buffer; // Push little extra down when trying to move up
+  2652	          }
+  2653	        }
+  2654	      }
+  2655	    });
+  2656	    
+  2657	    // Update tracking of last direction and movement state
+  2658	    if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
+  2659	      this.lastDirection = direction;
+  2660	      this.lastMoving = isMoving;
+  2661	    }
+  2662	  }
+  2663	
+  2664	  private verifyStationVisibility() {
+  2665	    console.log('Verifying station visibility...');
+  2666	    
+  2667	    this.stations.forEach(station => {
+  2668	      if (station.isUnlocked && station.container) {
+  2669	        // Check if the station should be visible but isn't
+  2670	        if (station.container.alpha < 1) {
+  2671	          console.log(`Fixing visibility for unlocked station: ${station.type}`);
+  2672	          station.container.setAlpha(1);
+  2673	        }
+  2674	        
+  2675	        // Make sure the container is visible
+  2676	        if (!station.container.visible) {
+  2677	          console.log(`Setting visible=true for unlocked station: ${station.type}`);
+  2678	          station.container.setVisible(true);
+  2679	        }
+  2680	      }
+  2681	    });
+  2682	    
+  2683	    // Special check for quantity station
+  2684	    const quantityStation = this.stations.find(s => s.type === 'quantity');
+  2685	    if (quantityStation && quantityStation.isUnlocked) {
+  2686	      console.log(`Quantity station status: unlocked=${quantityStation.isUnlocked}, alpha=${quantityStation.container.alpha}, visible=${quantityStation.container.visible}`);
+  2687	    }
+  2688	  }
+  2689	
+  2690	  private checkForUnlock() {
+  2691	    // Check if we've met the threshold for unlocking a new station
+  2692	    const unlockedCount = this.stations.filter(station => station.isUnlocked).length;
+  2693	    
+  2694	    // If we already have all stations unlocked, no need to check
+  2695	    if (unlockedCount >= this.stations.length) {
+  2696	      return;
+  2697	    }
+  2698	    
+  2699	    // If we've passed the threshold for the next unlock
+  2700	    if (this.totalEditsApplied >= this.lastUnlockedAtEditCount + 5) {
+  2701	      console.log('Threshold met to unlock next station: ${this.totalEditsApplied} edits applied');
+  2702	      
+  2703	      this.unlockNextStation();
+  2704	    }
+  2705	  }
+  2706	
+  2707	  // Helper function to create a pixel art style sign
+  2708	  private createStationSign(x: number, y: number, type: string): Phaser.GameObjects.Container {
+  2709	    // Create a container for the sign - position higher above the station to create more space
+  2710	    const signContainer = this.add.container(x, y - 85); // Increased distance from y - 50 to y - 85
+  2711	    
+  2712	    // Get the station name from the type
+  2713	    const text = this.getStationName(type);
+  2714	    
+  2715	    // Create the sign background (wooden plank)
+  2716	    const signWidth = Math.max(text.length * 14, 80); // Adjust width based on text length
+  2717	    const signHeight = 40;
+  2718	    
+  2719	    // Sign shadow
+  2720	    const signShadow = this.add.rectangle(2, 2, signWidth, signHeight, 0x000000)
+  2721	      .setOrigin(0.5, 0.5)
+  2722	      .setAlpha(0.3);
+  2723	    
+  2724	    // Main sign board with pixel art style
+  2725	    const sign = this.add.rectangle(0, 0, signWidth, signHeight, 0xC19A6B)
+  2726	      .setOrigin(0.5, 0.5)
+  2727	      .setStrokeStyle(2, 0x8B4513);
+  2728	    
+  2729	    // Add grain texture to the sign to give it a pixel art feel
+  2730	    const grainTexture = this.add.grid(
+  2731	      0, 0,
+  2732	      signWidth, signHeight,
+  2733	      8, 8, // Pixel grid size
+  2734	      0, 0,
+  2735	      0x8B4513, 0.1
+  2736	    ).setOrigin(0.5, 0.5);
+  2737	    
+  2738	    // Create nails at the corners for decorative effect
+  2739	    const nail1 = this.add.circle(-signWidth/2 + 8, -signHeight/2 + 8, 2, 0x808080);
+  2740	    const nail2 = this.add.circle(signWidth/2 - 8, -signHeight/2 + 8, 2, 0x808080);
+  2741	    const nail3 = this.add.circle(-signWidth/2 + 8, signHeight/2 - 8, 2, 0x808080);
+  2742	    const nail4 = this.add.circle(signWidth/2 - 8, signHeight/2 - 8, 2, 0x808080);
+  2743	    
+  2744	    // Format the text to make it look nicer
+  2745	    const formattedText = text.charAt(0).toUpperCase() + text.slice(1);
+  2746	    
+  2747	    // Add the text to the sign
+  2748	    const signText = this.add.text(0, 0, formattedText, {
+  2749	      fontFamily: 'monospace', // Pixel font style
+  2750	      fontSize: '20px',
+  2751	      color: '#000000',
+  2752	      align: 'center',
+  2753	      stroke: '#000000',
+  2754	      strokeThickness: 0.5
+  2755	    }).setOrigin(0.5, 0.5);
+  2756	    
+  2757	    // Add all elements to the container - removed post from this list
+  2758	    signContainer.add([signShadow, sign, grainTexture, nail1, nail2, nail3, nail4, signText]);
+  2759	    
+  2760	    // Set the depth to ensure it's visible but doesn't interfere with other elements
+  2761	    signContainer.setDepth(15); // Set to a depth that makes it visible but not too prominent
+  2762	    
+  2763	    return signContainer;
+  2764	  }
+  2765	
+  2766	  // Cheat function to unlock all stations
+  2767	  private unlockAllStationsCheat() {
+  2768	    // Unlock all stations
+  2769	    this.stations.forEach(station => {
+  2770	      station.isUnlocked = true;
+  2771	      
+  2772	      // Make station visible if it wasn't before
+  2773	      if (station.container) {
+  2774	        station.container.setAlpha(1);
+  2775	        station.sign.setAlpha(1);
+  2776	      }
+  2777	    });
+  2778	    
+  2779	    // Update the count of when stations were last unlocked
+  2780	    this.lastUnlockedAtEditCount = this.totalEditsApplied;
+  2781	    
+  2782	    // Show notification
+  2783	    this.stationUnlockText.setText('🔓 All stations unlocked! 🔓');
+  2784	    this.stationUnlockText.setVisible(true);
+  2785	    
+  2786	    // Fade out the notification after a delay
+  2787	    this.tweens.add({
+  2788	      targets: this.stationUnlockText,
+  2789	      alpha: 0,
+  2790	      duration: 2000,
+  2791	      delay: 1500,
+  2792	      onComplete: () => {
+  2793	        this.stationUnlockText.setVisible(false);
+  2794	        this.stationUnlockText.setAlpha(1);
+  2795	      }
+  2796	    });
+  2797	    
+  2798	    // Verify that all stations are visible
+  2799	    this.verifyStationVisibility();
+  2800	  }
+  2801	
+  2802	  /**
+  2803	   * Shows a comment for an order based on its edit type requirements
+  2804	   */
+  2805	  private showOrderComment(order: Order): void {
+  2806	    console.log(`Showing comment for order ${order.id}`);
+  2807	    
+  2808	    // Skip comments for auto-completed orders if needed
+  2809	    if (order.createdDuringPowerUp) {
+  2810	      this.showPowerUpComment(order);
+  2811	      return;
+  2812	    }
+  2813	    
+  2814	    // For normal orders, pick a comment related to one of its required edits
+  2815	    this.showRegularComment(order);
+  2816	  }
+  2817	
+  2818	  /**
+  2819	   * Shows a regular comment for an order
+  2820	   */
+  2821	  private showRegularComment(order: Order): void {
+  2822	    // Get a random edit type from the order's requirements
+  2823	    const randomEditType = this.getRandomEditType(order.types);
+  2824	    
+  2825	    if (randomEditType && regularComments[randomEditType]) {
+  2826	      const commentsForType = regularComments[randomEditType];
+  2827	      
+  2828	      // Filter out recently shown comments
+  2829	      const availableComments = commentsForType.filter(
+  2830	        comment => !this.recentComments.includes(comment.text)
+  2831	      );
+  2832	      
+  2833	      // If all comments have been recently shown, use the full list
+  2834	      const commentPool = availableComments.length > 0 ? availableComments : commentsForType;
+  2835	      
+  2836	      const randomIndex = Math.floor(Math.random() * commentPool.length);
+  2837	      const comment = commentPool[randomIndex];
+  2838	      
+  2839	      // Add to recent comments list
+  2840	      this.addToRecentComments(comment.text);
+  2841	      
+  2842	      this.createSpeechBubble(order, comment.text);
+  2843	    }
+  2844	  }
+  2845	
+  2846	  /**
+  2847	   * Shows a power-up related comment for an order
+  2848	   */
+  2849	  private showPowerUpComment(order: Order): void {
+  2850	    // Filter power-up comments that match the order's edit types
+  2851	    const matchingComments = powerUpComments.filter(comment => 
+  2852	      order.types.includes(comment.editType) || comment.editType === 'general'
+  2853	    );
+  2854	    
+  2855	    if (matchingComments.length === 0) {
+  2856	      // Fall back to general comments if no matching ones
+  2857	      const generalComments = powerUpComments.filter(comment => comment.editType === 'general');
+  2858	      
+  2859	      if (generalComments.length > 0) {
+  2860	        // Filter out recently shown comments
+  2861	        const availableComments = generalComments.filter(
+  2862	          comment => !this.recentComments.includes(comment.text)
+  2863	        );
+  2864	        
+  2865	        // If all comments have been recently shown, use the full list
+  2866	        const commentPool = availableComments.length > 0 ? availableComments : generalComments;
+  2867	        
+  2868	        const randomIndex = Math.floor(Math.random() * commentPool.length);
+  2869	        const commentText = commentPool[randomIndex].text;
+  2870	        
+  2871	        // Add to recent comments list
+  2872	        this.addToRecentComments(commentText);
+  2873	        
+  2874	        this.createSpeechBubble(order, commentText);
+  2875	      }
+  2876	      
+  2877	      return;
+  2878	    }
+  2879	    
+  2880	    // Filter out recently shown comments
+  2881	    const availableComments = matchingComments.filter(
+  2882	      comment => !this.recentComments.includes(comment.text)
+  2883	    );
+  2884	    
+  2885	    // If all comments have been recently shown, use the full list
+  2886	    const commentPool = availableComments.length > 0 ? availableComments : matchingComments;
+  2887	    
+  2888	    // Select a random matching comment
+  2889	    const randomIndex = Math.floor(Math.random() * commentPool.length);
+  2890	    const commentText = commentPool[randomIndex].text;
+  2891	    
+  2892	    // Add to recent comments list
+  2893	    this.addToRecentComments(commentText);
+  2894	    
+  2895	    this.createSpeechBubble(order, commentText);
+  2896	  }
+  2897	
+  2898	  /**
+  2899	   * Gets a random edit type from the order's requirements
+  2900	   */
+  2901	  private getRandomEditType(editTypes: string[]): string | null {
+  2902	    if (editTypes.length === 0) return null;
+  2903	    
+  2904	    // Simple random selection is more reliable here
+  2905	    const randomIndex = Math.floor(Math.random() * editTypes.length);
+  2906	    return editTypes[randomIndex];
+  2907	  }
+  2908	
+  2909	  /**
+  2910	   * Adds a comment to the recent comments list and removes oldest if needed
+  2911	   */
+  2912	  private addToRecentComments(comment: string): void {
+  2913	    // Add new comment to the list
+  2914	    this.recentComments.push(comment);
+  2915	    
+  2916	    // Keep only the most recent 5 comments
+  2917	    if (this.recentComments.length > this.maxRecentComments) {
+  2918	      this.recentComments.shift(); // Remove oldest comment
+  2919	    }
+  2920	  }
+  2921	
+  2922	  /**
+  2923	   * Creates a speech bubble for an order
+  2924	   */
+  2925	  private createSpeechBubble(order: Order, text: string): void {
+  2926	    console.log(`Creating speech bubble for order ${order.id}: "${text}"`);
+  2927	    
+  2928	    // Check if this order already has a bubble
+  2929	    if (this.activeBubbles.has(order.id)) {
+  2930	      console.log(`Order ${order.id} already has a speech bubble, skipping`);
+  2931	      return;
+  2932	    }
+  2933	    
+  2934	    // If we already have 2 active bubbles, remove the oldest one first
+  2935	    if (this.activeBubbles.size >= 2) {
+  2936	      console.log("Already showing 2 bubbles, removing oldest");
+  2937	      const oldestOrderId = Array.from(this.activeBubbles.keys())[0];
+  2938	      if (oldestOrderId) {
+  2939	        const oldestBubble = this.activeBubbles.get(oldestOrderId);
+  2940	        if (oldestBubble) {
+  2941	          oldestBubble.destroy();
+  2942	        }
+  2943	        this.activeBubbles.delete(oldestOrderId);
+  2944	      }
+  2945	    }
+  2946	    
+  2947	    // Create bubble with the SpeechBubble class
+  2948	    const bubble = new SpeechBubble({
+  2949	      scene: this,
+  2950	      x: order.x,
+  2951	      y: order.y + 80, // Position below the order
+  2952	      text: text,
+  2953	      padding: 12,
+  2954	      backgroundColor: order.createdDuringPowerUp ? 0x7358a7 : 0x4a6481, // Different color for power-up orders
+  2955	      borderColor: order.createdDuringPowerUp ? 0xff8bf7 : 0x8bf7ff,
+  2956	      borderWidth: 3,
+  2957	      pointerPosition: 'center',
+  2958	      lifespan: 0 // We'll manage the lifespan ourselves
+  2959	    });
+  2960	    
+  2961	    // Store reference to manage lifecycle
+  2962	    this.activeBubbles.set(order.id, bubble);
+  2963	    
+  2964	    // Add a small pop-in animation
+  2965	    bubble.container.setScale(0.1);
+  2966	    this.tweens.add({
+  2967	      targets: bubble.container,
+  2968	      scale: 1,
+  2969	      duration: 300,
+  2970	      ease: 'Back.Out'
+  2971	    });
+  2972	    
+  2973	    // Remove from tracking after a delay
+  2974	    this.time.delayedCall(5000, () => {
+  2975	      if (this.activeBubbles.has(order.id)) {
+  2976	        const storedBubble = this.activeBubbles.get(order.id);
+  2977	        if (storedBubble) {
+  2978	          storedBubble.destroy();
+  2979	          this.activeBubbles.delete(order.id);
+  2980	        }
+  2981	      }
+  2982	    });
+  2983	  }
+  2984	
+  2985	  private updateScore(points: number): void {
+  2986	    // Update score, ensuring it never goes below 0
+  2987	    this.score = Math.max(0, this.score + points);
+  2988	    this.scoreText.setText(`Score: ${this.score}`);
+  2989	  }
+  2990	}

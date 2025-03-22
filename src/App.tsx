@@ -358,7 +358,7 @@ function App() {
       <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
       
       {/* Game container at full size regardless of radio player status */}
-      <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+      <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden relative">
         {!game && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
@@ -366,10 +366,11 @@ function App() {
         )}
       </div>
 
+      {/* Button row - Radio component removed from here */}
       <div className="mt-4 flex gap-2">
         <button
           onClick={() => setShowInstructions(!showInstructions)}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors font-pixel text-sm"
         >
           {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
         </button>
@@ -384,6 +385,16 @@ function App() {
         )}
         
         <RadioButton onClick={toggleRadio} showRadio={showRadio} wiggle={radioWiggle} />
+      </div>
+      
+      {/* Radio component in its own container outside the button row */}
+      <div className="w-full max-w-6xl mt-2">
+        <Radio 
+          isOpen={showRadio} 
+          onClose={() => setShowRadio(false)} 
+          ref={radioRef}
+          autoplay={true}
+        />
       </div>
 
       {/* Song unlock notification */}
@@ -410,14 +421,6 @@ function App() {
             </ul>
           </div>
         )}
-        
-        {/* Radio player (initially hidden) with autoplay enabled */}
-        <Radio 
-          isOpen={showRadio} 
-          onClose={() => setShowRadio(false)} 
-          ref={radioRef}
-          autoplay={true}
-        />
       </div>
       
       {showDebug && (
