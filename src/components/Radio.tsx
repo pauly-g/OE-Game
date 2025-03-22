@@ -1179,7 +1179,6 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           <div className="radio-container">
             <div className="radio-header">
               <div className="radio-header-title">
-                <span>🎵</span>
                 <span>WAREHOUSE RADIO</span>
                 {isPlaying && renderEqualizer()}
               </div>
@@ -1242,21 +1241,22 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
                   >
                     ⏭
                   </button>
+                  
+                  {/* Volume control now inside the control panel */}
+                  <div className="volume-control">
+                    <span>VOL</span>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.01" 
+                      value={volume}
+                      onChange={handleVolumeChange}
+                      className="pixel-slider"
+                    />
+                  </div>
                 </div>
 
-                {/* Volume control */}
-                <div className="volume-control">
-                  <span>VOL</span>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="1" 
-                    step="0.01" 
-                    value={volume}
-                    onChange={handleVolumeChange}
-                    className="pixel-slider"
-                  />
-                </div>
               </div>
 
               {/* Right side: Display - playlist/lyrics */}

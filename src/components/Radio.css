@@ -5,8 +5,8 @@
   border: 2px solid #353535;
   box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.3);
   max-width: 100%;
-  margin-top: 16px;
-  margin-bottom: 20px;
+  margin-top: 12px;
+  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -16,7 +16,7 @@
   background: linear-gradient(90deg, #000000, #333366);
   border-bottom: 2px solid #111;
   color: #c7d0d9;
-  padding: 8px;
+  padding: 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -31,26 +31,28 @@
 }
 
 .radio-body {
-  padding: 12px;
+  padding: 8px;
   background-color: #232323;
   display: flex;
   flex-direction: row;
   width: 100%;
-  max-height: 280px; /* Limit height to prevent taking too much vertical space */
+  max-height: 200px;
 }
 
 .radio-controls {
   flex: 1;
-  padding-right: 12px;
-  max-width: 50%; /* Allow controls to take up to half the width */
+  padding-right: 8px;
+  max-width: 50%;
+  display: flex;
+  flex-direction: column;
 }
 
 .radio-display {
   flex: 1;
   border-left: 2px solid #444;
-  padding-left: 12px;
-  min-height: 250px;
-  max-height: 250px;
+  padding-left: 8px;
+  min-height: 180px;
+  max-height: 180px;
   overflow: hidden;
 }
 
@@ -59,7 +61,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 /* Equalizer bars animation */
@@ -120,8 +123,8 @@
   background-color: #111;
   color: #33ff33;
   font-family: 'Press Start 2P', monospace;
-  padding: 8px;
-  margin: 8px 0;
+  padding: 6px;
+  margin: 6px 0;
   border: 1px inset #444;
 }
 
@@ -143,17 +146,17 @@
   font-family: 'Press Start 2P', monospace;
   font-size: 12px;
   color: #33ff33;
-  margin-top: 8px;
+  margin-top: 6px;
   text-align: right;
 }
 
 .progress-container {
   background-color: #111;
   border: 1px inset #444;
-  height: 12px;
+  height: 10px;
   position: relative;
   cursor: pointer;
-  margin: 5px 0;
+  margin: 4px 0;
 }
 
 .progress-bar {
@@ -166,7 +169,7 @@
 
 .tab-buttons {
   display: flex;
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
   gap: 2px;
 }
 
@@ -190,7 +193,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 12px 0;
+  margin-left: auto;
+  flex: 1;
+  min-width: 120px;
 }
 
 .pixel-slider {
@@ -225,12 +230,12 @@
   border: 1px inset #444;
   height: 100%;
   overflow-y: auto;
-  margin-top: 8px;
-  max-height: 200px; /* Limit height for better vertical space usage */
+  margin-top: 6px;
+  max-height: 145px;
 }
 
 .playlist-item {
-  padding: 6px 8px;
+  padding: 4px 8px;
   cursor: pointer;
   border-bottom: 1px solid #333;
   font-size: 10px;
@@ -272,7 +277,7 @@
 .lyrics-panel {
   background-color: #111;
   border: 1px inset #444;
-  padding: 8px;
+  padding: 6px;
   height: 100%;
   overflow-y: auto;
   font-family: 'Press Start 2P', monospace;
@@ -280,7 +285,7 @@
   color: #ddd;
   white-space: pre-wrap;
   line-height: 1.4;
-  max-height: 200px; /* Limit height for better vertical space usage */
+  max-height: 170px;
 }
 
 .radio-player {
@@ -298,9 +303,9 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background-color: #6d28d9;  /* Match indigo-700 from RadioButton */
-  border-radius: 0.5rem;      /* Match other buttons */
-  padding: 0.5rem 1rem;       /* Match other buttons */
+  background-color: #6d28d9;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
   color: white;
   cursor: pointer;
   transition: background-color 300ms;
@@ -308,13 +313,13 @@
   font-size: 10px;
   min-width: 200px;
   max-width: 300px;
-  border: 2px solid #5b21b6; /* Add border to match RadioButton */
-  box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 0.3); /* Match RadioButton shadow */
-  height: 40px; /* Match the RadioButton height */
+  border: 2px solid #5b21b6;
+  box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 0.3);
+  height: 40px;
 }
 
 .mini-player:hover {
-  background-color: #5b21b6;  /* Match indigo-600 hover state */
+  background-color: #5b21b6;
 }
 
 .mini-player .radio-button {
@@ -348,18 +353,47 @@
 /* Improved infinite scrolling with better keyframes */
 @keyframes marquee {
   0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); } /* Only move half way to loop seamlessly */
+  100% { transform: translateX(-50%); }
 }
 
 .scrolling-text {
   display: inline-block;
   white-space: nowrap;
-  animation: marquee 25s linear infinite; /* Slowed down from 15s to 25s */
-  animation-delay: 5s; /* Hold for 5 seconds before starting animation */
+  animation: marquee 25s linear infinite;
+  animation-delay: 5s;
   width: max-content;
 }
 
 /* Hidden but still working audio player */
 .hidden-audio-player {
   display: none;
+}
+
+/* Custom scrollbar styling for playlist and lyrics panels */
+.playlist-panel::-webkit-scrollbar,
+.lyrics-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.playlist-panel::-webkit-scrollbar-track,
+.lyrics-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.playlist-panel::-webkit-scrollbar-thumb,
+.lyrics-panel::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 2px;
+}
+
+.playlist-panel::-webkit-scrollbar-thumb:hover,
+.lyrics-panel::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Firefox scrollbar styling */
+.playlist-panel, 
+.lyrics-panel {
+  scrollbar-width: thin;
+  scrollbar-color: #555 transparent;
 } 
