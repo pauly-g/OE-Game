@@ -112,6 +112,7 @@ export class Level1Scene extends Phaser.Scene {
   private currentAnimationFrame: number = 0; // Match the main branch value
   private animationFrameDuration: number = 125; // 8 frames per second = 125ms per frame
   private powerUpSwitchBounds!: Phaser.Geom.Rectangle;
+  private powerUpReadyText!: Phaser.GameObjects.Text;
   private lastFrameTime = 0;
   private buttonFlashTimer: number = 0;
   private buttonFlashInterval: number = 1000; // 1 second interval
@@ -427,8 +428,8 @@ export class Level1Scene extends Phaser.Scene {
     }).setOrigin(0.5).setVisible(false);
 
     // Create power-up button (positioned to the right side of the screen)
-    const buttonX = width * 0.76; // 76% from the left (right side)
-    const buttonY = height * 0.52; // 52% from the top (middle-ish)
+    const buttonX = width * 0.76; // 76% from the left (removed the +100px)
+    const buttonY = height * 0.52 + 50; // 52% from the top + 50px down
     this.createPowerUpSwitch(buttonX, buttonY);
   }
 
@@ -441,6 +442,15 @@ export class Level1Scene extends Phaser.Scene {
     // Add input event handlers
     this.powerUpButtonSprite.setInteractive();
     
+    // Initialize power-up button bounds based on the sprite
+    const buttonBounds = this.powerUpButtonSprite.getBounds();
+    this.powerUpSwitchBounds = new Phaser.Geom.Rectangle(
+      buttonBounds.x,
+      buttonBounds.y,
+      buttonBounds.width,
+      buttonBounds.height
+    );
+    
     // Create text for countdown (positioned properly)
     this.powerUpCountdownText = this.add.text(x, y - 30, '', {
       fontSize: '24px',
@@ -449,6 +459,15 @@ export class Level1Scene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 3
     }).setOrigin(0.5).setDepth(11);
+    
+    // Create "Order Editing Power Ready!" text (initially invisible)
+    this.powerUpReadyText = this.add.text(x, y - 60, 'Order Editing Power Ready!', {
+      fontSize: '20px',
+      fontStyle: 'bold',
+      color: '#00ff00', // Bright green
+      stroke: '#000000',
+      strokeThickness: 3
+    }).setOrigin(0.5).setDepth(11).setVisible(false);
     
     // Create warning text (initially invisible)
     this.powerUpWarningText = this.add.text(x, y - 80, '', {
@@ -854,16 +873,31 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private isNearPowerUpSwitch(): boolean {
-    if (!this.player || !this.powerUpSwitchBounds) return false;
+    if (!this.player || !this.powerUpSwitchBounds || !this.powerUpButtonSprite) return false;
     
-    const playerBounds = new Phaser.Geom.Rectangle(
-      this.player.x - 20,
-      this.player.y - 30,
-      40, 
-      60
+    // Get player bounds
+    const playerBounds = this.player.getBounds();
+    
+    // Get button bounds, but create a smaller one focused on the center/bottom of the button
+    // This makes it harder to trigger from the top and requires more precise positioning
+    const rawButtonBounds = this.powerUpButtonSprite.getBounds();
+    const buttonBounds = new Phaser.Geom.Rectangle(
+      rawButtonBounds.x + rawButtonBounds.width * 0.2,  // 20% inset from left
+      rawButtonBounds.y + rawButtonBounds.height * 0.4, // 40% down from top (lower half)
+      rawButtonBounds.width * 0.6,                      // 60% of original width
+      rawButtonBounds.height * 0.6                      // 60% of original height
     );
     
-    return Phaser.Geom.Rectangle.Overlaps(playerBounds, this.powerUpSwitchBounds);
+    // Create an ultra-precise collision area at the very bottom of the player's feet
+    const playerFeetBounds = new Phaser.Geom.Rectangle(
+      playerBounds.x + playerBounds.width * 0.45,
+      playerBounds.y + playerBounds.height - 2,
+      playerBounds.width * 0.1,
+      2
+    );
+    
+    // Check for collision with the adjusted button bounds
+    return Phaser.Geom.Rectangle.Overlaps(playerFeetBounds, buttonBounds);
   }
 
   private updatePlayerAnimation(time: number, delta: number) {
@@ -888,6 +922,7 @@ export class Level1Scene extends Phaser.Scene {
       
       // Set the texture based on the current frame
       const textureKey = `${prefix} ${this.lastDirection} ${this.currentAnimationFrame}`;
+      
       
       if (this.textures.exists(textureKey)) {
         this.player.setTexture(textureKey);
@@ -1301,6 +1336,11 @@ export class Level1Scene extends Phaser.Scene {
     this.powerUpTimer = 0;
     this.powerUpAvailable = false;
     
+    // Hide the power-up ready text when game is reset
+    if (this.powerUpReadyText) {
+      this.powerUpReadyText.setVisible(false);
+    }
+    
     // Reset station unlocking
     this.lastUnlockedAtEditCount = 0;
     
@@ -1527,6 +1567,11 @@ export class Level1Scene extends Phaser.Scene {
     this.powerUpActive = false;
     this.setButtonTexture('button-idle');
     this.powerUpCountdownText.setText('');
+    
+    // Hide the power-up ready text when deactivated
+    if (this.powerUpReadyText) {
+      this.powerUpReadyText.setVisible(false);
+    }
     
     // Reset the manual orders counter after power-up ends
     this.manualOrdersCompleted = 0;
@@ -1858,14 +1903,23 @@ export class Level1Scene extends Phaser.Scene {
     
     // Get bounds for pixel-perfect collision detection
     const playerBounds = this.player.getBounds();
-    const buttonBounds = this.powerUpButtonSprite.getBounds();
     
-    // Create a smaller collision area from player's feet
+    // Get button bounds, but create a smaller one focused on the center/bottom of the button
+    // This makes it harder to trigger from the top and requires more precise positioning
+    const rawButtonBounds = this.powerUpButtonSprite.getBounds();
+    const buttonBounds = new Phaser.Geom.Rectangle(
+      rawButtonBounds.x + rawButtonBounds.width * 0.2,  // 20% inset from left
+      rawButtonBounds.y + rawButtonBounds.height * 0.4, // 40% down from top (lower half)
+      rawButtonBounds.width * 0.6,                      // 60% of original width
+      rawButtonBounds.height * 0.6                      // 60% of original height
+    );
+    
+    // Create an ultra-precise collision area at the very bottom of the player's feet
     const playerFeetBounds = new Phaser.Geom.Rectangle(
-      playerBounds.x + playerBounds.width * 0.35, // Center portion of player
-      playerBounds.y + playerBounds.height * 0.8, // Bottom portion (feet)
-      playerBounds.width * 0.3, // Narrower than full player
-      playerBounds.height * 0.2 // Just the feet
+      playerBounds.x + playerBounds.width * 0.45,
+      playerBounds.y + playerBounds.height - 2,
+      playerBounds.width * 0.1,
+      2
     );
     
     // If player's feet overlap with button
@@ -1946,6 +2000,11 @@ export class Level1Scene extends Phaser.Scene {
     
     console.log("Power-up is now available!");
     
+    // Show the "POWER UP READY" text
+    if (this.powerUpReadyText) {
+      this.powerUpReadyText.setVisible(true);
+    }
+    
     // Start power-up button flashing/animation
     if (this.powerUpButtonSprite) {
       this.tweens.add({
@@ -1965,6 +2024,11 @@ export class Level1Scene extends Phaser.Scene {
     this.powerUpAvailable = false;
     this.powerUpTimer = 30000; // Extend power-up duration to 30 seconds (30000ms)
     this.powerUpFlashTimer = 0;
+    
+    // Hide the "POWER UP READY" text when activated
+    if (this.powerUpReadyText) {
+      this.powerUpReadyText.setVisible(false);
+    }
     
     console.log("Power-up activated!");
     
