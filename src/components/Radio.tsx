@@ -697,7 +697,16 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     // Handle game restart that needs stations to appear correctly
     const handleGameRestartWithStations = (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('[Radio] Received gameRestartWithStations event');
+      console.log('[Radio] Received gameRestartWithStations event', customEvent.detail);
+      
+      // Check if we need to force full recreation
+      const forceRecreate = customEvent.detail?.forceRecreate;
+      
+      if (forceRecreate) {
+        console.log('[Radio] Forcing complete station recreation');
+        // Reset everything first
+        stationTracker.resetStations();
+      }
       
       // Force stations to be re-initialized from storage
       stationTracker.initializeStations();

@@ -26,6 +26,7 @@
  * - Removed debug button and BG music button, using Radio for all music playback
  * - Updated background music to use Chilled, Frantic, and Relaxed songs
  * - Simplified background music autoplay using Radio component's autoplay feature
+ * - Added Firebase authentication and leaderboard integration
  */
 import React, { useEffect, useState, useRef } from 'react';
 import Phaser from 'phaser';
@@ -35,9 +36,22 @@ import { stationTracker } from './game/utils/stationTracker';
 import Radio from './components/Radio';
 import RadioButton from './components/RadioButton';
 import SongNotification from './components/SongNotification';
+import Leaderboard from './components/Leaderboard';
+import SignInButton from './components/SignInButton';
 import { tracks } from './data/musicData';
+import { AuthProvider, useAuth } from './firebase/AuthContext';
 
-function App() {
+// Main App component wrapper with AuthProvider
+function AppWithAuth() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+// App content that uses authentication
+function AppContent() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [game, setGame] = useState<Phaser.Game | null>(null);
@@ -50,7 +64,12 @@ function App() {
     title: '',
     artist: ''
   });
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [currentScore, setCurrentScore] = useState<number | undefined>(undefined);
+  
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
+  const { currentUser, submitUserScore, isLoading } = useAuth();
 
   // Reset stations on page load
   useEffect(() => {
@@ -271,8 +290,22 @@ function App() {
     
     window.addEventListener('keydown', handleGameRestart);
     
+    // Add explicit reset stations event listener for game over restarts
+    const handleResetStations = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[App] Received resetStations event, source:', 
+                 customEvent.detail?.source || 'unknown');
+      
+      // Force a complete station reset
+      console.log('[App] Forcibly resetting station tracker from App component');
+      stationTracker.resetStations();
+    };
+    
+    window.addEventListener('resetStations', handleResetStations);
+    
     return () => {
       window.removeEventListener('keydown', handleGameRestart);
+      window.removeEventListener('resetStations', handleResetStations);
     };
   }, []);
 
@@ -303,6 +336,73 @@ function App() {
       window.removeEventListener('keydown', handleDebugKeydown);
     };
   }, []);
+
+  // Handle leaderboard events from GameOverScene
+  useEffect(() => {
+    // Check authentication status
+    const handleCheckAuth = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { score, sceneInstance } = customEvent.detail;
+      
+      console.log('[App] Received checkGameAuth event, score:', score);
+      setCurrentScore(score);
+      
+      // Check if the user is authenticated
+      const isAuthenticated = !!currentUser;
+      let scoreSubmitted = false;
+      
+      // Auto-submit score if user is authenticated
+      if (isAuthenticated && score !== undefined) {
+        try {
+          const result = await submitUserScore(score);
+          scoreSubmitted = !!result;
+          console.log('[App] Score submission result:', result);
+        } catch (error) {
+          console.error('[App] Error submitting score:', error);
+        }
+      }
+      
+      // Send authentication status back to the game
+      const authResponseEvent = new CustomEvent('gameAuthResponse', {
+        detail: {
+          isAuthenticated,
+          scoreSubmitted
+        }
+      });
+      
+      window.dispatchEvent(authResponseEvent);
+    };
+    
+    // Show the leaderboard
+    const handleShowLeaderboard = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { score } = customEvent.detail;
+      
+      console.log('[App] Received showGameLeaderboard event, score:', score);
+      setCurrentScore(score);
+      setShowLeaderboard(true);
+    };
+    
+    // Handle sign in request
+    const handleSignInRequest = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { score } = customEvent.detail;
+      
+      console.log('[App] Received gameSignInRequest event, score:', score);
+      setCurrentScore(score);
+      setShowSignIn(true);
+    };
+    
+    window.addEventListener('checkGameAuth', handleCheckAuth);
+    window.addEventListener('showGameLeaderboard', handleShowLeaderboard);
+    window.addEventListener('gameSignInRequest', handleSignInRequest);
+    
+    return () => {
+      window.removeEventListener('checkGameAuth', handleCheckAuth);
+      window.removeEventListener('showGameLeaderboard', handleShowLeaderboard);
+      window.removeEventListener('gameSignInRequest', handleSignInRequest);
+    };
+  }, [currentUser, submitUserScore]);
 
   const downloadLogs = () => {
     gameDebugger.downloadLogs();
@@ -351,6 +451,33 @@ function App() {
     
     // Close the notification
     closeNotification();
+  };
+
+  // Handle successful sign in
+  const handleSignInSuccess = async () => {
+    setShowSignIn(false);
+    
+    // If user just signed in and we have a current score, submit it
+    if (currentUser && currentScore !== undefined) {
+      try {
+        const result = await submitUserScore(currentScore);
+        
+        // Send result back to game for display
+        const authResponseEvent = new CustomEvent('gameAuthResponse', {
+          detail: {
+            isAuthenticated: true,
+            scoreSubmitted: !!result
+          }
+        });
+        
+        window.dispatchEvent(authResponseEvent);
+        
+        // Show the leaderboard after successful submission
+        setShowLeaderboard(true);
+      } catch (error) {
+        console.error('[App] Error submitting score after sign in:', error);
+      }
+    }
   };
 
   return (
@@ -423,6 +550,28 @@ function App() {
         )}
       </div>
       
+      {/* Leaderboard component */}
+      <Leaderboard 
+        isOpen={showLeaderboard} 
+        onClose={() => setShowLeaderboard(false)}
+        userScore={currentScore}
+      />
+      
+      {/* Sign In Dialog */}
+      {showSignIn && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden p-4">
+            <SignInButton 
+              onSuccess={handleSignInSuccess}
+              onError={(error) => {
+                console.error('[App] Sign in error:', error);
+                // Display error if needed
+              }}
+            />
+          </div>
+        </div>
+      )}
+      
       {showDebug && (
         <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-6xl w-full max-h-60 overflow-auto">
           <h2 className="text-xl font-bold mb-2">Error Logs:</h2>
@@ -444,4 +593,5 @@ function App() {
   );
 }
 
-export default App;
+// Export the wrapped component
+export default AppWithAuth;
