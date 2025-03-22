@@ -74,6 +74,7 @@ export class Level1Scene extends Phaser.Scene {
   private dKey!: Phaser.Input.Keyboard.Key;
   private cKey!: Phaser.Input.Keyboard.Key;
   private fKey!: Phaser.Input.Keyboard.Key; // New f key for cheat code
+  private lKey!: Phaser.Input.Keyboard.Key; // New l key for reducing lives cheat
   private playerSpeed: number = 4; // Reduce from 8 to 4 for slower movement
   private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
@@ -176,7 +177,19 @@ export class Level1Scene extends Phaser.Scene {
   init(data?: { reset: boolean }) {
     console.log('Level1Scene init called', data);
     if (data?.reset) {
+      console.log('Game restarting from game over screen - forcing full reset');
+      
+      // Force reset of stations in localStorage first
+      stationTracker.resetStations();
+      
+      // Then reset all game elements
       this.reset();
+      
+      // Force a synchronous update to ensure stations are visible
+      stationTracker.initializeStations();
+      
+      // Log the game state after reset
+      console.log('Game reset complete, station state reset to initial conditions');
     }
   }
 
@@ -416,6 +429,7 @@ export class Level1Scene extends Phaser.Scene {
       this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
       this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
       this.fKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F); // Initialize f key
+      this.lKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L); // Initialize l key
       this.lastSpaceState = false;
       
       // Create UI elements
@@ -716,10 +730,21 @@ export class Level1Scene extends Phaser.Scene {
       // Create and add the station sign
       const sign = this.createStationSign(stationX, y, type);
       
-      // Hide locked stations completely (alpha 0)
+      // Set locked stations to be completely invisible (alpha 0 and visible false)
       if (!station.isUnlocked) {
         station.container.setAlpha(0);
-        sign.setAlpha(0); // Also hide the sign
+        station.container.setVisible(false);
+        sign.setAlpha(0);
+        sign.setVisible(false);
+      } else {
+        // Ensure the first station is explicitly visible
+        station.container.setAlpha(1);
+        station.container.setVisible(true);
+        station.container.setActive(true);
+        sign.setAlpha(1);
+        sign.setVisible(true);
+        sign.setActive(true);
+        console.log(`First station (${type}) initialized as visible`);
       }
       
       // Store the sign in the station object for later reference
@@ -727,6 +752,14 @@ export class Level1Scene extends Phaser.Scene {
 
       this.stations.push(station);
     });
+    
+    // Final log to confirm all stations are created correctly
+    console.log('Stations created:', this.stations.map(s => ({
+      type: s.type,
+      unlocked: s.isUnlocked,
+      visible: s.container.visible,
+      alpha: s.container.alpha
+    })));
   }
 
   private getStationIcon(type: string): string {
@@ -1004,6 +1037,11 @@ export class Level1Scene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.fKey)) {
         console.log('Cheat code activated: Unlock All Stations!');
         this.unlockAllStationsCheat();
+      }
+      
+      if (Phaser.Input.Keyboard.JustDown(this.lKey)) {
+        console.log('L key pressed - Reduce to one life');
+        this.reduceToOneLifeCheat();
       }
     } catch (error) {
       console.error('Error in update:', error);
@@ -1559,25 +1597,24 @@ export class Level1Scene extends Phaser.Scene {
     // Reset station unlocking
     this.lastUnlockedAtEditCount = 0;
     
-    // Reset stations (except the first one)
-    if (this.stations && this.stations.length > 0) {
-      this.stations.forEach((station, index) => {
-        station.isUnlocked = index === 0; // Only first station starts unlocked
-        station.container.setAlpha(index === 0 ? 1 : 0);
-        station.sign.setAlpha(index === 0 ? 1 : 0); // Also reset the sign
-      });
-    }
+    // Clean up all existing containers except the lives container
+    // This is important for proper recreation of all game elements
+    this.children.getAll().forEach(child => {
+      // Keep the lives container
+      if (child instanceof Phaser.GameObjects.Container && child !== this.livesContainer) {
+        child.destroy();
+      }
+    });
     
     // Reset the station tracker in localStorage
     console.log('Resetting station tracker in localStorage');
     stationTracker.resetStations();
     
-    // Clean up any existing orders
-    this.children.getAll().forEach(child => {
-      if (child instanceof Phaser.GameObjects.Container && child !== this.livesContainer) {
-        child.destroy();
-      }
-    });
+    // IMPORTANT: Clear the existing stations array to force complete recreation
+    this.stations = [];
+    
+    // Recreate the stations from scratch - this simulates what happens on page refresh
+    this.createStations();
     
     console.log('Level1Scene reset completed');
   }
@@ -2657,6 +2694,15 @@ export class Level1Scene extends Phaser.Scene {
     // Unlock the station
     nextStation.isUnlocked = true;
     
+    // Ensure the station is visible immediately - critical fix for restart issues
+    nextStation.container.setAlpha(1);
+    nextStation.container.setVisible(true);
+    nextStation.sign.setAlpha(1);
+    nextStation.sign.setVisible(true);
+    
+    // Force immediate display update
+    this.verifyStationVisibility();
+    
     // Update the station tracker to unlock the corresponding music track
     // Add logs and error handling
     try {
@@ -2691,16 +2737,16 @@ export class Level1Scene extends Phaser.Scene {
     // Debug station status
     this.debugStationStatus();
     
-    // Make sure the station is visible
+    // Make sure the station is visible and animate it
     if (nextStation.container) {
-      // Start with alpha 0
-      nextStation.container.setAlpha(0);
-      nextStation.sign.setAlpha(0); // Also set sign to invisible
+      // Start with already visible but small scale
+      nextStation.container.setAlpha(1);
+      nextStation.container.setVisible(true);
+      nextStation.container.setScale(0.7);
       
       // Flash the station to draw attention to it
       this.tweens.add({
         targets: nextStation.container,
-        alpha: { from: 0, to: 1 },
         scale: { from: 0.7, to: 1 },
         ease: 'Back.Out',
         duration: 600,
@@ -2708,21 +2754,26 @@ export class Level1Scene extends Phaser.Scene {
         onComplete: () => {
           // Ensure it stays visible after the animation
           nextStation.container.setAlpha(1);
-          console.log(`Animation complete for station: ${nextStation.type}, alpha: ${nextStation.container.alpha}`);
+          nextStation.container.setVisible(true);
+          console.log(`Animation complete for station: ${nextStation.type}, alpha: ${nextStation.container.alpha}, visible: ${nextStation.container.visible}`);
         }
       });
       
       // Animate the sign with a slight delay for a more dramatic reveal
+      nextStation.sign.setAlpha(1);
+      nextStation.sign.setVisible(true);
+      nextStation.sign.setScale(0.8);
+      
       this.time.delayedCall(300, () => {
         this.tweens.add({
           targets: nextStation.sign,
-          alpha: { from: 0, to: 1 },
           scale: { from: 0.8, to: 1 },
           ease: 'Back.Out',
           duration: 800,
           onComplete: () => {
             // Ensure sign stays visible
             nextStation.sign.setAlpha(1);
+            nextStation.sign.setVisible(true);
           }
         });
       });
@@ -2754,8 +2805,10 @@ export class Level1Scene extends Phaser.Scene {
     // Reset the counter
     this.lastUnlockedAtEditCount = this.totalEditsApplied;
     
-    // Verify all station visibility after unlocking
-    this.verifyStationVisibility();
+    // Verify all station visibility one more time after everything
+    this.time.delayedCall(1000, () => {
+      this.verifyStationVisibility();
+    });
   }
 
   // Helper to set button texture while maintaining scale
@@ -3002,26 +3055,70 @@ export class Level1Scene extends Phaser.Scene {
     console.log('Verifying station visibility...');
     
     this.stations.forEach(station => {
-      if (station.isUnlocked && station.container) {
-        // Check if the station should be visible but isn't
-        if (station.container.alpha < 1) {
-          console.log(`Fixing visibility for unlocked station: ${station.type}`);
-          station.container.setAlpha(1);
-        }
+      if (station.isUnlocked) {
+        console.log(`Station ${station.type} should be visible. Current state:`, {
+          container: station.container ? {
+            alpha: station.container.alpha,
+            visible: station.container.visible,
+            active: station.container.active
+          } : 'null',
+          sign: station.sign ? {
+            alpha: station.sign.alpha,
+            visible: station.sign.visible,
+            active: station.sign.active
+          } : 'null'
+        });
         
-        // Make sure the container is visible
-        if (!station.container.visible) {
-          console.log(`Setting visible=true for unlocked station: ${station.type}`);
-          station.container.setVisible(true);
+        // Ensure both container and sign exist
+        if (station.container && station.sign) {
+          // Check if the station should be visible but isn't fully visible
+          const containerNeedsVisibilityFix = 
+            station.container.alpha < 1 || 
+            !station.container.visible || 
+            !station.container.active;
+            
+          const signNeedsVisibilityFix = 
+            station.sign.alpha < 1 || 
+            !station.sign.visible || 
+            !station.sign.active;
+          
+          if (containerNeedsVisibilityFix) {
+            console.log(`Fixing container visibility for unlocked station: ${station.type}`);
+            station.container.setAlpha(1);
+            station.container.setVisible(true);
+            station.container.setActive(true);
+          }
+          
+          if (signNeedsVisibilityFix) {
+            console.log(`Fixing sign visibility for unlocked station: ${station.type}`);
+            station.sign.setAlpha(1);
+            station.sign.setVisible(true);
+            station.sign.setActive(true);
+          }
+        } else {
+          console.error(`Station ${station.type} has missing container or sign!`);
+        }
+      } else {
+        // For locked stations, ensure they're hidden
+        if (station.container) {
+          station.container.setAlpha(0);
+          station.container.setVisible(false);
+        }
+        if (station.sign) {
+          station.sign.setAlpha(0);
+          station.sign.setVisible(false);
         }
       }
     });
     
-    // Special check for quantity station
-    const quantityStation = this.stations.find(s => s.type === 'quantity');
-    if (quantityStation && quantityStation.isUnlocked) {
-      console.log(`Quantity station status: unlocked=${quantityStation.isUnlocked}, alpha=${quantityStation.container.alpha}, visible=${quantityStation.container.visible}`);
-    }
+    // Final verification log
+    const visibilityStatus = this.stations.map(s => ({
+      type: s.type, 
+      unlocked: s.isUnlocked,
+      visible: s.container?.visible && s.sign?.visible,
+      alpha: s.container?.alpha
+    }));
+    console.log('Station visibility verification complete:', visibilityStatus);
   }
 
   private checkForUnlock() {
@@ -3106,10 +3203,13 @@ export class Level1Scene extends Phaser.Scene {
     this.stations.forEach(station => {
       station.isUnlocked = true;
       
-      // Make station visible if it wasn't before
+      // Make station visible if it wasn't before - apply same robust visibility fixes
       if (station.container) {
+        // Set both alpha and visible properties
         station.container.setAlpha(1);
+        station.container.setVisible(true);
         station.sign.setAlpha(1);
+        station.sign.setVisible(true);
       }
     });
     
@@ -3135,8 +3235,13 @@ export class Level1Scene extends Phaser.Scene {
       });
     });
     
-    // Verify that all stations are visible
+    // Verify that all stations are visible immediately
     this.verifyStationVisibility();
+    
+    // And check again after a delay to be absolutely sure
+    this.time.delayedCall(1000, () => {
+      this.verifyStationVisibility();
+    });
   }
 
   /**
@@ -3424,6 +3529,45 @@ export class Level1Scene extends Phaser.Scene {
         const glowIntensity = (Math.sin(this.circularTextAngle * 2 + index * 0.2) + 1) * 4 + 5; // Range 5-13
         text.setShadowBlur(glowIntensity);
       });
+    }
+  }
+
+  // Cheat to reduce lives to one
+  private reduceToOneLifeCheat() {
+    // Only reduce lives if we have more than one
+    if (this.lives > 1) {
+      console.log(`Reducing lives from ${this.lives} to 1`);
+      this.lives = 1;
+      this.updateLivesDisplay();
+      
+      // Display a notification
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      const notificationText = this.add.text(
+        width / 2,
+        height / 2 - 50,
+        '⚠️ One life left! ⚠️',
+        {
+          fontSize: '32px',
+          color: '#FF0000',
+          stroke: '#000000',
+          strokeThickness: 4,
+          fontStyle: 'bold'
+        }
+      ).setOrigin(0.5).setDepth(100);
+      
+      // Make it fade out
+      this.tweens.add({
+        targets: notificationText,
+        alpha: { from: 1, to: 0 },
+        duration: 2000,
+        ease: 'Power2',
+        onComplete: () => {
+          notificationText.destroy();
+        }
+      });
+    } else {
+      console.log('Already at one life or fewer');
     }
   }
 }
