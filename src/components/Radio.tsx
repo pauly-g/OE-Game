@@ -176,64 +176,174 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     };
   }, []);
   
-  // Set up autoplay function when the component mounts
+  // Add a dedicated audio start function with retry capability
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps - Intentionally exclude changeTrack to avoid re-renders
-    if (autoplay) {
-      console.log('[Radio] Autoplay enabled, attempting to start background music');
-      // Find all background songs (warehouse type)
-      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
+    let retryCount = 0;
+    const maxRetries = 5;
+    const retryDelays = [100, 500, 1000, 2000, 3000]; // Exponential backoff
+    
+    const forceMusicPlay = () => {
+      console.log('[Radio] CRITICAL: Force music play attempt #' + (retryCount + 1));
       
-      if (backgroundSongs.length > 0) {
-        console.log('[Radio] Found background songs for autoplay:', backgroundSongs.map(t => t.title).join(', '));
-        // Delayed start to ensure component is fully initialized
-        setTimeout(() => {
-          try {
-            // Check if music is already playing
-            const isAudioPlaying = globalAudio && 
-                                  !globalAudio.paused && 
-                                  globalAudio.currentTime > 0 && 
-                                  !globalAudio.ended &&
-                                  globalAudio.src !== '';
-                                  
-            if (!isAudioPlaying) {
-              // First stop any existing playback to prevent duplicated audio
-              if (globalAudio && !globalAudio.paused) {
-                console.log('[Radio] Stopping any current audio before autoplay');
-                globalAudio.pause();
-                globalAudio.currentTime = 0;
+      // Check if audio is already playing
+      const isAudioPlaying = globalAudio && 
+        !globalAudio.paused && 
+        globalAudio.currentTime > 0 && 
+        !globalAudio.ended &&
+        globalAudio.src !== '';
+    
+      if (isAudioPlaying) {
+        console.log('[Radio] Audio already playing, canceling force play attempt');
+        return true; // Success - already playing
+      }
+      
+      // Find warehouse songs (the three we want)
+      const warehouseSongs = tracks.filter(track => 
+        track.stationType === 'warehouse' && 
+        ['Chilled', 'Frantic', 'Relaxed'].includes(track.title)
+      );
+      
+      if (warehouseSongs.length === 0) {
+        console.error('[Radio] No warehouse songs found, cannot autoplay');
+        return false;
+      }
+      
+      // Select a random song
+      const randomIndex = Math.floor(Math.random() * warehouseSongs.length);
+      const songToPlay = warehouseSongs[randomIndex];
+      
+      console.log(`[Radio] Attempting to force play: ${songToPlay.title}`);
+      
+      // Stop any current playback
+      if (globalAudio && !globalAudio.paused) {
+        console.log('[Radio] Stopping current audio before force play');
+        globalAudio.pause();
+        globalAudio.currentTime = 0;
+      }
+      
+      // Create a new audio element if needed
+      if (!globalAudio) {
+        console.log('[Radio] Creating new global audio element for force play');
+        globalAudio = new Audio();
+        audioRef.current = globalAudio;
+      }
+      
+      try {
+        // Prepare the audio
+        globalAudio.src = songToPlay.src;
+        globalAudio.volume = 1.0;
+        globalAudio.load();
+        
+        // Update state
+        globalAudioState.currentTrackId = songToPlay.id;
+        setCurrentTrack(songToPlay);
+        
+        // Try to play immediately
+        const playPromise = globalAudio.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('[Radio] Force play successful!');
+              setIsPlaying(true);
+              globalAudioState.isPlaying = true;
+              
+              // Mark success in localStorage for debugging
+              try {
+                localStorage.setItem('musicAutoplaySuccess', 'true');
+                localStorage.setItem('musicAutoplayTime', new Date().toString());
+                localStorage.setItem('musicAutoplaySong', songToPlay.title);
+              } catch (e) {
+                console.error('[Radio] Error writing to localStorage:', e);
               }
               
-              const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
-              const songToPlay = backgroundSongs[randomIndex];
-              console.log('[Radio] Auto-playing background song:', songToPlay.title);
+              return true;
+            })
+            .catch(error => {
+              console.error('[Radio] Force play attempt failed:', error);
               
-              // Use changeTrack to properly set up audio
-              changeTrack(songToPlay);
-            } else {
-              console.log('[Radio] Audio already playing, not starting autoplay');
-            }
-          } catch (error) {
-            console.error('[Radio] Error during autoplay:', error);
-          }
-        }, 1500);
-      } else {
-        console.warn('[Radio] No background songs found for autoplay');
+              // Schedule retry if we haven't exceeded max retries
+              if (retryCount < maxRetries) {
+                const delay = retryDelays[retryCount];
+                console.log(`[Radio] Scheduling retry #${retryCount + 1} in ${delay}ms`);
+                setTimeout(() => {
+                  retryCount++;
+                  forceMusicPlay();
+                }, delay);
+              } else {
+                console.error('[Radio] Max retries exceeded, giving up on autoplay');
+              }
+              
+              return false;
+            });
+        }
+      } catch (error) {
+        console.error('[Radio] Error during force play attempt:', error);
+        return false;
       }
+      
+      return true;
+    };
+    
+    // Register the function globally for direct access
+    (window as any).forceMusicPlay = forceMusicPlay;
+    
+    // Try initial autoplay when the component mounts, with staggered retries
+    // This is our most aggressive approach
+    setTimeout(forceMusicPlay, 300);
+    setTimeout(forceMusicPlay, 1000);
+    setTimeout(forceMusicPlay, 3000);
+    
+    // Also listen for the page load event
+    const handleLoad = () => {
+      console.log('[Radio] Window load event detected, trying force play');
+      forceMusicPlay();
+    };
+    
+    window.addEventListener('load', handleLoad);
+    
+    // Try after browser determines page is fully loaded
+    if (document.readyState === 'complete') {
+      console.log('[Radio] Document already complete, trying force play');
+      forceMusicPlay();
+    } else {
+      document.addEventListener('readystatechange', () => {
+        if (document.readyState === 'complete') {
+          console.log('[Radio] Document just completed, trying force play');
+          forceMusicPlay();
+        }
+      });
     }
-  }, [autoplay]);
+    
+    // Check if this is a refresh by looking at document referrer
+    // If referrer is same as current page, it's likely a refresh
+    const isRefresh = document.referrer === document.location.href;
+    if (isRefresh) {
+      console.log('[Radio] Detected page refresh via referrer, trying force play');
+      forceMusicPlay();
+    }
+    
+    return () => {
+      window.removeEventListener('load', handleLoad);
+      delete (window as any).forceMusicPlay;
+    };
+  }, []);
 
   // Set up page visibility and load event listeners to handle page refresh
   useEffect(() => {
     // Function to handle playback of a random background song
-    const playRandomBackgroundSong = () => {
-      console.log('[Radio] Playing random background song after refresh');
+    const playRandomBackgroundSong = (source = 'visibility_change') => {
+      console.log(`[Radio] Playing random background song from source: ${source}`);
       
       // Find all background songs
-      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
+      const backgroundSongs = tracks.filter(track => 
+        track.stationType === 'warehouse' && 
+        ['Chilled', 'Frantic', 'Relaxed'].includes(track.title)
+      );
+      
       if (backgroundSongs.length > 0) {
         try {
-          // Stop any currently playing audio first to prevent duplicate playback
+          // First stop any currently playing audio to prevent duplicate playback
           if (globalAudio && !globalAudio.paused) {
             console.log('[Radio] Stopping current playback before playing new background song');
             globalAudio.pause();
@@ -244,14 +354,51 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
           const songToPlay = backgroundSongs[randomIndex];
           
-          console.log(`[Radio] Selected background song: ${songToPlay.title}`);
+          console.log(`[Radio] Selected background song: ${songToPlay.title} from source: ${source}`);
           
-          // Use a timeout to ensure DOM is ready
-          setTimeout(() => {
-            console.log('[Radio] Starting background song');
-            // Always play the song - don't check if audio is playing
-            changeTrack(songToPlay);
-          }, 500);
+          // Mark that we've attempted to play music
+          try {
+            sessionStorage.setItem('musicPlayAttempt', Date.now().toString());
+          } catch (e) {
+            console.error('[Radio] Error setting sessionStorage:', e);
+          }
+          
+          // Play immediately - don't wait
+          if (globalAudio) {
+            console.log('[Radio] Setting audio source to:', songToPlay.src);
+            globalAudio.src = songToPlay.src;
+            globalAudio.load();
+            
+            // Set global state and component state
+            globalAudioState.currentTrackId = songToPlay.id;
+            setCurrentTrack(songToPlay);
+            
+            // Play with high volume
+            globalAudio.volume = 1.0;
+            
+            const playPromise = globalAudio.play();
+            if (playPromise !== undefined) {
+              playPromise
+                .then(() => {
+                  console.log('[Radio] Successfully played background song:', songToPlay.title);
+                  setIsPlaying(true);
+                  globalAudioState.isPlaying = true;
+                })
+                .catch(error => {
+                  console.error('[Radio] Error playing background song:', error);
+                  
+                  // Retry once after a short delay
+                  setTimeout(() => {
+                    if (globalAudio) {
+                      console.log('[Radio] Retrying playback after error');
+                      globalAudio.play().catch(e => 
+                        console.error('[Radio] Retry also failed:', e)
+                      );
+                    }
+                  }, 300);
+                });
+            }
+          }
         } catch (error) {
           console.error('[Radio] Error playing random background song:', error);
         }
@@ -260,35 +407,92 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     
     // Handle visibility changes (page refresh)
     const handleVisibilityChange = () => {
+      // Only proceed when page becomes visible (coming back from hidden state)
       if (document.visibilityState === 'visible') {
         console.log('[Radio] Page became visible (possible refresh detected)');
         
-        // More aggressive check - if document just became visible, play music
-        setTimeout(() => {
-          // Always try to play music when page visibility changes
-          playRandomBackgroundSong();
-        }, 500);
+        // Check if this is a new page load/refresh by looking at timestamps
+        const lastVisibilityTime = sessionStorage.getItem('lastVisibilityTime');
+        const now = Date.now();
+        
+        // Store current timestamp
+        try {
+          sessionStorage.setItem('lastVisibilityTime', now.toString());
+        } catch (e) {
+          console.error('[Radio] Error setting visibility timestamp:', e);
+        }
+        
+        // If no previous timestamp or it was more than 2 seconds ago, likely a refresh
+        const timeDiff = lastVisibilityTime ? now - parseInt(lastVisibilityTime) : Infinity;
+        const isLikelyRefresh = !lastVisibilityTime || timeDiff > 2000;
+        
+        if (isLikelyRefresh) {
+          console.log('[Radio] Refresh detected via visibility change, playing music immediately');
+          
+          // Check if audio is already playing
+          const isAudioPlaying = globalAudio && 
+                               !globalAudio.paused && 
+                               globalAudio.currentTime > 0 && 
+                               !globalAudio.ended &&
+                               globalAudio.src !== '';
+          
+          if (!isAudioPlaying) {
+            console.log('[Radio] No audio playing, starting a song');
+            // Don't delay, play immediately
+            playRandomBackgroundSong('visibility_refresh');
+          } else {
+            console.log('[Radio] Audio already playing, not starting new playback');
+          }
+        }
       }
     };
     
     // Handle window load event
     const handleLoadEvent = () => {
       console.log('[Radio] Window load event - checking if we need to start music');
-      setTimeout(() => {
-        playRandomBackgroundSong();
-      }, 1000);
+      
+      // Check if audio is already playing
+      const isAudioPlaying = globalAudio && 
+                            !globalAudio.paused && 
+                            globalAudio.currentTime > 0 && 
+                            !globalAudio.ended &&
+                            globalAudio.src !== '';
+      
+      if (!isAudioPlaying) {
+        console.log('[Radio] No audio playing on window load, starting background music');
+        // Small delay to ensure DOM is ready
+        setTimeout(() => playRandomBackgroundSong('window_load'), 100);
+      } else {
+        console.log('[Radio] Audio already playing on window load, not starting new playback');
+      }
     };
     
     // Handle page refreshed event
     const handlePageRefreshed = () => {
       console.log('[Radio] Received pageRefreshed event, playing background music');
-      playRandomBackgroundSong();
+      
+      // Don't bother checking if audio is playing - this is an explicit request
+      playRandomBackgroundSong('page_refreshed_event');
     };
     
     // Set up event listeners for refresh scenarios
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('load', handleLoadEvent);
     window.addEventListener('pageRefreshed', handlePageRefreshed);
+    
+    // Also try immediately on component mount
+    console.log('[Radio] Component mounted, checking if we need to play music');
+    const isAudioPlaying = globalAudio && 
+                          !globalAudio.paused && 
+                          globalAudio.currentTime > 0 && 
+                          !globalAudio.ended &&
+                          globalAudio.src !== '';
+    
+    if (!isAudioPlaying) {
+      console.log('[Radio] No audio playing on component mount, playing music with delay');
+      // Delay to ensure component is fully mounted
+      setTimeout(() => playRandomBackgroundSong('component_mount'), 500);
+    }
     
     // Clean up on unmount
     return () => {
@@ -431,61 +635,57 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     // Force play music handler - this is the most direct way to ensure music plays
     const handleForcePlayMusic = (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('[Radio] Received forcePlayMusic event, source:', 
-                 customEvent.detail?.source || 'unknown');
+      const source = customEvent.detail?.source || 'unknown';
+      console.log(`[Radio] Received forcePlayMusic event from source: ${source}`);
       
-      // Find all background songs (warehouse type)
-      const backgroundSongs = tracks.filter(track => track.stationType === 'warehouse');
-      
-      if (backgroundSongs.length > 0) {
-        try {
-          // First stop any current audio if playing to prevent duplicated music
-          if (globalAudio) {
-            if (!globalAudio.paused) {
-              console.log('[Radio] Stopping any current audio before playing new track');
+      // Call our dedicated force play function that handles retries
+      if (typeof (window as any).forceMusicPlay === 'function') {
+        console.log('[Radio] Delegating to forceMusicPlay function');
+        (window as any).forceMusicPlay();
+      } else {
+        console.error('[Radio] forceMusicPlay function not available');
+        
+        // Fallback to original implementation - this shouldn't normally happen
+        const backgroundSongs = tracks.filter(track => 
+          track.stationType === 'warehouse' && 
+          ['Chilled', 'Frantic', 'Relaxed'].includes(track.title)
+        );
+        
+        if (backgroundSongs.length > 0) {
+          try {
+            // Stop any current audio if playing
+            if (globalAudio && !globalAudio.paused) {
+              console.log('[Radio] Stopping current audio before playing new track');
               globalAudio.pause();
               globalAudio.currentTime = 0;
             }
             
-            // Select a random background song from the warehouse type
+            // Select a random background song
             const randomIndex = Math.floor(Math.random() * backgroundSongs.length);
             const songToPlay = backgroundSongs[randomIndex];
             
             console.log('[Radio] Force playing warehouse song:', songToPlay.title);
             
-            // Set the source and prepare the audio
-            globalAudio.src = songToPlay.src;
-            globalAudio.load();
-            
-            // Play with a delay to ensure the audio context is ready
-            setTimeout(() => {
-              if (globalAudio) {
-                console.log('[Radio] Attempting to directly play audio');
-                
-                // Set global state and component state
-                globalAudioState.currentTrackId = songToPlay.id;
-                setCurrentTrack(songToPlay);
-                
-                // Play with high volume
-                globalAudio.volume = 1.0;
-                
-                const playPromise = globalAudio.play();
-                if (playPromise !== undefined) {
-                  playPromise
-                    .then(() => {
-                      console.log('[Radio] Successfully force played audio');
-                      setIsPlaying(true);
-                      globalAudioState.isPlaying = true;
-                    })
-                    .catch(error => {
-                      console.error('[Radio] Error playing forced audio:', error);
-                    });
-                }
-              }
-            }, 100);
+            if (globalAudio) {
+              globalAudio.src = songToPlay.src;
+              globalAudio.load();
+              globalAudioState.currentTrackId = songToPlay.id;
+              setCurrentTrack(songToPlay);
+              globalAudio.volume = 1.0;
+              
+              globalAudio.play()
+                .then(() => {
+                  console.log('[Radio] Successfully played audio');
+                  setIsPlaying(true);
+                  globalAudioState.isPlaying = true;
+                })
+                .catch(error => {
+                  console.error('[Radio] Error playing audio:', error);
+                });
+            }
+          } catch (error) {
+            console.error('[Radio] Error in forcePlayMusic handler:', error);
           }
-        } catch (error) {
-          console.error('[Radio] Error in forcePlayMusic handler:', error);
         }
       }
     };
@@ -530,30 +730,22 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       }
     };
     
-    // Set up all event listeners
+    // Register all event listeners
     window.addEventListener('stationUnlocked', handleStationUnlock);
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('playTrack', handlePlayTrack);
     window.addEventListener('forcePlayMusic', handleForcePlayMusic);
     window.addEventListener('gameRestartWithStations', handleGameRestartWithStations);
     window.addEventListener('stopMusic', handleStopMusic);
-    
-    // Check for unlocks immediately
-    checkForUnlocks();
-    
-    // Set up periodic checks for unlocks
-    const intervalId = setInterval(checkForUnlocks, 3000);
-    
-    // Return cleanup function
+
+    // Clean up listeners on unmount
     return () => {
-      // Clean up all event listeners
       window.removeEventListener('stationUnlocked', handleStationUnlock);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('playTrack', handlePlayTrack);
       window.removeEventListener('forcePlayMusic', handleForcePlayMusic);
       window.removeEventListener('gameRestartWithStations', handleGameRestartWithStations);
       window.removeEventListener('stopMusic', handleStopMusic);
-      clearInterval(intervalId);
     };
   }, [showPlaylist, isOpen, isPlaying]);
 

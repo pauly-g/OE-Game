@@ -111,6 +111,36 @@ export class GameOverScene extends Phaser.Scene {
     // Check for spacebar press to restart
     if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
       gameDebugger.info('Spacebar pressed to restart game');
+      
+      // In a browser environment, dispatch custom events for music and stations
+      // The non-null assertion is safe here as Phaser only runs in browser contexts
+      const win = window as Window;
+      
+      // Dispatch custom events to ensure stations and music are properly handled
+      try {
+        gameDebugger.info('Dispatching gameRestartWithStations event');
+        const stationsEvent = new CustomEvent('gameRestartWithStations', { 
+          detail: { requireStationReset: true } 
+        });
+        win.dispatchEvent(stationsEvent);
+        
+        // Also dispatch event to force music playback after a short delay
+        setTimeout(() => {
+          try {
+            gameDebugger.info('Dispatching forcePlayMusic event');
+            const musicEvent = new CustomEvent('forcePlayMusic', { 
+              detail: { source: 'gameOverSceneRestart' } 
+            });
+            win.dispatchEvent(musicEvent);
+          } catch (err) {
+            gameDebugger.error('Error dispatching forcePlayMusic event:', err);
+          }
+        }, 300);
+      } catch (err) {
+        gameDebugger.error('Error dispatching gameRestartWithStations event:', err);
+      }
+      
+      // Start the game scene regardless of event dispatch success
       this.scene.start('Level1Scene', { reset: true });
     }
   }

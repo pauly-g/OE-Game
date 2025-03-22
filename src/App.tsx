@@ -191,38 +191,116 @@ function App() {
     };
   }, [game]);
 
-  // Ensure music plays after page load/refresh
+  // Ensure music plays after page load/refresh using the most direct approach possible
   useEffect(() => {
-    const handlePageLoad = () => {
-      console.log('[App] Page loaded or refreshed, ensuring music plays');
-      // Create and dispatch a custom event to trigger music playback
-      const event = new CustomEvent('pageRefreshed');
-      window.dispatchEvent(event);
+    const playMusic = () => {
+      console.log('[App] Direct attempt to force music play');
+      
+      // Try to use the special forceMusicPlay function if available
+      if (typeof (window as any).forceMusicPlay === 'function') {
+        console.log('[App] Using global forceMusicPlay function');
+        (window as any).forceMusicPlay();
+        return;
+      }
+      
+      // Fallback approach if forceMusicPlay is not available
+      console.log('[App] Fallback to forcePlayMusic event');
+      const playEvent = new CustomEvent('forcePlayMusic', { 
+        detail: { source: 'appFallbackMethod' } 
+      });
+      window.dispatchEvent(playEvent);
     };
 
-    // Add listener for the load event
-    window.addEventListener('load', handlePageLoad);
+    // First try immediate check on component mount
+    console.log('[App] App component mounted, trying to force play music');
     
-    // Also handle when the visibility changes (another way to detect refresh)
-    const handleVisibility = () => {
+    // Try immediately
+    playMusic();
+    
+    // Also try after slight delays to ensure Radio component is mounted
+    setTimeout(playMusic, 500);
+    setTimeout(playMusic, 1500);
+    setTimeout(playMusic, 3000);
+    
+    // Also listen for window load event
+    window.addEventListener('load', playMusic);
+    
+    // Use visibility change as another trigger
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        console.log('[App] Page visibility changed to visible');
-        const event = new CustomEvent('pageRefreshed');
-        window.dispatchEvent(event);
+        console.log('[App] Page became visible, trying to play music');
+        playMusic();
       }
     };
     
-    document.addEventListener('visibilitychange', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    // Run once on mount too
-    setTimeout(() => {
-      const event = new CustomEvent('pageRefreshed');
-      window.dispatchEvent(event);
-    }, 1000);
-
     return () => {
-      window.removeEventListener('load', handlePageLoad);
-      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('load', playMusic);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Handle game restart with spacebar to ensure both music and stations work
+  useEffect(() => {
+    const handleGameRestart = (event: KeyboardEvent) => {
+      // Check if we're at the game over screen - this is when space restarts the game
+      // We can check if there's a game over message visible in the DOM
+      const gameOverMessage = document.querySelector('.game-over-message');
+      
+      if (event.code === 'Space' && gameOverMessage) {
+        console.log('[App] Game restart detected via spacebar at game over screen');
+        
+        // First dispatch event to reset stations properly
+        const stationsEvent = new CustomEvent('gameRestartWithStations', { 
+          detail: { requireStationReset: true } 
+        });
+        console.log('[App] Dispatching gameRestartWithStations event');
+        window.dispatchEvent(stationsEvent);
+        
+        // Then after a small delay, trigger music play
+        setTimeout(() => {
+          const musicEvent = new CustomEvent('forcePlayMusic', { 
+            detail: { source: 'gameRestart' } 
+          });
+          console.log('[App] Dispatching forcePlayMusic event');
+          window.dispatchEvent(musicEvent);
+        }, 300);
+      }
+    };
+    
+    window.addEventListener('keydown', handleGameRestart);
+    
+    return () => {
+      window.removeEventListener('keydown', handleGameRestart);
+    };
+  }, []);
+
+  // Add debug helpers for music playback and station sync
+  useEffect(() => {
+    const handleDebugKeydown = (event: KeyboardEvent) => {
+      // Special debug keys
+      if (event.code === 'KeyM') {
+        console.log('[App] DEBUG: Manually triggering music playback with M key');
+        const musicEvent = new CustomEvent('forcePlayMusic', { 
+          detail: { source: 'manualDebug' } 
+        });
+        window.dispatchEvent(musicEvent);
+      }
+      
+      if (event.code === 'KeyS') {
+        console.log('[App] DEBUG: Manually triggering station reset with S key');
+        const stationsEvent = new CustomEvent('gameRestartWithStations', { 
+          detail: { requireStationReset: true } 
+        });
+        window.dispatchEvent(stationsEvent);
+      }
+    };
+    
+    window.addEventListener('keydown', handleDebugKeydown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleDebugKeydown);
     };
   }, []);
 
