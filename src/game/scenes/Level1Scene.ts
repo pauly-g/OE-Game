@@ -440,15 +440,104 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private createUI(width: number, height: number) {
-    this.scoreText = this.add.text(width - 20, 16, 'Score: 0', {
+    // Create a wooden sign container for the score at the top center
+    const scoreContainer = this.add.container(width * 0.5, 16);
+    scoreContainer.setDepth(100); // Ensure it's above everything else
+    
+    // Create the wooden sign background for score (similar to station signs)
+    const scoreWidth = 180; // Fixed width that can accommodate large scores
+    const scoreHeight = 44; // Slightly taller than station signs
+    
+    // Score sign shadow for depth
+    const scoreShadow = this.add.rectangle(3, 3, scoreWidth, scoreHeight, 0x000000)
+      .setOrigin(0.5, 0.5)
+      .setAlpha(0.3);
+    
+    // Score sign background 
+    const scoreBackground = this.add.rectangle(0, 0, scoreWidth, scoreHeight, 0xC19A6B)
+      .setOrigin(0.5, 0.5)
+      .setStrokeStyle(3, 0x8B4513);
+    
+    // Add grain texture to the sign
+    const scoreGrainTexture = this.add.grid(
+      0, 0,
+      scoreWidth, scoreHeight,
+      8, 8, // Pixel grid size
+      0, 0,
+      0x8B4513, 0.1
+    ).setOrigin(0.5, 0.5);
+    
+    // Create nails at the corners
+    const nail1 = this.add.circle(-scoreWidth/2 + 10, -scoreHeight/2 + 10, 2, 0x808080);
+    const nail2 = this.add.circle(scoreWidth/2 - 10, -scoreHeight/2 + 10, 2, 0x808080);
+    const nail3 = this.add.circle(-scoreWidth/2 + 10, scoreHeight/2 - 10, 2, 0x808080);
+    const nail4 = this.add.circle(scoreWidth/2 - 10, scoreHeight/2 - 10, 2, 0x808080);
+    
+    // Create the score text with improved visibility
+    this.scoreText = this.add.text(0, 0, 'Score: 0', {
+      fontFamily: 'monospace', // Match station sign font
       fontSize: '24px',
-      color: '#ffffff',
+      color: '#000000', // Black text on wooden background
       stroke: '#000000',
-      strokeThickness: 3
-    }).setOrigin(1, 0);
+      strokeThickness: 0.5,
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // Add all elements to the score container
+    scoreContainer.add([
+      scoreShadow, 
+      scoreBackground, 
+      scoreGrainTexture, 
+      nail1, nail2, nail3, nail4, 
+      this.scoreText
+    ]);
 
-    // Create heart icons for lives instead of text
-    this.livesContainer = this.add.container(25, 16);
+    // Create wooden sign container for lives
+    const livesContainer = this.add.container(80, 16);
+    livesContainer.setDepth(100);
+    
+    // Create lives sign background (initial size for 3 lives)
+    const livesWidth = 110;
+    const livesHeight = 44;
+    
+    // Lives background shadow
+    const livesShadow = this.add.rectangle(3, 3, livesWidth, livesHeight, 0x000000)
+      .setOrigin(0.5, 0.5)
+      .setAlpha(0.3);
+    
+    // Lives sign background
+    const livesBackground = this.add.rectangle(0, 0, livesWidth, livesHeight, 0xC19A6B)
+      .setOrigin(0.5, 0.5)
+      .setStrokeStyle(3, 0x8B4513);
+    
+    // Lives grain texture
+    const livesGrainTexture = this.add.grid(
+      0, 0, 
+      livesWidth, livesHeight,
+      8, 8,
+      0, 0,
+      0x8B4513, 0.1
+    ).setOrigin(0.5, 0.5);
+    
+    // Lives nail decorations
+    const livesNail1 = this.add.circle(-livesWidth/2 + 10, -livesHeight/2 + 10, 2, 0x808080);
+    const livesNail2 = this.add.circle(livesWidth/2 - 10, -livesHeight/2 + 10, 2, 0x808080);
+    const livesNail3 = this.add.circle(-livesWidth/2 + 10, livesHeight/2 - 10, 2, 0x808080);
+    const livesNail4 = this.add.circle(livesWidth/2 - 10, livesHeight/2 - 10, 2, 0x808080);
+    
+    // Add backgrounds to container first
+    livesContainer.add([
+      livesShadow,
+      livesBackground,
+      livesGrainTexture,
+      livesNail1, livesNail2, livesNail3, livesNail4
+    ]);
+    
+    // Now create the hearts container (as a child of the background)
+    this.livesContainer = this.add.container(0, 0);
+    livesContainer.add(this.livesContainer);
+    
+    // Initialize lives display
     this.updateLivesDisplay();
 
     this.powerUpText = this.add.text(width * 0.5, 50, '', {
@@ -568,7 +657,7 @@ export class Level1Scene extends Phaser.Scene {
     
     // Calculate starting X position to center all stations
     const startX = (this.cameras.main.width - totalWidth) / 2;
-    const y = this.cameras.main.height * 0.2;
+    const y = this.cameras.main.height * 0.2 + 20; // Move stations down by 20px
 
     // Define consistent size for all stations
     const tableSize = 120; // Size of the table
@@ -1353,15 +1442,62 @@ export class Level1Scene extends Phaser.Scene {
     // Clear any existing heart icons
     this.livesContainer.removeAll(true);
     
-    // Add heart icons based on current lives
+    // Heart emoji dimensions and positioning
+    const heartWidth = 24;
+    const spacing = 6;
+    
+    // Position hearts from left side (disappear from right when lost)
+    // Start from the left edge of the container with padding
+    const startX = -42; // Left edge of wooden sign with padding (moved another 3px right)
+    const yOffset = -10; // Move hearts up by 10px
+    
     for (let i = 0; i < this.lives; i++) {
+      const heartX = startX + (i * (heartWidth + spacing));
       const heart = this.add.text(
-        i * 30, // Space hearts horizontally
-        0,
+        heartX,
+        yOffset, // Apply vertical offset to move hearts up
         '❤️',
         { fontSize: '24px' }
       );
       this.livesContainer.add(heart);
+    }
+    
+    // Get parent container (the wooden sign)
+    const parent = this.livesContainer.parentContainer;
+    
+    // If we have more than 3 hearts, resize the background
+    if (parent && this.lives > 3) {
+      // Calculate the new width based on number of hearts
+      const totalWidth = (this.lives * heartWidth) + ((this.lives - 1) * spacing);
+      const newWidth = Math.max(110, totalWidth + 24); // Add padding
+      
+      // Get the background elements (shadow, background, texture)
+      const shadow = parent.getAt(0) as Phaser.GameObjects.Rectangle;
+      const background = parent.getAt(1) as Phaser.GameObjects.Rectangle; 
+      const texture = parent.getAt(2) as Phaser.GameObjects.Grid;
+      
+      // Update the sizes
+      shadow.width = newWidth;
+      background.width = newWidth;
+      texture.width = newWidth;
+      
+      // Update nail positions
+      const nail1 = parent.getAt(3) as Phaser.GameObjects.Arc;
+      const nail2 = parent.getAt(4) as Phaser.GameObjects.Arc;
+      const nail3 = parent.getAt(5) as Phaser.GameObjects.Arc;
+      const nail4 = parent.getAt(6) as Phaser.GameObjects.Arc;
+      
+      // Position nails at corners
+      const halfWidth = newWidth / 2;
+      const halfHeight = 44 / 2;
+      nail1.x = -halfWidth + 10;
+      nail1.y = -halfHeight + 10;
+      nail2.x = halfWidth - 10;
+      nail2.y = -halfHeight + 10;
+      nail3.x = -halfWidth + 10;
+      nail3.y = halfHeight - 10;
+      nail4.x = halfWidth - 10;
+      nail4.y = halfHeight - 10;
     }
   }
 
@@ -2882,7 +3018,7 @@ export class Level1Scene extends Phaser.Scene {
   // Helper function to create a pixel art style sign
   private createStationSign(x: number, y: number, type: string): Phaser.GameObjects.Container {
     // Create a container for the sign - position higher above the station to create more space
-    const signContainer = this.add.container(x, y - 85); // Increased distance from y - 50 to y - 85
+    const signContainer = this.add.container(x, y - 85); // Position remains relative to the station
     
     // Get the station name from the type
     const text = this.getStationName(type);
