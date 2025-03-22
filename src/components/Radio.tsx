@@ -1289,10 +1289,23 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
                 
                 {/* Lyrics panel */}
                 {activeTab === 'lyrics' && (
-                  <div className="lyrics-panel">
-                    {currentTrack?.lyrics.split('\n').map((line, index) => (
-                      <p key={index}>{line}</p>
-                    ))}
+                  <div className="lyrics-panel" style={{ overflowY: 'auto', maxHeight: '100%' }}>
+                    {currentTrack?.lyrics.split('\n').map((line, index, array) => {
+                      // Check if this line or the next line has a section header like [Chorus], [Verse], etc.
+                      const isHeader = line.match(/^\[.*\]/) !== null;
+                      const isEmptyLine = line.trim() === '';
+                      const nextLineIsHeader = index < array.length - 1 && array[index + 1].match(/^\[.*\]/) !== null;
+                      
+                      // Add extra margin before section headers or if the next line is a header
+                      const style = {
+                        margin: '0',
+                        ...(isEmptyLine ? { height: '1em' } : {}),
+                        ...(isHeader ? { marginTop: '1.5em', fontWeight: 'bold' } : {}),
+                        ...(nextLineIsHeader && !isEmptyLine ? { marginBottom: '1.5em' } : {})
+                      };
+                      
+                      return <p key={index} style={style}>{line}</p>;
+                    })}
                   </div>
                 )}
               </div>
