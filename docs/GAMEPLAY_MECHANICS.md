@@ -263,6 +263,7 @@ For testing and demonstration purposes:
 - **D key**: Activates the power-up
 - **C key**: Unlocks all stations immediately
 - **F key**: Adds a life
+- **L key**: Reduces player lives to one
 
 ## Game Over Screen
 - Game over screen displays when player loses all lives
@@ -339,7 +340,401 @@ For testing and demonstration purposes:
 - **Responsive Layout**: Maintaining game aspect ratio across different screen sizes
 - **Audio Management**: Persisting audio playback state between component remounts
 
+### File Structure
+```
+src/
+├── game/
+│   ├── scenes/
+│   │   ├── Level1Scene.ts   // Main gameplay
+│   │   └── GameOverScene.ts // Game over screen
+│   ├── utils/
+│   │   ├── debug.ts         // Debugging utilities
+│   │   └── stationTracker.ts // Station unlock management
+│   └── config.ts            // Phaser configuration
+├── components/
+│   ├── Radio.tsx            // Music player
+│   ├── RadioButton.tsx      // Toggle for radio
+│   └── SongNotification.tsx // New song alerts
+├── data/
+│   └── musicData.ts         // Music track definitions
+└── App.tsx                  // Main React component
+```
+
 The architecture is designed to be modular and extensible, making it easy to add new features or modify existing ones without significant refactoring.
+
+## Technical Implementation
+
+### Order Generation
+
+```typescript
+private generateOrder = () => {
+  // Select random edit types from unlocked stations
+  const stationTypes = this.stations
+    .filter(station => station.isUnlocked)
+    .map(station => station.type);
+    
+  // Ensure we don't have duplicates by using the Fisher-Yates shuffle
+  const shuffledTypes = [...stationTypes].sort(() => Math.random() - 0.5);
+  
+  // Take the first numEdits types (no duplicates)
+  const selectedTypes: string[] = [];
+  for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
+    selectedTypes.push(shuffledTypes[i]);
+  }
+  
+  // Dynamic box sizing based on the number of edits
+  if (numEdits <= 2) {
+    // Small boxes for 1-2 edits
+    bgWidth = 110 + (numEdits * 10);
+    bgHeight = 70;
+  } else if (numEdits <= 4) {
+    // Medium boxes for 3-4 edits
+    bgWidth = 130 + ((numEdits - 2) * 15);
+    bgHeight = numEdits === 3 ? 75 : 100;
+  } else {
+    // Large boxes for 5-6 edits
+    bgWidth = 160 + ((numEdits - 4) * 20);
+    bgHeight = 120;
+  }
+}
+```
+
+### Order Complexity System
+
+```typescript
+// Determine order complexity based on unlocked stations
+const maxPossibleEdits = Math.min(5, unlockedStations.length);
+
+// Probability table for the number of edits (example for 5 unlocked stations)
+// Format: [1 edit, 2 edits, 3 edits, 4 edits, 5 edits]
+let editProbabilities = [0.3, 0.25, 0.25, 0.15, 0.05];
+
+// Determine number of edits using probability table
+const random = Math.random();
+let cumulativeProbability = 0;
+let numEdits = 1;
+
+for (let i = 0; i < editProbabilities.length; i++) {
+  cumulativeProbability += editProbabilities[i];
+  if (random <= cumulativeProbability) {
+    numEdits = i + 1;
+    break;
+  }
+}
+```
+
+### Edit Application System
+
+```typescript
+private applyEditToOrder(order: Order) {
+  if (this.carriedEdits.length === 0) return false;
+  
+  // Get the first edit in the queue (FIFO)
+  const edit = this.carriedEdits[0];
+  
+  // Check if the order requires this edit type and it hasn't been applied yet
+  if (order.types.includes(edit.type) && !order.completedEdits.includes(edit.type)) {
+    // Success! Apply the edit
+    order.completedEdits.push(edit.type);
+    
+    // Create a checkmark to show this edit has been applied
+    this.markEditAsApplied(order, edit.type);
+    
+    // Increment total edits applied (for unlocking stations)
+    this.totalEditsApplied++;
+    
+    // Check if we should unlock a new station (every 5 edits)
+    if (this.totalEditsApplied >= 5 && 
+        (this.totalEditsApplied - this.lastUnlockedAtEditCount) >= 5) {
+      this.unlockNextStation();
+    }
+    
+    // Increase score
+    this.score += 10;
+    
+    // Check if order is now complete
+    if (order.completedEdits.length === order.types.length) {
+      this.completeOrder(order);
+    }
+    
+    // Remove the used edit
+    this.removeFirstEdit();
+    
+    return true;
+  } else {
+    // Wrong edit type - show failure feedback
+    // ...
+  }
+}
+```
+
+### Lives Display Implementation
+
+```typescript
+private updateLivesDisplay() {
+  // Clear any existing heart icons
+  this.livesContainer.removeAll(true);
+  
+  // Heart emoji dimensions and positioning
+  const heartWidth = 24;
+  const spacing = 6;
+  
+  // Position hearts from left side (disappear from right when lost)
+  // Start from the left edge of the container with padding
+  const startX = -42; // Left edge of wooden sign with padding
+  const yOffset = -10; // Move hearts up by 10px
+  
+  for (let i = 0; i < this.lives; i++) {
+    const heartX = startX + (i * (heartWidth + spacing));
+    const heart = this.add.text(
+      heartX,
+      yOffset, // Apply vertical offset to move hearts up
+      '❤️',
+      { fontSize: '24px' }
+    );
+    this.livesContainer.add(heart);
+  }
+  
+  // Get parent container (the wooden sign)
+  const parent = this.livesContainer.parentContainer;
+  
+  // If we have more than 3 hearts, resize the background
+  if (parent && this.lives > 3) {
+    // Calculate the new width based on number of hearts
+    const totalWidth = (this.lives * heartWidth) + ((this.lives - 1) * spacing);
+    const newWidth = Math.max(110, totalWidth + 24); // Add padding
+    
+    // Update the sizes of container elements
+    shadow.width = newWidth;
+    background.width = newWidth;
+    texture.width = newWidth;
+    
+    // Update nail positions at corners
+  }
+}
+```
+
+### Station Unlock Notification System
+
+```typescript
+// Create a container for the station unlock notification
+this.stationUnlockContainer = this.add.container(width * 0.5, height * 0.4);
+this.stationUnlockContainer.setVisible(false);
+
+// Create shadow for depth
+const signShadow = this.add.rectangle(4, 4, 500, 60, 0x000000, 0.4).setOrigin(0.5);
+
+// Create dark wood background
+const signBackground = this.add.rectangle(0, 0, 500, 60, 0x3A2921).setOrigin(0.5);
+
+// Create wood border (top, right, bottom, left)
+const borderTop = this.add.rectangle(0, -30, 500, 4, 0x6B4C3B).setOrigin(0.5, 0.5);
+const borderBottom = this.add.rectangle(0, 30, 500, 4, 0x6B4C3B).setOrigin(0.5, 0.5);
+const borderLeft = this.add.rectangle(-250, 0, 4, 60, 0x6B4C3B).setOrigin(0.5, 0.5);
+const borderRight = this.add.rectangle(250, 0, 4, 60, 0x6B4C3B).setOrigin(0.5, 0.5);
+
+// Create simple end caps for the wooden sign
+const leftCap = this.add.rectangle(-250, 0, 12, 40, 0x5C3C2E).setOrigin(0.5, 0.5);
+const rightCap = this.add.rectangle(250, 0, 12, 40, 0x5C3C2E).setOrigin(0.5, 0.5);
+
+// Create the text with proper setup
+this.stationUnlockText = this.add.text(0, 0, '', {
+  fontSize: '22px',
+  color: '#ffffff',
+  stroke: '#000000',
+  strokeThickness: 2,
+  align: 'center'
+}).setOrigin(0.5);
+```
+
+### Order Completion and Animations
+
+```typescript
+private completeOrder(order: Order) {
+  // Mark as complete
+  order.isComplete = true;
+  
+  // Happy wiggle animation
+  this.tweens.add({
+    targets: order.container,
+    angle: { from: -5, to: 5 },
+    duration: 120,
+    ease: 'Sine.InOut',
+    repeat: 3,
+    yoyo: true,
+    onComplete: () => {
+      order.container.angle = 0;
+    }
+  });
+  
+  // Show completion indicator
+  const completionEmoji = this.add.text(
+    order.container.x,
+    order.container.y - 40,
+    '✅',
+    { fontSize: '36px', stroke: '#000000', strokeThickness: 2 }
+  ).setOrigin(0.5);
+  
+  // Add it to the container so it moves with the order
+  order.container.add(completionEmoji);
+}
+```
+
+### Player-Station Collision Detection
+
+```typescript
+// Track previous position before any movement occurs
+const prevX = this.player.x;
+const prevY = this.player.y;
+
+// Allow player movement with arrow keys...
+
+// Create precise player bounds for collision detection
+const playerBounds = new Phaser.Geom.Rectangle(
+  this.player.x - 14,
+  this.player.y - 14,
+  28,
+  28
+);
+
+// Check for station collisions
+for (const station of this.stations) {
+  if (station && station.isUnlocked && station.bounds) {
+    const stationBounds = new Phaser.Geom.Rectangle(
+      station.bounds.x, station.bounds.y, 
+      station.bounds.width, station.bounds.height
+    );
+    
+    // Expand station bounds slightly for more reliable collision detection
+    stationBounds.width += 4;
+    stationBounds.height += 4;
+    stationBounds.x -= 2;
+    stationBounds.y -= 2;
+    
+    if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
+      // Collision detected - restore previous position
+      collision = true;
+      break;
+    }
+  }
+}
+
+// If collision occurred, restore previous position
+if (collision) {
+  this.player.x = prevX;
+  this.player.y = prevY;
+}
+```
+
+### Player Animation System
+
+```typescript
+// The updatePlayerAnimation method handles animation frames
+private updatePlayerAnimation(time: number) {
+  // Animation rate: 8 frames per second = 125ms per frame
+  const frameDelay = 125; 
+  
+  if (time - this.lastFrameTime > frameDelay) {
+    // Advance to next frame (looping from 6 back to 1)
+    this.currentFrame = this.currentFrame >= 6 ? 1 : this.currentFrame + 1;
+    this.lastFrameTime = time;
+    
+    // Update the texture with the new frame
+    this.setPlayerDirectionTexture(this.lastDirection, this.lastMoving);
+  }
+}
+```
+
+### Power-Up System Implementation
+
+```typescript
+private updatePowerUp(delta: number) {
+  if (this.powerUpActive) {
+    // Decrement timer
+    this.powerUpTimer -= delta;
+    
+    // Update countdown text
+    const secondsLeft = Math.ceil(this.powerUpTimer / 1000);
+    this.powerUpCountdownText.setText(`${secondsLeft}s`);
+    
+    // Check if power-up has expired
+    if (this.powerUpTimer <= 0) {
+      this.deactivatePowerUp();
+    }
+    
+    // Auto-complete any existing orders that were created before power-up
+    for (const order of this.orders) {
+      if (!order.isComplete && !order.createdDuringPowerUp) {
+        // Auto-complete logic...
+      }
+    }
+  }
+}
+```
+
+### Progressive Difficulty System
+
+```typescript
+// When unlocking a new station
+private unlockNextStation() {
+  // Increase game difficulty slightly
+  this.orderSpeedMultiplier = Math.min(
+    this.maxOrderSpeedMultiplier,
+    this.orderSpeedMultiplier + 0.15
+  );
+  this.conveyorSpeed = Math.min(
+    this.maxConveyorSpeed,
+    this.conveyorSpeed + 0.25
+  );
+  this.nextOrderDelay = Math.max(1500, this.nextOrderDelay - 250);
+}
+
+// In the update method
+// Move orders based on their speed multiplier
+order.x += 0.5 * this.orderSpeedMultiplier;
+
+// Conveyor belt pushes the player with increasing force
+this.player.x += this.conveyorSpeed;
+```
+
+### Station Tracker System
+
+```typescript
+// Station Tracker for managing unlocked stations and radio integration
+const isStationUnlocked = (stationType: string): boolean => {
+  // Always unlock warehouse station
+  if (stationType === 'warehouse') {
+    return true;
+  }
+  
+  // For all other stations, check the unlocked status
+  const stations = getUnlockedStations();
+  const isUnlocked = !!stations[stationType];
+  return isUnlocked;
+};
+
+// Mark a station as unlocked
+const unlockStation = (stationType: string): void => {
+  const stations = getUnlockedStations();
+  
+  // Check if already unlocked
+  if (stations[stationType] === true) {
+    return;
+  }
+  
+  // Update the state
+  stations[stationType] = true;
+  localStorage.setItem(UNLOCKED_STATIONS_KEY, JSON.stringify(stations));
+  
+  // Create a custom event to notify radio component
+  const event = new CustomEvent('stationUnlocked', { 
+    detail: { stationType, timestamp: Date.now() },
+    bubbles: true
+  });
+  
+  window.dispatchEvent(event);
+}
+```
 
 ## Common Issues and Fixes
 
@@ -371,6 +766,45 @@ if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
 - **Problem**: Music doesn't continue when radio UI is closed
 - **Solution**: Global audio state outside React lifecycle
 - **Approach**: Use a global audio element and state that persists across component remounts
+
+## Game Architecture
+
+The game is built using Phaser 3 with TypeScript, consisting of several key components:
+
+1. **Level1Scene**: Main gameplay scene with player, orders, stations, and core mechanics
+2. **GameOverScene**: Displays final score and restart option when the game ends
+3. **SpeechBubble**: UI component for showing customer comments
+4. **Radio**: Music player with unlockable tracks tied to station progress
+5. **StationTracker**: Utility for tracking unlocked stations across components
+
+## User Interface Elements
+
+- **Score Display**: Shows current player score in the top corner with wooden sign styling
+- **Lives Indicator**: Visual hearts showing remaining lives inside wooden sign container
+- **Power-Up Timer**: Countdown display during active power-up
+- **Station Signs**: Text labels identifying each edit station
+- **Station Unlock Notification**: Announces newly unlocked stations with distinctive wood sign styling
+- **Radio Button**: Toggle for displaying/hiding the music player interface
+
+## Development Reference
+
+### Important File Locations
+- `src/game/scenes/Level1Scene.ts`: Main gameplay logic
+- `src/game/utils/debug.ts`: Debug utilities
+- `src/game/utils/stationTracker.ts`: Station unlocking and persistence
+- `src/components/Radio.tsx`: Music player implementation
+- `src/data/musicData.ts`: Track definitions and lyrics
+- `public/assets/`: Game assets (sprites, audio, etc.)
+
+### Key Methods for Edit Mechanics
+- `tryPickupFromStation()`: Handles edit pickup from stations
+- `pickupEdit()`: Creates and attaches the edit to the player
+- `tryApplyEditToOrder()`: Checks if player can apply edit to an order
+- `applyEditToOrder()`: Applies edit to an order if valid
+- `discardEdit()`: Creates particles when an edit is discarded
+- `updateLivesDisplay()`: Updates the hearts display with current lives count
+- `unlockNextStation()`: Handles station unlocking and notification display
+- `createPowerUpSwitch()`: Creates the power-up button with appropriate bounds
 
 ## Conclusion
 
