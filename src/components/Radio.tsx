@@ -1179,7 +1179,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           <div className="radio-container">
             <div className="radio-header">
               <div className="radio-header-title">
-                <span>WAREHOUSE RADIO</span>
+                <span>ORDER EDITING RADIO</span>
                 {isPlaying && renderEqualizer()}
               </div>
               <button 

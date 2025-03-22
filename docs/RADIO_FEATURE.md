@@ -62,7 +62,7 @@ public/
 
 ## Usage
 
-1. Click the "Warehouse Radio" button next to the game instructions to open the player
+1. Click the "Order Editing Radio" button next to the game instructions to open the player
 2. Use the playback controls on the left to manage music playback
 3. The equalizer animation indicates when music is playing
 4. Click the progress bar to seek to different parts of the track

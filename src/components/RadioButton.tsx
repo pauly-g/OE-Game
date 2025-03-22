@@ -26,7 +26,7 @@ const RadioButton: React.FC<RadioButtonProps> = ({ onClick, showRadio, wiggle = 
       aria-label={showRadio ? "Close Radio" : "Open Radio"}
       title={showRadio ? "Close Radio" : "Open Radio"}
     >
-      {showRadio ? 'Close Radio' : 'Warehouse Radio'}
+      {showRadio ? 'Close Radio' : 'Order Editing Radio'}
     </button>
   );
 };
