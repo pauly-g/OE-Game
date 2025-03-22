@@ -21,12 +21,15 @@
 - Collision detection prevents walking through stations
 - Cannot walk onto the conveyor belt (blocked by collision detection)
 - Can carry up to 3 different types of edits simultaneously
+- Player movement speed is set to 4 (reduced from the original 8 for better control)
 
 ### Player Character
 
 - Has distinctive animations for idle and movement in all four directions
 - Applies edits to orders when standing near them and pressing spacebar
 - Previous position tracking prevents both sliding and walking through stations
+- Animation frame rate is 8 frames per second (125ms per frame)
+- Character sprite has 6 frames for each animation sequence
 
 ### Edit Handling Mechanics
 
@@ -35,6 +38,7 @@
   - Each station provides a specific type of edit
   - Player can collect up to 3 different edits at a time (no duplicates)
   - The edit icons follow the player with appropriate offsets based on direction
+  - Warning message displays when trying to pick up a duplicate edit type
 
 - **Applying Edits to Orders**:
   - Press spacebar when near an order to apply the carried edit
@@ -43,6 +47,7 @@
   - If the edit is valid for the order, it will be applied with a visual checkmark
   - If the edit is invalid, a failure indicator (❌) appears but the edit isn't consumed
   - Wrong edits show a failure animation but aren't consumed
+  - Discarded edits (when applied away from orders) dissipate with a particle effect
 
 ### Conveyor Belt
 
@@ -51,6 +56,9 @@
 - Orders appear on the left side and exit on the right
 - Player must apply edits before orders reach the right edge
 - Contains directional arrows showing the flow of orders
+- Initial conveyor speed is 0.5 (reduced from 2 for a gentler start)
+- Maximum conveyor speed is 3 (reduced from 4 to maintain playability)
+- Conveyor exerts a pushing force on the player, pushing them towards the right
 
 ## Game Elements
 
@@ -70,11 +78,14 @@
   - Stations unlock in a fixed order (Address → Quantity → Discount → Product → Invoice → Cancel)
   - When a station unlocks, a notification appears on screen
   - Stations maintain their unlocked state throughout the game session
+  - Newly unlocked stations appear with a fade-in and scale animation for emphasis
 
 - **Station Collision**:
   - Stations have robust collision boundaries to prevent player from walking through
   - Collision detection uses precise player and station bounds
   - Tracking previous player position prevents sliding and clipping through stations
+  - Player bounds for collision are 28x28 pixels
+  - Station bounds are expanded by 4 pixels in each dimension for reliable collision detection
 
 ### Orders
 
@@ -82,31 +93,82 @@
 - Move from left to right on the conveyor belt
 - Orders maintain consistent 40px spacing on the conveyor belt
 - Orders never require duplicate edit types
+- Orders generation is controlled by a timer with adjustable delays
 
 - **Order Edit Requirements**:
   - Each order requires 1-6 different types of edits
   - As more stations unlock, individual boxes may require multiple edits
   - Multi-edit boxes are interspersed with simpler boxes
   - As the game progresses, the frequency of multi-edit boxes increases
+  - Order complexity increases with game progression using a probability system
 
 - **Order Sizes**:
   - Orders have dynamic sizes based on the number of edits required:
-    - 1-2 edits: Small box
-    - 3-4 edits: Medium box
-    - 5-6 edits: Large box
+    - 1-2 edits: Small box (110px + (numEdits * 10)px width × 70px height)
+    - 3-4 edits: Medium box (130px + ((numEdits - 2) * 15)px width × 75-100px height)
+    - 5-6 edits: Large box (160px + ((numEdits - 4) * 20)px width × 120px height)
 
 - **Visual Representation**:
   - Orders with 1-3 edits display icons in a horizontal row
   - Orders with 4-6 edits display icons in a grid pattern
   - Checkmarks appear above corresponding icons when edits are applied
   - Multiple edits can be applied to the same order until all required edits are completed
+  - Completed orders show a happy wiggle animation and checkmark
+  - Failed orders display an angry emoji (😡) when exiting the screen
+  - Completed orders show a heart emoji (❤️) when exiting
 
 ### Speech Bubbles and Comments
 
 - Orders display speech bubbles with customer comments
 - Comments are context-specific to the edit type required
-- The system prevents repetition of recently shown comments
+- The system prevents repetition of recently shown comments (tracks last 5)
 - Special comments appear during power-up mode
+- Comments are designed to be humorous and fit the theme of each edit type
+- Speech bubbles disappear when orders move beyond a certain point on the screen
+
+## User Interface Elements
+
+### Score Display
+- Shows the current player score in the top center
+- Features a wooden sign background for visual distinction
+- Sign includes a shadow, grain texture, and nail decorations
+- Wooden sign dimensions: 180px width × 44px height
+- Score text is bold, black on wooden background for readability
+- The sign has a darker border and realistic wood grain texture
+
+### Lives Display
+- Lives are displayed as hearts (❤️) in the top left corner
+- Hearts are positioned horizontally with 6px spacing between them
+- Hearts are positioned with careful alignment (-42px from left edge, -10px vertical offset)
+- Lives container features a wooden sign background matching the score display style
+- Sign includes shadow, grain texture, and nail decorations
+- Wooden sign dimensions: 110px width for 3 lives, dynamically resizing for more lives
+- Hearts disappear from right to left when lives are lost
+- When collecting extra lives, the wooden background expands to accommodate
+
+### Station Unlock Notifications
+- Appears when a new station is unlocked
+- Features a dark wood background (0x3A2921) with wood border (0x6B4C3B)
+- Includes wooden end caps for a realistic sign appearance
+- Text is white with black outline for readability
+- Shows both the station name and its emoji icon
+- Centered on screen (at 50% width, 40% height)
+- Appears with full opacity and fades out after 5 seconds
+- Dimensions: 500px width × 60px height with 4px border
+- Notification persists for 5 seconds to ensure player notices it
+
+### Power-Up Timer
+- Countdown display showing seconds remaining on active power-up
+- Appears above the power switch when power-up is active
+- Counts down from 30 seconds to 0
+
+### Power-Up Switch
+- Located on the right side of the screen
+- Features a lever that can be activated by the player
+- Visual indication when player is near the switch (flashing)
+- Shows a ready indicator when power-up is available
+- Switch has precise collision bounds for interaction
+- Button flashes with a 1-second interval when ready
 
 ## Game Progression
 
@@ -122,9 +184,10 @@ The game difficulty increases in 5 stages based on time played:
 6. **Stage 5 (5 min)**: Very challenging distribution (30% chance of 6 edits)
 
 As time progresses:
-- Conveyor belt speed gradually increases up to a maximum value
-- Time between new orders decreases
-- Orders move faster across the screen
+- Conveyor belt speed gradually increases up to a maximum value (from 0.5 to 3)
+- Time between new orders decreases (starting at 5000ms and decreasing to 1500ms minimum)
+- Orders move faster across the screen (orderSpeedMultiplier increases from 1.0 to 2.0)
+- Each station unlock increases game difficulty slightly
 
 ### Lives System
 - Player starts with 3 lives, displayed as hearts in the top left corner
@@ -137,6 +200,7 @@ As time progresses:
 - Base points for applying an edit: 10 points
 - Completion bonus: 25 points × number of edits in the order
 - Higher scores come from completing complex multi-edit orders
+- Score is displayed prominently in the wooden sign at the top center
 
 ## Visual Feedback
 
@@ -153,6 +217,8 @@ As time progresses:
 - **Wrong Edit**: Red X symbol (❌) with shake animation
 - **Max Carried Edits**: Warning message when trying to exceed the 3-edit limit
 - **Duplicate Edit**: Warning message when trying to pick up the same edit type twice
+- **Power-Up Ready**: Flashing lever and "Ready!" text
+- **Order Complete**: Happy wiggle animation and checkmark
 
 ## Power-Up System
 
@@ -162,6 +228,33 @@ As time progresses:
   - Auto-complete new orders as they appear
   - Auto-complete existing orders on the conveyor belt
   - Display a countdown timer showing remaining time
+- Power-up switch is positioned at 76% from the left and 52% from the top + 50px
+- Power-up system tracks which orders were created during power-up mode
+
+## Radio Feature
+
+The game includes a music player radio system with the following features:
+
+- **Order Editing Radio**: Replaces the original "Warehouse Radio" name
+- **Music Unlocking**: New music tracks unlock as game stations unlock
+- **Track Variety**:
+  - Background music tracks (always available)
+  - Thematic songs for each station type (unlocked progressively)
+- **Player Interface**:
+  - 8-bit Winamp-inspired horizontal player
+  - Play/pause/stop controls
+  - Volume slider
+  - Track progress bar
+  - Animated equalizer visualizer
+  - Playlist and lyrics tabs
+- **Persistence**:
+  - Music continues playing when UI is closed
+  - Music state is preserved across component remounts
+  - Unlocked stations are tracked in localStorage
+- **Integration**:
+  - Radio button in the main UI
+  - Notification system for newly unlocked songs
+  - Station tracker syncs game progress with radio availability
 
 ## Cheat Codes
 
@@ -282,6 +375,85 @@ private applyEditToOrder(order: Order) {
     // ...
   }
 }
+```
+
+### Lives Display Implementation
+
+```typescript
+private updateLivesDisplay() {
+  // Clear any existing heart icons
+  this.livesContainer.removeAll(true);
+  
+  // Heart emoji dimensions and positioning
+  const heartWidth = 24;
+  const spacing = 6;
+  
+  // Position hearts from left side (disappear from right when lost)
+  // Start from the left edge of the container with padding
+  const startX = -42; // Left edge of wooden sign with padding
+  const yOffset = -10; // Move hearts up by 10px
+  
+  for (let i = 0; i < this.lives; i++) {
+    const heartX = startX + (i * (heartWidth + spacing));
+    const heart = this.add.text(
+      heartX,
+      yOffset, // Apply vertical offset to move hearts up
+      '❤️',
+      { fontSize: '24px' }
+    );
+    this.livesContainer.add(heart);
+  }
+  
+  // Get parent container (the wooden sign)
+  const parent = this.livesContainer.parentContainer;
+  
+  // If we have more than 3 hearts, resize the background
+  if (parent && this.lives > 3) {
+    // Calculate the new width based on number of hearts
+    const totalWidth = (this.lives * heartWidth) + ((this.lives - 1) * spacing);
+    const newWidth = Math.max(110, totalWidth + 24); // Add padding
+    
+    // Update the sizes of container elements
+    shadow.width = newWidth;
+    background.width = newWidth;
+    texture.width = newWidth;
+    
+    // Update nail positions at corners
+  }
+}
+```
+
+### Station Unlock Notification System
+
+```typescript
+// Create a container for the station unlock notification
+this.stationUnlockContainer = this.add.container(width * 0.5, height * 0.4);
+this.stationUnlockContainer.setVisible(false);
+
+// Create shadow for depth
+const signShadow = this.add.rectangle(4, 4, 500, 60, 0x000000, 0.4).setOrigin(0.5);
+
+// Create dark wood background
+const signBackground = this.add.rectangle(0, 0, 500, 60, 0x3A2921).setOrigin(0.5);
+
+// Create wood border (top, right, bottom, left)
+const borderTop = this.add.rectangle(0, -30, 500, 4, 0x6B4C3B).setOrigin(0.5, 0.5);
+const borderBottom = this.add.rectangle(0, 30, 500, 4, 0x6B4C3B).setOrigin(0.5, 0.5);
+const borderLeft = this.add.rectangle(-250, 0, 4, 60, 0x6B4C3B).setOrigin(0.5, 0.5);
+const borderRight = this.add.rectangle(250, 0, 4, 60, 0x6B4C3B).setOrigin(0.5, 0.5);
+
+// Create simple end caps for the wooden sign
+const leftCap = this.add.rectangle(-250, 0, 12, 40, 0x5C3C2E).setOrigin(0.5, 0.5);
+const rightCap = this.add.rectangle(250, 0, 12, 40, 0x5C3C2E).setOrigin(0.5, 0.5);
+
+// Create the text with proper setup
+this.stationUnlockText = this.add.text(0, 0, '', {
+  fontSize: '22px',
+  color: '#ffffff',
+  stroke: '#000000',
+  strokeThickness: 2,
+  align: 'center'
+}).setOrigin(0.5);
 ```
 
 ### Order Completion and Animations
@@ -434,6 +606,45 @@ order.x += 0.5 * this.orderSpeedMultiplier;
 this.player.x += this.conveyorSpeed;
 ```
 
+### Station Tracker System
+
+```typescript
+// Station Tracker for managing unlocked stations and radio integration
+const isStationUnlocked = (stationType: string): boolean => {
+  // Always unlock warehouse station
+  if (stationType === 'warehouse') {
+    return true;
+  }
+  
+  // For all other stations, check the unlocked status
+  const stations = getUnlockedStations();
+  const isUnlocked = !!stations[stationType];
+  return isUnlocked;
+};
+
+// Mark a station as unlocked
+const unlockStation = (stationType: string): void => {
+  const stations = getUnlockedStations();
+  
+  // Check if already unlocked
+  if (stations[stationType] === true) {
+    return;
+  }
+  
+  // Update the state
+  stations[stationType] = true;
+  localStorage.setItem(UNLOCKED_STATIONS_KEY, JSON.stringify(stations));
+  
+  // Create a custom event to notify radio component
+  const event = new CustomEvent('stationUnlocked', { 
+    detail: { stationType, timestamp: Date.now() },
+    bubbles: true
+  });
+  
+  window.dispatchEvent(event);
+}
+```
+
 ## Common Issues and Fixes
 
 ### Player Movement Issues
@@ -454,6 +665,16 @@ if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
   2. **Use precise collision boxes** (28x28 for player, slightly expanded for stations)
   3. **Restore previous position completely** when collision is detected
   4. **Add debug logging** to track collision issues
+  
+### Visual Content Positioning
+- **Problem**: UI elements not aligned correctly
+- **Solution**: Use careful positioning with pixel precision
+- **Example**: Hearts in the lives display are positioned with exact pixel values (-42px from left edge, -10px vertical offset)
+
+### Radio Play Issues
+- **Problem**: Music doesn't continue when radio UI is closed
+- **Solution**: Global audio state outside React lifecycle
+- **Approach**: Use a global audio element and state that persists across component remounts
 
 ## Game Architecture
 
@@ -462,21 +683,26 @@ The game is built using Phaser 3 with TypeScript, consisting of several key comp
 1. **Level1Scene**: Main gameplay scene with player, orders, stations, and core mechanics
 2. **GameOverScene**: Displays final score and restart option when the game ends
 3. **SpeechBubble**: UI component for showing customer comments
-4. **BuyerComments**: Data storage for various comment types
+4. **Radio**: Music player with unlockable tracks tied to station progress
+5. **StationTracker**: Utility for tracking unlocked stations across components
 
 ## User Interface Elements
 
-- **Score Display**: Shows current player score in the top corner
-- **Lives Indicator**: Visual hearts showing remaining lives
+- **Score Display**: Shows current player score in the top corner with wooden sign styling
+- **Lives Indicator**: Visual hearts showing remaining lives inside wooden sign container
 - **Power-Up Timer**: Countdown display during active power-up
 - **Station Signs**: Text labels identifying each edit station
-- **Station Unlock Notification**: Announces newly unlocked stations
+- **Station Unlock Notification**: Announces newly unlocked stations with distinctive wood sign styling
+- **Radio Button**: Toggle for displaying/hiding the music player interface
 
 ## Development Reference
 
 ### Important File Locations
 - `src/game/scenes/Level1Scene.ts`: Main gameplay logic
 - `src/game/utils/debug.ts`: Debug utilities
+- `src/game/utils/stationTracker.ts`: Station unlocking and persistence
+- `src/components/Radio.tsx`: Music player implementation
+- `src/data/musicData.ts`: Track definitions and lyrics
 - `public/assets/`: Game assets (sprites, audio, etc.)
 
 ### Key Methods for Edit Mechanics
@@ -485,9 +711,12 @@ The game is built using Phaser 3 with TypeScript, consisting of several key comp
 - `tryApplyEditToOrder()`: Checks if player can apply edit to an order
 - `applyEditToOrder()`: Applies edit to an order if valid
 - `discardEdit()`: Creates particles when an edit is discarded
+- `updateLivesDisplay()`: Updates the hearts display with current lives count
+- `unlockNextStation()`: Handles station unlocking and notification display
+- `createPowerUpSwitch()`: Creates the power-up button with appropriate bounds
 
 ## Conclusion
 
 "Order Editing - The Game" combines arcade action with warehouse order management in a unique gaming experience. The progressive difficulty, power-up system, and visual feedback create an engaging gameplay loop that challenges players to improve their efficiency and strategic thinking over time.
 
-The modular code design allows for easy extension of gameplay features, such as adding new edit types or enhancing the power-up system in future updates.
+The modular code design allows for easy extension of gameplay features, such as adding new edit types or enhancing the power-up system in future updates. The integration of the radio feature adds musical depth to the game experience while providing rewards for game progress.
