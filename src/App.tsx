@@ -27,6 +27,7 @@
  * - Updated background music to use Chilled, Frantic, and Relaxed songs
  * - Simplified background music autoplay using Radio component's autoplay feature
  * - Added Firebase authentication and leaderboard integration
+ * - Updated leaderboard to be a full-screen view with integrated sign-in
  */
 import React, { useEffect, useState, useRef } from 'react';
 import Phaser from 'phaser';
@@ -37,7 +38,6 @@ import Radio from './components/Radio';
 import RadioButton from './components/RadioButton';
 import SongNotification from './components/SongNotification';
 import Leaderboard from './components/Leaderboard';
-import SignInButton from './components/SignInButton';
 import { tracks } from './data/musicData';
 import { AuthProvider, useAuth } from './firebase/AuthContext';
 
@@ -65,7 +65,6 @@ function AppContent() {
     artist: ''
   });
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [showSignIn, setShowSignIn] = useState(false);
   const [currentScore, setCurrentScore] = useState<number | undefined>(undefined);
   
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
@@ -383,24 +382,12 @@ function AppContent() {
       setShowLeaderboard(true);
     };
     
-    // Handle sign in request
-    const handleSignInRequest = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { score } = customEvent.detail;
-      
-      console.log('[App] Received gameSignInRequest event, score:', score);
-      setCurrentScore(score);
-      setShowSignIn(true);
-    };
-    
     window.addEventListener('checkGameAuth', handleCheckAuth);
     window.addEventListener('showGameLeaderboard', handleShowLeaderboard);
-    window.addEventListener('gameSignInRequest', handleSignInRequest);
     
     return () => {
       window.removeEventListener('checkGameAuth', handleCheckAuth);
       window.removeEventListener('showGameLeaderboard', handleShowLeaderboard);
-      window.removeEventListener('gameSignInRequest', handleSignInRequest);
     };
   }, [currentUser, submitUserScore]);
 
@@ -453,30 +440,14 @@ function AppContent() {
     closeNotification();
   };
 
-  // Handle successful sign in
-  const handleSignInSuccess = async () => {
-    setShowSignIn(false);
+  // Handle closing the leaderboard - make sure we return focus to the game
+  const handleCloseLeaderboard = () => {
+    setShowLeaderboard(false);
     
-    // If user just signed in and we have a current score, submit it
-    if (currentUser && currentScore !== undefined) {
-      try {
-        const result = await submitUserScore(currentScore);
-        
-        // Send result back to game for display
-        const authResponseEvent = new CustomEvent('gameAuthResponse', {
-          detail: {
-            isAuthenticated: true,
-            scoreSubmitted: !!result
-          }
-        });
-        
-        window.dispatchEvent(authResponseEvent);
-        
-        // Show the leaderboard after successful submission
-        setShowLeaderboard(true);
-      } catch (error) {
-        console.error('[App] Error submitting score after sign in:', error);
-      }
+    // Return focus to the game container
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+      gameContainer.focus();
     }
   };
 
@@ -533,7 +504,7 @@ function AppContent() {
         onListen={handleListenNow}
       />
       
-      {/* Instructions and Radio are placed below the game without affecting its size */}
+      {/* Instructions placed below the game without affecting its size */}
       <div className="w-full max-w-6xl">
         {showInstructions && (
           <div className="mt-4 p-4 bg-gray-800 rounded-lg">
@@ -550,27 +521,12 @@ function AppContent() {
         )}
       </div>
       
-      {/* Leaderboard component */}
+      {/* Leaderboard component - now full screen */}
       <Leaderboard 
         isOpen={showLeaderboard} 
-        onClose={() => setShowLeaderboard(false)}
+        onClose={handleCloseLeaderboard}
         userScore={currentScore}
       />
-      
-      {/* Sign In Dialog */}
-      {showSignIn && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4">
-          <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden p-4">
-            <SignInButton 
-              onSuccess={handleSignInSuccess}
-              onError={(error) => {
-                console.error('[App] Sign in error:', error);
-                // Display error if needed
-              }}
-            />
-          </div>
-        </div>
-      )}
       
       {showDebug && (
         <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-6xl w-full max-h-60 overflow-auto">

@@ -16,99 +16,142 @@ export interface UserData {
   photoURL: string | null;
 }
 
-// Function to sign in with Google
+// Mock user data for development/testing
+const MOCK_USER: User = {
+  uid: 'mock-user-123',
+  email: 'player@example.com',
+  displayName: 'Test Player',
+  photoURL: 'https://ui-avatars.com/api/?name=Test+Player&background=random',
+  emailVerified: true,
+  isAnonymous: false,
+  metadata: {},
+  providerData: [],
+  refreshToken: '',
+  tenantId: null,
+  delete: async () => Promise.resolve(),
+  getIdToken: async () => Promise.resolve('mock-token'),
+  getIdTokenResult: async () => Promise.resolve({
+    token: 'mock-token',
+    signInProvider: 'google.com',
+    expirationTime: '',
+    issuedAtTime: '',
+    authTime: '',
+    claims: {}
+  }),
+  reload: async () => Promise.resolve(),
+  toJSON: () => ({ uid: 'mock-user-123' }),
+  providerId: 'google.com',
+  phoneNumber: null
+};
+
+// Mock authenticated state
+let mockAuthenticated = false;
+const authStateListeners: ((user: User | null) => void)[] = [];
+
+// Function to sign in with Google - MOCK VERSION
 export const signInWithGoogle = async (marketingOptIn: boolean = true): Promise<UserData | null> => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
+    // In real implementation, this would call Firebase
+    // For now, we're just returning mock data
+    console.log('MOCK: Signing in with Google (marketingOptIn:', marketingOptIn, ')');
     
-    // Save user profile to Firestore with marketing opt-in
-    await saveUserProfile(user, marketingOptIn);
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 800));
     
+    // Set mock auth state
+    mockAuthenticated = true;
+    
+    // Notify listeners
+    authStateListeners.forEach(listener => listener(MOCK_USER));
+    
+    // Return mock user data
     return {
-      userId: user.uid,
-      email: user.email,
+      userId: MOCK_USER.uid,
+      email: MOCK_USER.email,
       marketingOptIn,
-      displayName: user.displayName,
-      photoURL: user.photoURL
+      displayName: MOCK_USER.displayName,
+      photoURL: MOCK_USER.photoURL
     };
   } catch (error) {
-    console.error('Error signing in with Google:', error);
+    console.error('Error in mock sign in:', error);
     return null;
   }
 };
 
-// Function to sign out
+// Function to sign out - MOCK VERSION
 export const signOutUser = async (): Promise<boolean> => {
   try {
-    await signOut(auth);
+    // In real implementation, this would call Firebase
+    console.log('MOCK: Signing out');
+    
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Set mock auth state
+    mockAuthenticated = false;
+    
+    // Notify listeners
+    authStateListeners.forEach(listener => listener(null));
+    
     return true;
   } catch (error) {
-    console.error('Error signing out:', error);
+    console.error('Error in mock sign out:', error);
     return false;
   }
 };
 
-// Function to save user profile to Firestore
+// Function to save user profile to Firestore - MOCK VERSION
 export const saveUserProfile = async (user: User, marketingOptIn: boolean): Promise<void> => {
-  const userRef = doc(db, 'users', user.uid);
-  
-  // Check if user document already exists
-  const userDoc = await getDoc(userRef);
-  
-  if (!userDoc.exists()) {
-    // Create new user profile
-    await setDoc(userRef, {
-      userId: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      marketingOptIn: marketingOptIn,
-      createdAt: new Date()
-    });
-  } else {
-    // Update existing user profile
-    // Note: We don't override the marketing preference if it already exists
-    const userData = userDoc.data();
-    await setDoc(userRef, {
-      ...userData,
-      email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      lastSignIn: new Date()
-    }, { merge: true });
-  }
+  // In real implementation, this would save to Firestore
+  console.log('MOCK: Saving user profile', { 
+    userId: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+    photoURL: user.photoURL,
+    marketingOptIn
+  });
 };
 
-// Function to get current user from auth state
+// Function to get current user from auth state - MOCK VERSION
 export const getCurrentUser = (): User | null => {
-  return auth.currentUser;
+  return mockAuthenticated ? MOCK_USER : null;
 };
 
-// Function to get user data from Firestore
+// Function to get user data from Firestore - MOCK VERSION
 export const getUserData = async (userId: string): Promise<UserData | null> => {
   try {
-    const userRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userRef);
+    // In real implementation, this would fetch from Firestore
+    console.log('MOCK: Getting user data for', userId);
     
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
+    if (mockAuthenticated && userId === MOCK_USER.uid) {
       return {
-        userId: userData.userId,
-        email: userData.email,
-        marketingOptIn: userData.marketingOptIn || false,
-        displayName: userData.displayName,
-        photoURL: userData.photoURL
+        userId: MOCK_USER.uid,
+        email: MOCK_USER.email,
+        marketingOptIn: true,
+        displayName: MOCK_USER.displayName,
+        photoURL: MOCK_USER.photoURL
       };
     }
     return null;
   } catch (error) {
-    console.error('Error getting user data:', error);
+    console.error('Error getting mock user data:', error);
     return null;
   }
 };
 
-// Function to listen to auth state changes
+// Function to listen to auth state changes - MOCK VERSION
 export const onAuthChange = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, callback);
+  // Add the callback to our listeners
+  authStateListeners.push(callback);
+  
+  // Initial callback with current state
+  callback(mockAuthenticated ? MOCK_USER : null);
+  
+  // Return unsubscribe function
+  return () => {
+    const index = authStateListeners.indexOf(callback);
+    if (index > -1) {
+      authStateListeners.splice(index, 1);
+    }
+  };
 }; 

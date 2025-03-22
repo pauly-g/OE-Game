@@ -14,6 +14,9 @@
  * - Updated text styling to ensure it's readable against the background
  * - Added leaderboard integration with event dispatching
  * - Fixed linter error with null check on button
+ * - Enhanced leaderboard button visibility and removed sign-in button
+ * - Fixed linter error with preFX null check
+ * - Simplified auth flow with leaderboard as full screen
  */
 import Phaser from 'phaser';
 import { gameDebugger } from '../utils/debug';
@@ -22,8 +25,6 @@ export class GameOverScene extends Phaser.Scene {
   private score: number = 0;
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private leaderboardButton!: Phaser.GameObjects.Text;
-  private signInButton!: Phaser.GameObjects.Text;
-  private scoreSubmitStatus!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'GameOverScene' });
@@ -83,40 +84,41 @@ export class GameOverScene extends Phaser.Scene {
         shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 8 }
       }).setOrigin(0.5).setDepth(1);
 
-      // Add status text for score submission (initially hidden)
-      this.scoreSubmitStatus = this.add.text(width * 0.5, height * 0.48, '', {
-        fontSize: '24px',
-        color: '#4ade80', // Green color for success
-        stroke: '#000000',
-        strokeThickness: 3,
-        fontStyle: 'italic',
-        shadow: { color: '#000000', fill: true, offsetX: 1, offsetY: 1, blur: 4 }
-      }).setOrigin(0.5).setDepth(1).setVisible(false);
-
-      // Add leaderboard button
-      this.leaderboardButton = this.add.text(width * 0.5, height * 0.58, 'View Leaderboard', {
-        fontSize: '32px',
+      // Add enhanced leaderboard button with more prominence
+      this.leaderboardButton = this.add.text(width * 0.5, height * 0.6, '📊 VIEW LEADERBOARD 📊', {
+        fontSize: '38px',
         color: '#ffffff',
         stroke: '#000000',
-        strokeThickness: 4,
-        backgroundColor: '#3b82f680',
-        padding: { x: 20, y: 10 },
-        shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 6 }
+        strokeThickness: 5,
+        backgroundColor: '#4f46e7', // Brighter purple/blue
+        padding: { x: 24, y: 12 },
+        shadow: { color: '#000000', fill: true, offsetX: 3, offsetY: 3, blur: 8 }
       }).setOrigin(0.5).setDepth(1).setInteractive({ useHandCursor: true });
-
-      // Add sign in button if needed (we'll check auth state and show conditionally)
-      this.signInButton = this.add.text(width * 0.5, height * 0.7, 'Sign in with Google to submit score', {
-        fontSize: '28px',
-        color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 4,
-        backgroundColor: '#ea438580', // Google red
-        padding: { x: 20, y: 10 },
-        shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 6 }
-      }).setOrigin(0.5).setDepth(1).setInteractive({ useHandCursor: true });
-
-      // Check if user is authenticated and dispatch event to check
-      this.dispatchAuthCheckEvent();
+      
+      // Add a glow effect to the leaderboard button (with null check to fix linter error)
+      if (this.leaderboardButton.preFX) {
+        const glowFX = this.leaderboardButton.preFX!.addGlow(0x3355ff, 0, 0, false, 0.1, 16);
+        
+        // Animate the glow effect
+        this.tweens.add({
+          targets: glowFX,
+          outerStrength: { from: 1, to: 4 },
+          duration: 1500,
+          ease: 'Sine.InOut',
+          yoyo: true,
+          repeat: -1
+        });
+      }
+      
+      // Add continuous pulsing animation to leaderboard button to make it stand out
+      this.tweens.add({
+        targets: this.leaderboardButton,
+        scale: { from: 1.0, to: 1.1 },
+        duration: 1200,
+        ease: 'Sine.InOut',
+        yoyo: true,
+        repeat: -1
+      });
 
       // Add spacebar restart prompt with enhanced styling and visual cue
       const restartText = this.add.text(width * 0.5, height * 0.82, 'Press SPACE to Restart', {
@@ -150,50 +152,26 @@ export class GameOverScene extends Phaser.Scene {
     }
   }
 
-  private dispatchAuthCheckEvent() {
-    // Dispatch event to check if user is authenticated
-    const win = window as Window;
-    const checkAuthEvent = new CustomEvent('checkGameAuth', { 
-      detail: { 
-        score: this.score,
-        sceneInstance: this 
-      } 
-    });
-    
-    gameDebugger.info('Dispatching checkGameAuth event');
-    win.dispatchEvent(checkAuthEvent);
-    
-    // Listen for auth response events
-    win.addEventListener('gameAuthResponse', this.handleAuthResponse);
-  }
-
-  private handleAuthResponse = (event: Event) => {
-    const customEvent = event as CustomEvent;
-    const { isAuthenticated, scoreSubmitted } = customEvent.detail;
-    
-    gameDebugger.info('Received gameAuthResponse:', customEvent.detail);
-    
-    // Hide sign in button if user is authenticated
-    this.signInButton.setVisible(!isAuthenticated);
-    
-    // Show score submitted confirmation if applicable
-    if (scoreSubmitted) {
-      this.scoreSubmitStatus.setText('Score submitted to leaderboard!');
-      this.scoreSubmitStatus.setVisible(true);
-    }
-  }
-
   private setupButtonHandlers() {
     // Leaderboard button handler
     this.leaderboardButton.on('pointerdown', () => {
       gameDebugger.info('Leaderboard button clicked');
       
-      // Make the button pulse on click
+      // Make the button pulse on click with a faster, more dramatic effect
       this.tweens.add({
         targets: this.leaderboardButton,
-        scale: { from: 1, to: 1.1 },
+        scale: { from: 1.1, to: 0.9 },
         duration: 100,
-        yoyo: true
+        yoyo: true,
+        onComplete: () => {
+          // Return to original animation state after click
+          this.tweens.add({
+            targets: this.leaderboardButton,
+            scale: 1.1,
+            duration: 300,
+            ease: 'Back.Out'
+          });
+        }
       });
       
       // Dispatch event to show leaderboard
@@ -209,44 +187,23 @@ export class GameOverScene extends Phaser.Scene {
     
     // Hover effects
     this.leaderboardButton.on('pointerover', () => {
-      this.leaderboardButton.setStyle({ backgroundColor: '#4f46e580' }); // Lighter blue
+      this.leaderboardButton.setStyle({ backgroundColor: '#635bf7' }); // Lighter purple
+      this.tweens.add({
+        targets: this.leaderboardButton,
+        scale: 1.2,
+        duration: 200,
+        ease: 'Back.Out'
+      });
     });
     
     this.leaderboardButton.on('pointerout', () => {
-      this.leaderboardButton.setStyle({ backgroundColor: '#3b82f680' }); // Back to normal
-    });
-    
-    // Sign in button handler
-    this.signInButton.on('pointerdown', () => {
-      gameDebugger.info('Sign in button clicked');
-      
-      // Make the button pulse on click
+      this.leaderboardButton.setStyle({ backgroundColor: '#4f46e7' }); // Back to normal
       this.tweens.add({
-        targets: this.signInButton,
-        scale: { from: 1, to: 1.1 },
-        duration: 100,
-        yoyo: true
+        targets: this.leaderboardButton,
+        scale: 1.1,
+        duration: 200,
+        ease: 'Back.In'
       });
-      
-      // Dispatch event to trigger sign in
-      const win = window as Window;
-      const signInEvent = new CustomEvent('gameSignInRequest', { 
-        detail: { 
-          score: this.score,
-          sceneInstance: this 
-        } 
-      });
-      
-      win.dispatchEvent(signInEvent);
-    });
-    
-    // Hover effects
-    this.signInButton.on('pointerover', () => {
-      this.signInButton.setStyle({ backgroundColor: '#f0584580' }); // Lighter red
-    });
-    
-    this.signInButton.on('pointerout', () => {
-      this.signInButton.setStyle({ backgroundColor: '#ea438580' }); // Back to normal
     });
   }
 
@@ -294,9 +251,6 @@ export class GameOverScene extends Phaser.Scene {
       } catch (err) {
         gameDebugger.error('Error dispatching gameRestartWithStations event:', err);
       }
-      
-      // Remove auth response event listener
-      win.removeEventListener('gameAuthResponse', this.handleAuthResponse);
       
       // Add a short delay to ensure events are processed before starting the scene
       setTimeout(() => {
