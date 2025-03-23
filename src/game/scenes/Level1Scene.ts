@@ -230,7 +230,7 @@ export class Level1Scene extends Phaser.Scene {
       });
 
       // Load background
-      this.load.image('background', 'game/Background/Background.png')
+      this.load.image('background', 'game/Background/Background2.jpg')
         .on('filecomplete', () => {
           gameDebugger.info('Background loaded');
         })
