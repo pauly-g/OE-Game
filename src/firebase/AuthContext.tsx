@@ -5,7 +5,8 @@ import {
   signInWithGoogle, 
   signOutUser, 
   getUserData, 
-  UserData 
+  UserData,
+  mockSignInWithNameCompany
 } from './auth';
 import { submitScore } from './leaderboard';
 
@@ -17,6 +18,8 @@ interface AuthContextType {
   signIn: (marketingOptIn: boolean) => Promise<UserData | null>;
   signOut: () => Promise<boolean>;
   submitUserScore: (score: number) => Promise<string | null>;
+  mockSignIn: (name: string, company: string) => Promise<UserData | null>;
+  lastSubmittedScore: number | null;
 }
 
 // Create the context
@@ -36,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [lastSubmittedScore, setLastSubmittedScore] = useState<number | null>(null);
 
   // Listen to auth state changes
   useEffect(() => {
@@ -66,6 +70,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     }
   };
+  
+  // Mock sign in with custom name and company
+  const mockSignIn = async (name: string, company: string) => {
+    try {
+      const userData = await mockSignInWithNameCompany(name, company);
+      return userData;
+    } catch (error) {
+      console.error('Error in mock sign in:', error);
+      return null;
+    }
+  };
 
   // Sign out
   const signOut = async () => {
@@ -82,11 +97,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const submitUserScore = async (score: number) => {
     if (!currentUser) return null;
     
+    // Store the score in state for potential later use
+    setLastSubmittedScore(score);
+    
     return await submitScore(
       currentUser.uid, 
       score, 
       currentUser.displayName, 
-      currentUser.photoURL
+      currentUser.photoURL,
+      userData?.company || null
     );
   };
 
@@ -96,8 +115,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userData,
     isLoading,
     signIn,
+    mockSignIn,
     signOut,
-    submitUserScore
+    submitUserScore,
+    lastSubmittedScore
   };
 
   return (

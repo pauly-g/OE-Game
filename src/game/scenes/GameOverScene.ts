@@ -23,12 +23,17 @@ import { gameDebugger } from '../utils/debug';
 
 export class GameOverScene extends Phaser.Scene {
   private score: number = 0;
-  private spaceKey!: Phaser.Input.Keyboard.Key;
-  private leaderboardButton!: Phaser.GameObjects.Text;
+  private spaceKey: Phaser.Input.Keyboard.Key;
+  private leaderboardButton: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'GameOverScene' });
     gameDebugger.info('GameOverScene constructor called');
+    
+    // Initialize with dummy values that will be properly set in create()
+    // This fixes the "Property has no initializer and is not definitely assigned" error
+    this.spaceKey = {} as Phaser.Input.Keyboard.Key;
+    this.leaderboardButton = {} as Phaser.GameObjects.Text;
   }
 
   preload() {
@@ -48,12 +53,17 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create() {
-    gameDebugger.info('GameOverScene create started');
     try {
+      gameDebugger.info('GameOverScene create started');
+      
+      // Define width and height for convenience
       const width = this.cameras.main.width;
       const height = this.cameras.main.height;
-
-      // Add the game over background
+      
+      // Set up key bindings
+      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      
+      // Add the game over background image back
       const background = this.add.image(width / 2, height / 2, 'gameOverBG');
       
       // Scale the background to cover the screen while maintaining aspect ratio
@@ -61,22 +71,22 @@ export class GameOverScene extends Phaser.Scene {
       const scaleY = height / background.height;
       const scale = Math.max(scaleX, scaleY);
       background.setScale(scale).setDepth(0);
-
-      // Setup spacebar to restart game
-      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-      // Create game over text
-      this.add.text(width * 0.5, height * 0.25, 'Game Over', {
-        fontSize: '72px',
+      
+      // Add semi-transparent overlay to ensure text is readable
+      this.add.rectangle(0, 0, width, height, 0x000000, 0.4).setOrigin(0, 0).setDepth(0.5);
+      
+      // Game Over title
+      this.add.text(width * 0.5, height * 0.3, 'GAME OVER', {
+        fontSize: '64px',
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 6,
         fontStyle: 'bold',
         shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 8 }
       }).setOrigin(0.5).setDepth(1);
-
-      // Display score with enhanced styling
-      this.add.text(width * 0.5, height * 0.4, `Score: ${this.score}`, {
+      
+      // Final score text
+      this.add.text(width * 0.5, height * 0.4, `Final Score: ${this.score}`, {
         fontSize: '48px',
         color: '#ffffff',
         stroke: '#000000',
@@ -84,40 +94,97 @@ export class GameOverScene extends Phaser.Scene {
         shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 8 }
       }).setOrigin(0.5).setDepth(1);
 
-      // Add enhanced leaderboard button with more prominence
-      this.leaderboardButton = this.add.text(width * 0.5, height * 0.6, '📊 VIEW LEADERBOARD 📊', {
-        fontSize: '38px',
-        color: '#ffffff',
+      // Create a wooden sign container for the leaderboard button
+      const leaderboardContainer = this.add.container(width * 0.5, height * 0.6);
+      
+      // Create shadow for depth
+      const signShadow = this.add.rectangle(4, 4, 400, 60, 0x000000, 0.4).setOrigin(0.5);
+      
+      // Create wood background with darker color (darker than previous but still visible)
+      const signBackground = this.add.rectangle(0, 0, 400, 60, 0x4A3629).setOrigin(0.5);
+      
+      // Create wood border with adjusted color 
+      const borderTop = this.add.rectangle(0, -30, 400, 4, 0x755C49).setOrigin(0.5, 0.5);
+      const borderBottom = this.add.rectangle(0, 30, 400, 4, 0x755C49).setOrigin(0.5, 0.5);
+      const borderLeft = this.add.rectangle(-200, 0, 4, 60, 0x755C49).setOrigin(0.5, 0.5);
+      const borderRight = this.add.rectangle(200, 0, 4, 60, 0x755C49).setOrigin(0.5, 0.5);
+      
+      // Create simple end caps for the wooden sign with adjusted color
+      const leftCap = this.add.rectangle(-200, 0, 12, 40, 0x614A3C).setOrigin(0.5, 0.5);
+      const rightCap = this.add.rectangle(200, 0, 12, 40, 0x614A3C).setOrigin(0.5, 0.5);
+      
+      // Create the leaderboard button text with bright appearance
+      this.leaderboardButton = this.add.text(0, 0, 'VIEW LEADERBOARD', {
+        fontSize: '30px',
+        color: '#FFFFFF', 
         stroke: '#000000',
-        strokeThickness: 5,
-        backgroundColor: '#4f46e7', // Brighter purple/blue
-        padding: { x: 24, y: 12 },
-        shadow: { color: '#000000', fill: true, offsetX: 3, offsetY: 3, blur: 8 }
-      }).setOrigin(0.5).setDepth(1).setInteractive({ useHandCursor: true });
+        strokeThickness: 3,
+        fontStyle: 'bold',
+        align: 'center'
+      }).setOrigin(0.5).setDepth(1);
       
-      // Add a glow effect to the leaderboard button (with null check to fix linter error)
-      if (this.leaderboardButton.preFX) {
-        const glowFX = this.leaderboardButton.preFX!.addGlow(0x3355ff, 0, 0, false, 0.1, 16);
+      // Add all elements to container in correct layering order
+      leaderboardContainer.add([
+        signShadow,
+        signBackground,
+        borderTop,
+        borderBottom,
+        borderLeft,
+        borderRight,
+        leftCap,
+        rightCap,
+        this.leaderboardButton
+      ]);
+      
+      // Give the container a slight glow to make it stand out
+      leaderboardContainer.setDepth(1);
+      
+      // Make the container interactive
+      leaderboardContainer.setInteractive(new Phaser.Geom.Rectangle(-200, -30, 400, 60), Phaser.Geom.Rectangle.Contains);
+      
+      // Set up click handler for the container
+      leaderboardContainer.on('pointerdown', () => {
+        gameDebugger.info('Leaderboard button clicked');
         
-        // Animate the glow effect
+        // Simple click feedback (slight scale down and up, no continuous animation)
         this.tweens.add({
-          targets: glowFX,
-          outerStrength: { from: 1, to: 4 },
-          duration: 1500,
-          ease: 'Sine.InOut',
+          targets: leaderboardContainer,
+          scale: { from: 1.0, to: 0.95 },
+          duration: 100,
           yoyo: true,
-          repeat: -1
+          onComplete: () => {
+            // Return to original scale
+            this.tweens.add({
+              targets: leaderboardContainer,
+              scale: 1.0,
+              duration: 100
+            });
+          }
         });
-      }
+        
+        // Dispatch event to show leaderboard WITHIN the game frame, not as a fullscreen page
+        const win = window as Window;
+        const showLeaderboardEvent = new CustomEvent('showGameLeaderboard', { 
+          detail: { 
+            score: this.score,
+            inGameFrame: true // Flag to indicate leaderboard should stay within game frame
+          } 
+        });
+        
+        win.dispatchEvent(showLeaderboardEvent);
+      });
       
-      // Add continuous pulsing animation to leaderboard button to make it stand out
-      this.tweens.add({
-        targets: this.leaderboardButton,
-        scale: { from: 1.0, to: 1.1 },
-        duration: 1200,
-        ease: 'Sine.InOut',
-        yoyo: true,
-        repeat: -1
+      // Simple hover effects - brighter feedback
+      leaderboardContainer.on('pointerover', () => {
+        // Lighten the wood color more significantly on hover
+        signBackground.setFillStyle(0x5A4639);
+        this.leaderboardButton.setStyle({ fontSize: '31px' }); // Slightly grow text
+      });
+      
+      leaderboardContainer.on('pointerout', () => {
+        // Return to normal wood color
+        signBackground.setFillStyle(0x4A3629);
+        this.leaderboardButton.setStyle({ fontSize: '30px' }); // Return to normal size
       });
 
       // Add spacebar restart prompt with enhanced styling and visual cue
@@ -143,120 +210,40 @@ export class GameOverScene extends Phaser.Scene {
         repeat: -1
       });
 
-      // Set up button click handlers
-      this.setupButtonHandlers();
-
       gameDebugger.info('GameOverScene create completed');
     } catch (error) {
       gameDebugger.error('Error in GameOverScene create:', error);
     }
   }
 
-  private setupButtonHandlers() {
-    // Leaderboard button handler
-    this.leaderboardButton.on('pointerdown', () => {
-      gameDebugger.info('Leaderboard button clicked');
-      
-      // Make the button pulse on click with a faster, more dramatic effect
-      this.tweens.add({
-        targets: this.leaderboardButton,
-        scale: { from: 1.1, to: 0.9 },
-        duration: 100,
-        yoyo: true,
-        onComplete: () => {
-          // Return to original animation state after click
-          this.tweens.add({
-            targets: this.leaderboardButton,
-            scale: 1.1,
-            duration: 300,
-            ease: 'Back.Out'
-          });
-        }
-      });
-      
-      // Dispatch event to show leaderboard
-      const win = window as Window;
-      const showLeaderboardEvent = new CustomEvent('showGameLeaderboard', { 
-        detail: { 
-          score: this.score
-        } 
-      });
-      
-      win.dispatchEvent(showLeaderboardEvent);
-    });
-    
-    // Hover effects
-    this.leaderboardButton.on('pointerover', () => {
-      this.leaderboardButton.setStyle({ backgroundColor: '#635bf7' }); // Lighter purple
-      this.tweens.add({
-        targets: this.leaderboardButton,
-        scale: 1.2,
-        duration: 200,
-        ease: 'Back.Out'
-      });
-    });
-    
-    this.leaderboardButton.on('pointerout', () => {
-      this.leaderboardButton.setStyle({ backgroundColor: '#4f46e7' }); // Back to normal
-      this.tweens.add({
-        targets: this.leaderboardButton,
-        scale: 1.1,
-        duration: 200,
-        ease: 'Back.In'
-      });
-    });
-  }
-
   update() {
-    // Check for spacebar press to restart
-    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      gameDebugger.info('Spacebar pressed to restart game');
+    // Check for spacebar press to restart game with null check to fix linter error
+    if (this.spaceKey && this.spaceKey.isDown !== undefined && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+      // Check if leaderboard is open
+      const isLeaderboardOpen = (window as any).isLeaderboardOpen === true;
       
-      // In a browser environment, dispatch custom events for music and stations
-      // The non-null assertion is safe here as Phaser only runs in browser contexts
-      const win = window as Window;
-      
-      // Force an explicit reset of all stations in localStorage before starting the scene
-      try {
-        gameDebugger.info('Forcibly resetting station tracker');
-        // Access station tracker directly to reset stations
-        const resetEvent = new CustomEvent('resetStations', { 
-          detail: { source: 'gameOverRestart' } 
-        });
-        win.dispatchEvent(resetEvent);
-      } catch (err) {
-        gameDebugger.error('Error resetting stations:', err);
-      }
-      
-      // Dispatch custom events to ensure stations and music are properly handled
-      try {
-        gameDebugger.info('Dispatching gameRestartWithStations event');
-        const stationsEvent = new CustomEvent('gameRestartWithStations', { 
-          detail: { requireStationReset: true, forceRecreate: true } 
-        });
-        win.dispatchEvent(stationsEvent);
+      // Only proceed if leaderboard is not open
+      if (!isLeaderboardOpen) {
+        gameDebugger.info('Space key pressed in GameOverScene - restarting game');
+        this.scene.start('Level1Scene');
         
-        // Also dispatch event to force music playback after a short delay
-        setTimeout(() => {
-          try {
-            gameDebugger.info('Dispatching forcePlayMusic event');
-            const musicEvent = new CustomEvent('forcePlayMusic', { 
-              detail: { source: 'gameOverSceneRestart' } 
-            });
-            win.dispatchEvent(musicEvent);
-          } catch (err) {
-            gameDebugger.error('Error dispatching forcePlayMusic event:', err);
-          }
-        }, 300);
-      } catch (err) {
-        gameDebugger.error('Error dispatching gameRestartWithStations event:', err);
+        // Dispatch restart event
+        const restartEvent = new CustomEvent('gameRestart', {
+          detail: { source: 'gameOver' }
+        });
+        window.dispatchEvent(restartEvent);
+        
+        // Create and dispatch a custom event to reset stations
+        try {
+          const resetStationsEvent = new CustomEvent('resetStations');
+          window.dispatchEvent(resetStationsEvent);
+          gameDebugger.info('Reset stations event dispatched');
+        } catch (error) {
+          gameDebugger.error('Error dispatching station reset event:', error);
+        }
+      } else {
+        gameDebugger.info('Space key pressed but ignored - leaderboard is open');
       }
-      
-      // Add a short delay to ensure events are processed before starting the scene
-      setTimeout(() => {
-        gameDebugger.info('Starting Level1Scene with reset=true from GameOverScene');
-        this.scene.start('Level1Scene', { reset: true, forceRecreate: true });
-      }, 50);
     }
   }
 }

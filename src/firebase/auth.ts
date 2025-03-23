@@ -14,10 +14,11 @@ export interface UserData {
   marketingOptIn: boolean;
   displayName: string | null;
   photoURL: string | null;
+  company?: string | null;
 }
 
 // Mock user data for development/testing
-const MOCK_USER: User = {
+export const MOCK_USER: User = {
   uid: 'mock-user-123',
   email: 'player@example.com',
   displayName: 'Test Player',
@@ -33,6 +34,7 @@ const MOCK_USER: User = {
   getIdTokenResult: async () => Promise.resolve({
     token: 'mock-token',
     signInProvider: 'google.com',
+    signInSecondFactor: null,
     expirationTime: '',
     issuedAtTime: '',
     authTime: '',
@@ -44,9 +46,56 @@ const MOCK_USER: User = {
   phoneNumber: null
 };
 
-// Mock authenticated state
+// Mock authenticated state and user profile information
 let mockAuthenticated = false;
+let mockUserName = 'Test Player';
+let mockUserCompany = 'Cursor Inc';
 const authStateListeners: ((user: User | null) => void)[] = [];
+
+// Mock sign in with custom details
+export const mockSignInWithNameCompany = async (name: string, company: string): Promise<UserData | null> => {
+  try {
+    console.log('MOCK: Signing in with name:', name, 'company:', company);
+    
+    // Store the provided values
+    mockUserName = name;
+    mockUserCompany = company;
+    
+    // Update the mock user
+    const updatedUser = {
+      ...MOCK_USER,
+      displayName: name,
+      photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+    };
+    
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // Set mock auth state
+    mockAuthenticated = true;
+    
+    // Notify listeners
+    console.log('MOCK: Notifying auth state listeners with updated user');
+    authStateListeners.forEach(listener => listener(updatedUser));
+    
+    const userData = {
+      userId: updatedUser.uid,
+      email: updatedUser.email,
+      displayName: updatedUser.displayName,
+      photoURL: updatedUser.photoURL,
+      company: company,
+      marketingOptIn: true
+    };
+    
+    console.log('MOCK: Returning user data:', userData);
+    
+    // Return mock user data
+    return userData;
+  } catch (error) {
+    console.error('Error in mock sign in with name/company:', error);
+    return null;
+  }
+};
 
 // Function to sign in with Google - MOCK VERSION
 export const signInWithGoogle = async (marketingOptIn: boolean = true): Promise<UserData | null> => {
@@ -62,15 +111,22 @@ export const signInWithGoogle = async (marketingOptIn: boolean = true): Promise<
     mockAuthenticated = true;
     
     // Notify listeners
-    authStateListeners.forEach(listener => listener(MOCK_USER));
+    const mockUserToUse = {
+      ...MOCK_USER,
+      displayName: mockUserName, // Use stored name
+      photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(mockUserName)}&background=random`
+    };
+    
+    authStateListeners.forEach(listener => listener(mockUserToUse));
     
     // Return mock user data
     return {
-      userId: MOCK_USER.uid,
-      email: MOCK_USER.email,
+      userId: mockUserToUse.uid,
+      email: mockUserToUse.email,
       marketingOptIn,
-      displayName: MOCK_USER.displayName,
-      photoURL: MOCK_USER.photoURL
+      displayName: mockUserToUse.displayName,
+      photoURL: mockUserToUse.photoURL,
+      company: mockUserCompany // Use stored company
     };
   } catch (error) {
     console.error('Error in mock sign in:', error);

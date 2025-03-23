@@ -21,17 +21,25 @@ export interface LeaderboardEntry {
   score: number;
   timestamp: Date;
   displayName?: string | null;
+  company?: string | null;
   photoURL?: string | null;
 }
 
 // Function to submit score to leaderboard
-export const submitScore = async (userId: string, score: number, displayName?: string | null, photoURL?: string | null): Promise<string | null> => {
+export const submitScore = async (
+  userId: string, 
+  score: number, 
+  displayName?: string | null, 
+  photoURL?: string | null,
+  company?: string | null
+): Promise<string | null> => {
   try {
     const entry: LeaderboardEntry = {
       userId,
       score,
       timestamp: new Date(),
       displayName: displayName || null,
+      company: company || null,
       photoURL: photoURL || null
     };
     
@@ -43,9 +51,97 @@ export const submitScore = async (userId: string, score: number, displayName?: s
   }
 };
 
+// Mock leaderboard data for offline/development use
+export const generateMockLeaderboardData = (userScore?: number): LeaderboardEntry[] => {
+  // Company names for random assignment
+  const companies = [
+    'Cursor Inc',
+    'Google',
+    'Microsoft',
+    'Apple',
+    'Amazon',
+    'Meta',
+    'Netflix',
+    'Tesla',
+    'IBM',
+    'Intel',
+    'Oracle',
+    'Salesforce',
+    'Adobe',
+    'Cisco',
+    'Dell',
+    'HP',
+    'Shopify',
+    'Twitter',
+    'Spotify',
+    'Slack'
+  ];
+  
+  // Player names for random assignment
+  const playerNames = [
+    'Alex Johnson',
+    'Taylor Smith',
+    'Jordan Lee',
+    'Casey Brown',
+    'Morgan Davis',
+    'Riley Wilson',
+    'Quinn Miller',
+    'Cameron Moore',
+    'Avery Williams',
+    'Sam Thompson',
+    'Jordan Clark',
+    'Jamie Rodriguez',
+    'Drew Martinez',
+    'Pat Garcia',
+    'Chris Harris',
+    'Kyle Lewis',
+    'Terry Walker',
+    'Robin Hall',
+    'Blake Young',
+    'Dylan King'
+  ];
+  
+  // Generate high scores that are better than the user's score
+  const mockScores: LeaderboardEntry[] = [];
+  
+  // Default starting score if userScore not provided
+  const startingScore = userScore ? userScore + Math.floor(Math.random() * 100) + 50 : 1000;
+  
+  // Generate 20 random entries
+  for (let i = 0; i < 20; i++) {
+    // Calculate a score that decreases as we go
+    // The first few entries will have higher scores
+    const scoreAdjustment = Math.floor(Math.random() * 30) - 5; // Random variation
+    const score = startingScore - (i * 40) + scoreAdjustment;
+    
+    // Randomize the player name and company
+    const nameIndex = Math.floor(Math.random() * playerNames.length);
+    const companyIndex = Math.floor(Math.random() * companies.length);
+    
+    mockScores.push({
+      id: `mock-entry-${i}`,
+      userId: `mock-user-${i}`,
+      score,
+      timestamp: new Date(Date.now() - i * 3600000), // Spread out over the last few hours
+      displayName: playerNames[nameIndex],
+      company: companies[companyIndex],
+      photoURL: null
+    });
+  }
+  
+  // Sort by score, highest first
+  return mockScores.sort((a, b) => b.score - a.score);
+};
+
 // Function to get top scores
 export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEntry[]> => {
   try {
+    // For development/testing purposes, return mock data
+    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+      console.log('[Leaderboard] Using mock leaderboard data');
+      return generateMockLeaderboardData().slice(0, topCount);
+    }
+    
     const q = query(
       collection(db, 'leaderboard'),
       orderBy('score', 'desc'),
@@ -95,6 +191,14 @@ export const getUserBestScore = async (userId: string): Promise<LeaderboardEntry
 // Function to get user's score rank
 export const getUserScoreRank = async (score: number): Promise<number> => {
   try {
+    // For development/testing purposes, return mock rank
+    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+      console.log('[Leaderboard] Using mock rank calculation');
+      const mockScores = generateMockLeaderboardData(score);
+      const higherScores = mockScores.filter(entry => entry.score > score);
+      return higherScores.length + 1;
+    }
+    
     // Query to count how many scores are higher than the user's score
     const q = query(
       collection(db, 'leaderboard'),
@@ -116,6 +220,26 @@ export const getScoresAroundUser = async (score: number, count: number = 3): Pro
   below: LeaderboardEntry[]
 }> => {
   try {
+    // For development/testing purposes, return mock data
+    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+      console.log('[Leaderboard] Using mock nearby scores');
+      const mockScores = generateMockLeaderboardData(score);
+      
+      // Find the position where the user's score would be
+      const userScoreIndex = mockScores.findIndex(entry => entry.score <= score);
+      
+      // Get scores above the user's score
+      const above = mockScores
+        .slice(Math.max(0, userScoreIndex - count), userScoreIndex)
+        .reverse();
+      
+      // Get scores below the user's score
+      const below = mockScores
+        .slice(userScoreIndex, userScoreIndex + count);
+      
+      return { above, below };
+    }
+    
     // Get scores above user's score
     const aboveQuery = query(
       collection(db, 'leaderboard'),

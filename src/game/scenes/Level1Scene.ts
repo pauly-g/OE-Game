@@ -75,7 +75,7 @@ export class Level1Scene extends Phaser.Scene {
   private cKey!: Phaser.Input.Keyboard.Key;
   private fKey!: Phaser.Input.Keyboard.Key; // New f key for cheat code
   private lKey!: Phaser.Input.Keyboard.Key; // New l key for reducing lives cheat
-  private playerSpeed: number = 4; // Reduce from 8 to 4 for slower movement
+  private playerSpeed: number = 8; // Changed from 4 to 8 for faster movement
   private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
   private ordersCompleted: number = 0;
@@ -136,6 +136,7 @@ export class Level1Scene extends Phaser.Scene {
 
   private totalEditsCompleted: number = 0;
   private firstSongUnlocked: boolean = false;
+  private inputsDisabled: boolean = false; // Track if keyboard inputs should be ignored
   
   // Add a function to create confetti particle effect
   private createConfettiEffect(x: number, y: number) {
@@ -316,8 +317,40 @@ export class Level1Scene extends Phaser.Scene {
 
   create() {
     console.log('Level1Scene create called');
-    
     try {
+      // Listen for input disabling events from outside the game (leaderboard, etc)
+      const handleInputDisabling = (event: Event) => {
+        const customEvent = event as CustomEvent;
+        if (customEvent && customEvent.detail) {
+          this.inputsDisabled = customEvent.detail.inputsDisabled;
+          console.log(`[Level1Scene] Game inputs ${this.inputsDisabled ? 'disabled' : 'enabled'}`);
+          
+          // If forceReset flag is set, make sure player movement is restored
+          if (customEvent.detail.forceReset && !this.inputsDisabled) {
+            console.log('[Level1Scene] Force resetting player controls');
+            // Ensure the player speed is properly set
+            this.playerSpeed = 8;
+            
+            // Ensure cursor keys will work
+            if (this.input && this.input.keyboard) {
+              this.cursors = this.input.keyboard.createCursorKeys();
+            }
+          }
+        }
+      };
+      
+      // Add the event listener
+      window.addEventListener('gameInputState', handleInputDisabling);
+      
+      // Store the listener so we can remove it in scene shutdown
+      this.events.on('shutdown', () => {
+        window.removeEventListener('gameInputState', handleInputDisabling);
+      });
+      
+      // Define width and height for convenience
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      
       gameDebugger.info('Level1Scene create method started');
       
       // Reset the state when starting a new game
@@ -342,10 +375,6 @@ export class Level1Scene extends Phaser.Scene {
         gameDebugger.error('Error dispatching forcePlayMusic event:', err);
       }
     
-      // Get screen dimensions
-      const width = this.cameras.main.width;
-      const height = this.cameras.main.height;
-      
       // Calculate screen width threshold for comments (1/3 of the screen width)
       this.screenWidthThreshold = width / 3;
       
@@ -794,6 +823,30 @@ export class Level1Scene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     try {
+      
+      // Skip input handling if inputs are disabled by leaderboard or other UI elements
+      if (this.inputsDisabled) {
+        // Still update non-input related things like order positions, etc.
+        this.updateOrderPositions(delta);
+        this.updateButtonFlashing(delta);
+        this.updateCircularText(delta);
+        if (this.powerUpActive) {
+          this.updatePowerUp(delta);
+        }
+        return;
+      }
+      
+      // Input handling only happens when inputs are not disabled
+      
+      // Ensure player speed is always correct
+      if (this.playerSpeed !== 8) {
+        console.log('[Level1Scene] Correcting player speed from', this.playerSpeed, 'to 8');
+        this.playerSpeed = 8;
+      }
+      
+      // First find out if we're near a station for interaction
+      let nearStation = this.isNearStation();
+      
       if (!this.player) return;
 
       // Add check for cursors
@@ -812,20 +865,17 @@ export class Level1Scene extends Phaser.Scene {
         // Scroll the texture horizontally to create a movement effect
         this.conveyorBelt.tilePositionX -= this.conveyorSpeed; // Adjust speed as needed
       }
-
+      
       // Activate power-up after 10 edits
       if (!this.powerUpAvailable && !this.powerUpActive && this.manualOrdersCompleted >= 10) {
         console.log(`Power-up now available after ${this.manualOrdersCompleted} manual orders completed`);
         this.powerUpAvailable = true;
         this.setButtonColor(0x00ff00);
       }
-
+      
       // Process player movement
       let isMoving = false;
       let direction = this.lastDirection;
-
-      // Only check if near station for spacebar interactions, not to restrict movement
-      let nearStation = this.isNearStation();
       
       // Save the previous player position before any movement
       const prevX = this.player.x;
@@ -896,6 +946,14 @@ export class Level1Scene extends Phaser.Scene {
       if (this.player.y < 30) this.player.y = 30;
       if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
 
+      // Create precise player bounds for collision detection
+      const playerBounds = new Phaser.Geom.Rectangle(
+        this.player.x - 14,
+        this.player.y - 14,
+        28,
+        28
+      );
+
       // Check collisions with stations
       this.stations.forEach(station => {
         if (station.isUnlocked) {
@@ -906,17 +964,10 @@ export class Level1Scene extends Phaser.Scene {
             100
           );
           
-          const playerBounds = new Phaser.Geom.Rectangle(
-            this.player!.x - 20,
-            this.player!.y - 30,
-            40, 
-            60
-          );
-          
           if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
             // Determine which side of the station the player is coming from
-            const dx = this.player!.x - station.container.x;
-            const dy = this.player!.y - station.container.y;
+            const dx = this.player.x - station.container.x;
+            const dy = this.player.y - station.container.y;
             
             // Calculate distances to each edge of the station
             const distToLeft = Math.abs(dx + 50);
@@ -932,31 +983,31 @@ export class Level1Scene extends Phaser.Scene {
             
             // Apply appropriate displacement with increased push distance
             if (minDist === distToLeft) {
-              this.player!.x = station.container.x - 80; // Increased push distance to 80
+              this.player.x = station.container.x - 80; // Increased push distance to 80
             } else if (minDist === distToRight) {
-              this.player!.x = station.container.x + 80; // Increased push distance to 80
+              this.player.x = station.container.x + 80; // Increased push distance to 80
             } else if (minDist === distToTop) {
-              this.player!.y = station.container.y - 80; // Increased push distance to 80
+              this.player.y = station.container.y - 80; // Increased push distance to 80
             } else if (minDist === distToBottom) {
-              this.player!.y = station.container.y + 80; // Increased push distance to 80
+              this.player.y = station.container.y + 80; // Increased push distance to 80
               
               // Add additional check for bottom collision to prevent sliding
               if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
                 // If player is trying to move horizontally while colliding with bottom,
                 // push them slightly further down to avoid the collision zone
-                this.player!.y += buffer;
+                this.player.y += buffer;
               }
             }
             
             // Add extra push when trying to move directly into a station
             if (minDist === distToLeft && this.cursors.right.isDown) {
-              this.player!.x -= buffer; // Push little extra left when trying to move right
+              this.player.x -= buffer; // Push little extra left when trying to move right
             } else if (minDist === distToRight && this.cursors.left.isDown) {
-              this.player!.x += buffer; // Push little extra right when trying to move left
+              this.player.x += buffer; // Push little extra right when trying to move left
             } else if (minDist === distToTop && this.cursors.down.isDown) {
-              this.player!.y -= buffer; // Push little extra up when trying to move down
+              this.player.y -= buffer; // Push little extra up when trying to move down
             } else if (minDist === distToBottom && this.cursors.up.isDown) {
-              this.player!.y += buffer; // Push little extra down when trying to move up
+              this.player.y += buffer; // Push little extra down when trying to move up
             }
           }
         }
@@ -1008,9 +1059,6 @@ export class Level1Scene extends Phaser.Scene {
           this.removeFirstEdit();
         }
       }
-      
-      // Handle player movement and animation
-      this.handlePlayerMovement(delta);
       
       // Check if player is stepping on the button
       this.checkPlayerOnButton();
@@ -2907,7 +2955,7 @@ export class Level1Scene extends Phaser.Scene {
     let direction = this.lastDirection;
 
     // Only check if near station for spacebar interactions, not to restrict movement
-    let nearStation = this.isNearStation();
+    const nearStation = this.isNearStation();
     
     // Save the previous player position before any movement
     const prevX = this.player.x;
@@ -3566,8 +3614,35 @@ export class Level1Scene extends Phaser.Scene {
           notificationText.destroy();
         }
       });
+    } else if (this.lives === 1) {
+      // If already at one life, pressing L again will trigger an immediate game over
+      console.log('Debug: Triggering immediate game over');
+      
+      // Display brief notification
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      const notificationText = this.add.text(
+        width / 2,
+        height / 2 - 50,
+        '⚠️ Game Over! ⚠️',
+        {
+          fontSize: '32px',
+          color: '#FF0000',
+          stroke: '#000000',
+          strokeThickness: 4,
+          fontStyle: 'bold'
+        }
+      ).setOrigin(0.5).setDepth(100);
+      
+      // Reduce lives to zero and trigger game over after brief delay for notification
+      this.time.delayedCall(800, () => {
+        this.lives = 0;
+        this.updateLivesDisplay();
+        this.gameOver();
+        notificationText.destroy();
+      });
     } else {
-      console.log('Already at one life or fewer');
+      console.log('Already at zero lives');
     }
   }
 }

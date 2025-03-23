@@ -66,6 +66,7 @@ function AppContent() {
   });
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [currentScore, setCurrentScore] = useState<number | undefined>(undefined);
+  const [leaderboardInGameFrame, setLeaderboardInGameFrame] = useState(true);
   
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
   const { currentUser, submitUserScore, isLoading } = useAuth();
@@ -74,6 +75,9 @@ function AppContent() {
   useEffect(() => {
     console.log('[App] Resetting stations on page load');
     stationTracker.resetStations();
+    
+    // Initialize global flag for leaderboard state
+    (window as any).isLeaderboardOpen = false;
     
     // Add global debug function
     (window as any).resetStations = () => {
@@ -262,6 +266,11 @@ function AppContent() {
   // Handle game restart with spacebar to ensure both music and stations work
   useEffect(() => {
     const handleGameRestart = (event: KeyboardEvent) => {
+      // If leaderboard is open, don't allow space bar to restart the game
+      if (showLeaderboard) {
+        return;
+      }
+      
       // Check if we're at the game over screen - this is when space restarts the game
       // We can check if there's a game over message visible in the DOM
       const gameOverMessage = document.querySelector('.game-over-message');
@@ -306,11 +315,16 @@ function AppContent() {
       window.removeEventListener('keydown', handleGameRestart);
       window.removeEventListener('resetStations', handleResetStations);
     };
-  }, []);
+  }, [showLeaderboard]);
 
   // Add debug helpers for music playback and station sync
   useEffect(() => {
     const handleDebugKeydown = (event: KeyboardEvent) => {
+      // If leaderboard is open, don't process any keyboard shortcuts
+      if ((window as any).isLeaderboardOpen === true) {
+        return;
+      }
+      
       // Special debug keys
       if (event.code === 'KeyM') {
         console.log('[App] DEBUG: Manually triggering music playback with M key');
@@ -375,11 +389,22 @@ function AppContent() {
     // Show the leaderboard
     const handleShowLeaderboard = (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { score } = customEvent.detail;
+      const { score, inGameFrame = true } = customEvent.detail;
       
-      console.log('[App] Received showGameLeaderboard event, score:', score);
+      console.log('[App] Received showGameLeaderboard event, score:', score, 'inGameFrame:', inGameFrame);
       setCurrentScore(score);
+      // Store the inGameFrame preference in state
+      setLeaderboardInGameFrame(inGameFrame);
       setShowLeaderboard(true);
+      
+      // Set global flag for game to check
+      (window as any).isLeaderboardOpen = true;
+      
+      // Dispatch event to notify game scenes that inputs should be disabled
+      const inputEvent = new CustomEvent('gameInputState', { 
+        detail: { inputsDisabled: true }
+      });
+      window.dispatchEvent(inputEvent);
     };
     
     window.addEventListener('checkGameAuth', handleCheckAuth);
@@ -444,6 +469,26 @@ function AppContent() {
   const handleCloseLeaderboard = () => {
     setShowLeaderboard(false);
     
+    // Set global flag for game to check
+    (window as any).isLeaderboardOpen = false;
+    
+    // Dispatch event to notify game scenes that inputs should be enabled
+    // Use a short timeout to ensure the event is processed after the state changes
+    setTimeout(() => {
+      const inputEvent = new CustomEvent('gameInputState', { 
+        detail: { inputsDisabled: false }
+      });
+      window.dispatchEvent(inputEvent);
+      
+      // Force a second event after a brief delay to ensure it's received
+      setTimeout(() => {
+        const secondEvent = new CustomEvent('gameInputState', { 
+          detail: { inputsDisabled: false, forceReset: true }
+        });
+        window.dispatchEvent(secondEvent);
+      }, 100);
+    }, 50);
+    
     // Return focus to the game container
     const gameContainer = document.getElementById('game-container');
     if (gameContainer) {
@@ -460,6 +505,18 @@ function AppContent() {
         {!game && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        )}
+        
+        {/* Leaderboard component positioned within the game container */}
+        {showLeaderboard && (
+          <div className="absolute inset-0 z-50">
+            <Leaderboard 
+              isOpen={showLeaderboard} 
+              onClose={handleCloseLeaderboard}
+              userScore={currentScore}
+              inGameFrame={true}
+            />
           </div>
         )}
       </div>
@@ -520,13 +577,6 @@ function AppContent() {
           </div>
         )}
       </div>
-      
-      {/* Leaderboard component - now full screen */}
-      <Leaderboard 
-        isOpen={showLeaderboard} 
-        onClose={handleCloseLeaderboard}
-        userScore={currentScore}
-      />
       
       {showDebug && (
         <div className="mt-4 p-4 bg-gray-800 rounded-lg max-w-6xl w-full max-h-60 overflow-auto">
