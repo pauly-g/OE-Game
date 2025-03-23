@@ -125,11 +125,11 @@
     - 3-4 edits: Medium box (130px + ((numEdits - 2) * 15)px width × 75-100px height)
     - 5-6 edits: Large box (160px + ((numEdits - 4) * 20)px width × 120px height)
 
-- **Visual Representation**:
-  - Orders with 1-3 edits display icons in a horizontal row
+  - **Visual Representation**:
+    - Orders with 1-3 edits display icons in a horizontal row
   - Orders with 4-6 edits display icons in a grid pattern
-  - Checkmarks appear above corresponding icons when edits are applied
-  - Multiple edits can be applied to the same order until all required edits are completed
+    - Checkmarks appear above corresponding icons when edits are applied
+    - Multiple edits can be applied to the same order until all required edits are completed
   - Completed orders show a happy wiggle animation and checkmark
   - Failed orders display an angry emoji (😡) when exiting the screen
   - Completed orders show a heart emoji (❤️) when exiting

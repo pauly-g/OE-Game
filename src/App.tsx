@@ -29,7 +29,7 @@
  * - Added Firebase authentication and leaderboard integration
  * - Updated leaderboard to be a full-screen view with integrated sign-in
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Phaser from 'phaser';
 import { gameConfig } from './game/config';
 import { gameDebugger } from './game/utils/debug';
@@ -40,6 +40,9 @@ import SongNotification from './components/SongNotification';
 import Leaderboard from './components/Leaderboard';
 import { tracks } from './data/musicData';
 import { AuthProvider, useAuth } from './firebase/AuthContext';
+import UserProfileCorner from './components/UserProfileCorner';
+import Toast from './components/Toast';
+import './styles/main.css';
 
 // Main App component wrapper with AuthProvider
 function AppWithAuth() {
@@ -67,9 +70,14 @@ function AppContent() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [currentScore, setCurrentScore] = useState<number | undefined>(undefined);
   const [leaderboardInGameFrame, setLeaderboardInGameFrame] = useState(true);
+  const [showAuth, setShowAuth] = useState(false);
+  const [toastMessage, setToastMessage] = useState({
+    type: 'info',
+    message: ''
+  });
   
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
-  const { currentUser, submitUserScore, isLoading } = useAuth();
+  const { currentUser, submitUserScore, isLoading, userData } = useAuth();
 
   // Reset stations on page load
   useEffect(() => {
@@ -350,71 +358,125 @@ function AppContent() {
     };
   }, []);
 
-  // Handle leaderboard events from GameOverScene
-  useEffect(() => {
-    // Check authentication status
-    const handleCheckAuth = async (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { score, sceneInstance } = customEvent.detail;
+  // Function to handle authentication check and score submission
+  const handleCheckAuth = useCallback(async () => {
+    console.log('handleCheckAuth called with score:', currentScore);
+    
+    // If user is not authenticated, show sign-in form
+    if (!currentUser) {
+      console.log('User not authenticated, showing sign-in form');
+      setShowAuth(true);
+      return;
+    }
+    
+    // Ensure we have a valid score
+    if (currentScore === undefined) {
+      console.error('Cannot submit undefined score');
+      setToastMessage({
+        type: 'error',
+        message: 'No valid score to submit'
+      });
+      return;
+    }
+    
+    // User is already authenticated, submit the score directly
+    try {
+      console.log('User is authenticated, submitting score:', currentScore);
       
-      console.log('[App] Received checkGameAuth event, score:', score);
-      setCurrentScore(score);
+      // Submit the score and get the result (which includes whether it's a high score)
+      const submissionResult = await submitUserScore(currentScore);
       
-      // Check if the user is authenticated
-      const isAuthenticated = !!currentUser;
-      let scoreSubmitted = false;
+      console.log('Score submission result:', submissionResult);
       
-      // Auto-submit score if user is authenticated
-      if (isAuthenticated && score !== undefined) {
-        try {
-          const result = await submitUserScore(score);
-          scoreSubmitted = !!result;
-          console.log('[App] Score submission result:', result);
-        } catch (error) {
-          console.error('[App] Error submitting score:', error);
-        }
+      // Display appropriate notification based on the submission result
+      if (submissionResult.success) {
+        // Show different notifications based on whether it's a high score
+        setToastMessage({
+          type: submissionResult.isHighScore ? 'success' : 'info',
+          message: submissionResult.message
+        });
+      } else {
+        // Show error notification if submission failed
+        setToastMessage({
+          type: 'error',
+          message: submissionResult.message || 'Failed to submit score'
+        });
       }
       
-      // Send authentication status back to the game
-      const authResponseEvent = new CustomEvent('gameAuthResponse', {
-        detail: {
-          isAuthenticated,
-          scoreSubmitted
-        }
-      });
-      
-      window.dispatchEvent(authResponseEvent);
-    };
-    
-    // Show the leaderboard
-    const handleShowLeaderboard = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { score, inGameFrame = true } = customEvent.detail;
-      
-      console.log('[App] Received showGameLeaderboard event, score:', score, 'inGameFrame:', inGameFrame);
-      setCurrentScore(score);
-      // Store the inGameFrame preference in state
-      setLeaderboardInGameFrame(inGameFrame);
+      // Always show the leaderboard after submission attempt
       setShowLeaderboard(true);
-      
-      // Set global flag for game to check
-      (window as any).isLeaderboardOpen = true;
-      
-      // Dispatch event to notify game scenes that inputs should be disabled
-      const inputEvent = new CustomEvent('gameInputState', { 
-        detail: { inputsDisabled: true }
+    } catch (error) {
+      console.error('Error in handleCheckAuth:', error);
+      setToastMessage({
+        type: 'error',
+        message: 'An unexpected error occurred when submitting your score'
       });
-      window.dispatchEvent(inputEvent);
+    }
+  }, [currentScore, currentUser, submitUserScore, setShowAuth, setToastMessage, setShowLeaderboard]);
+
+  // Handle leaderboard events from GameOverScene
+  useEffect(() => {
+    // Event handler for game over - check auth and handle score submission
+    const handleGameOver = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { score } = customEvent.detail;
+      
+      console.log('[App] Received checkGameAuth event, score:', score);
+      console.log('[App] Current user authentication status:', !!currentUser);
+      console.log('[App] User data available:', !!userData);
+      
+      // Set the current score in state
+      setCurrentScore(score);
+      
+      // Force this code to execute asynchronously to ensure state updates first
+      setTimeout(async () => {
+        console.log('[App] Score set in state, calling handleCheckAuth');
+        
+        try {
+          // Direct call to submitUserScore for logged-in users
+          if (currentUser && userData) {
+            console.log('[App] User authenticated, directly calling submitUserScore');
+            const result = await submitUserScore(score);
+            console.log('[App] Score submission result:', result);
+            
+            // Set toast message based on result
+            setToastMessage({
+              type: result.success ? 'success' : 'info',
+              message: result.message
+            });
+            
+            // Only show the leaderboard if successful submission AND it was a high score
+            if (result.success && result.isHighScore) {
+              setShowLeaderboard(true);
+            }
+          } else {
+            // Not logged in, show sign-in form
+            console.log('[App] User not authenticated, showing sign-in form');
+            setShowAuth(true);
+          }
+        } catch (error) {
+          console.error('[App] Error in direct score submission:', error);
+          setToastMessage({
+            type: 'error',
+            message: 'An unexpected error occurred when submitting your score'
+          });
+        }
+      }, 100);
     };
     
-    window.addEventListener('checkGameAuth', handleCheckAuth);
+    const handleShowLeaderboard = () => {
+      console.log('[App] Received showGameLeaderboard event');
+      setShowLeaderboard(true);
+    };
+    
+    window.addEventListener('checkGameAuth', handleGameOver);
     window.addEventListener('showGameLeaderboard', handleShowLeaderboard);
     
     return () => {
-      window.removeEventListener('checkGameAuth', handleCheckAuth);
+      window.removeEventListener('checkGameAuth', handleGameOver);
       window.removeEventListener('showGameLeaderboard', handleShowLeaderboard);
     };
-  }, [currentUser, submitUserScore]);
+  }, [currentUser, handleCheckAuth]); // Add handleCheckAuth to dependency array
 
   const downloadLogs = () => {
     gameDebugger.downloadLogs();
@@ -498,7 +560,21 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-start p-4">
-      <h1 className="text-3xl font-bold mb-4 tracking-widest text-blue-400 arcade-font">Order Editing: The Game</h1>
+      <div className="w-full max-w-6xl flex justify-center items-center mb-4 relative">
+        <h1 className="text-3xl font-bold tracking-widest text-blue-400 arcade-font text-center">Order Editing: The Game</h1>
+        <div className="absolute right-0 top-0">
+          <UserProfileCorner />
+        </div>
+      </div>
+      
+      {/* Toast notifications */}
+      {toastMessage.message && (
+        <Toast 
+          message={toastMessage.message}
+          type={toastMessage.type as 'success' | 'error' | 'info'}
+          onClose={() => setToastMessage({ type: 'info', message: '' })}
+        />
+      )}
       
       {/* Game container at full size regardless of radio player status */}
       <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden relative">

@@ -138,3 +138,12 @@ To test the leaderboard feature:
 3. **Local development issues**:
    - Ensure Firebase configuration is correctly set in `src/firebase/config.ts`
    - Try using Firebase emulators for local testing 
+
+# Firebase Configuration - KEEP THESE SECRET!
+REACT_APP_FIREBASE_API_KEY=AIzaSyCLZpaAHMViePnpqDh3V7cgMzqp4UBV308
+REACT_APP_FIREBASE_AUTH_DOMAIN=order-editing-game.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=order-editing-game
+REACT_APP_FIREBASE_STORAGE_BUCKET=order-editing-game.firebasestorage.app
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=732746877933
+REACT_APP_FIREBASE_APP_ID=1:732746877933:web:0dda30a4693f913ac235e4
+REACT_APP_FIREBASE_MEASUREMENT_ID=G-BYQ10MKT0B 

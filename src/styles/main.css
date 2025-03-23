@@ -1,0 +1,313 @@
+/* main.css - Core styles for Order Editing: The Game */
+
+/* Import custom scrollbar CSS */
+@import './customScrollbar.css';
+
+/* Reset and base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: #0f172a; /* dark blue background */
+  color: #f8fafc;
+  line-height: 1.5;
+}
+
+/* Pixel font for game elements */
+@font-face {
+  font-family: 'pixelmix';
+  src: url('/fonts/pixelmix.woff2') format('woff2'),
+       url('/fonts/pixelmix.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-pixel,
+.arcade-font {
+  font-family: 'pixelmix', monospace;
+  letter-spacing: 1px;
+}
+
+/* Button styles */
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* Game container */
+#game-container {
+  position: relative;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+/* Animation classes */
+.wiggle {
+  animation: wiggle 0.5s ease-in-out;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-5deg); }
+  50% { transform: rotate(0); }
+  75% { transform: rotate(5deg); }
+}
+
+/* Utility classes */
+.thin-scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(0, 0, 0, 0.1);
+}
+
+/* For WebKit browsers */
+.thin-scrollbar-dark::-webkit-scrollbar {
+  width: 8px;
+}
+
+.thin-scrollbar-dark::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.thin-scrollbar-dark::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+/* Leaderboard Styles */
+.leaderboard-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #1f2937;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  border: 2px solid #3b82f6;
+  font-family: 'pixelmix', monospace;
+  letter-spacing: 1px;
+  z-index: 100;
+}
+
+.leaderboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background-color: #111827;
+  border-bottom: 1px solid #374151;
+  font-family: 'pixelmix', monospace;
+}
+
+.leaderboard-header h2 {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #f3f4f6;
+  font-family: 'pixelmix', monospace;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: color 0.2s;
+  padding: 0;
+  margin: 0;
+  font-family: 'pixelmix', monospace;
+}
+
+.close-button:hover {
+  color: #f3f4f6;
+}
+
+.leaderboard-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 24px;
+  font-family: 'pixelmix', monospace;
+}
+
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 32px 0;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 4px solid rgba(59, 130, 246, 0.3);
+  border-top-color: #3b82f6;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  color: #ef4444;
+  text-align: center;
+  padding: 24px 0;
+  font-size: 1.2rem;
+  font-family: 'pixelmix', monospace;
+}
+
+.leaderboard-section {
+  margin-bottom: 32px;
+}
+
+.leaderboard-section h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #e5e7eb;
+  font-family: 'pixelmix', monospace;
+}
+
+.scores-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'pixelmix', monospace;
+}
+
+.scores-table th {
+  text-align: left;
+  padding: 12px 16px;
+  background-color: #1f2937;
+  font-weight: 600;
+  color: #d1d5db;
+  font-family: 'pixelmix', monospace;
+}
+
+.scores-table td {
+  padding: 12px 16px;
+  border-top: 1px solid #374151;
+  font-family: 'pixelmix', monospace;
+}
+
+.scores-table tbody tr:nth-child(odd) {
+  background-color: #1f2937;
+}
+
+.scores-table tbody tr:nth-child(even) {
+  background-color: #111827;
+}
+
+.scores-table tbody tr:hover {
+  background-color: #374151;
+}
+
+.current-user-row {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+  border-left: 4px solid #3b82f6;
+}
+
+.player-info {
+  display: flex;
+  align-items: center;
+}
+
+.player-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-right: 8px;
+  object-fit: cover;
+  border: 2px solid #4b5563;
+}
+
+.current-user-badge {
+  margin-left: 8px;
+  background-color: #3b82f6;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  font-family: 'pixelmix', monospace;
+}
+
+.score-value {
+  text-align: right;
+  font-weight: bold;
+  font-family: 'pixelmix', monospace;
+}
+
+.no-scores {
+  text-align: center;
+  color: #9ca3af;
+  padding: 16px 0;
+  font-family: 'pixelmix', monospace;
+}
+
+.user-position {
+  margin-top: 32px;
+}
+
+.user-rank {
+  color: #d1d5db;
+  margin-bottom: 16px;
+  font-family: 'pixelmix', monospace;
+}
+
+.user-rank span {
+  font-weight: bold;
+  font-size: 1.2rem;
+  color: #fbbf24;
+}
+
+.leaderboard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background-color: #111827;
+  border-top: 1px solid #374151;
+  font-family: 'pixelmix', monospace;
+}
+
+.game-title {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  font-family: 'pixelmix', monospace;
+}
+
+.resubmit-button {
+  background-color: #3b82f6;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  transition: background-color 0.2s;
+  font-family: 'pixelmix', monospace;
+}
+
+.resubmit-button:hover {
+  background-color: #2563eb;
+} 

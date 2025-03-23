@@ -10,9 +10,14 @@ import {
   getDoc,
   startAfter,
   endBefore,
-  limitToLast
+  limitToLast,
+  serverTimestamp,
+  Timestamp
 } from 'firebase/firestore';
 import { db } from './config';
+
+// Set this to true to force real Firebase data even in development mode
+const FORCE_REAL_DATA = true;
 
 // Interface for leaderboard entry
 export interface LeaderboardEntry {
@@ -25,28 +30,66 @@ export interface LeaderboardEntry {
   photoURL?: string | null;
 }
 
-// Function to submit score to leaderboard
+/**
+ * Submit a score to the leaderboard
+ * 
+ * @param userId - The user's ID
+ * @param score - The score to submit
+ * @param displayName - The user's display name
+ * @param photoURL - The user's photo URL
+ * @param company - The user's company name
+ * @returns The ID of the newly created leaderboard entry, or null if submission failed or wasn't a high score
+ */
 export const submitScore = async (
-  userId: string, 
-  score: number, 
-  displayName?: string | null, 
-  photoURL?: string | null,
-  company?: string | null
+  userId: string,
+  score: number,
+  displayName: string | null,
+  photoURL: string | null,
+  company: string | null
 ): Promise<string | null> => {
   try {
-    const entry: LeaderboardEntry = {
+    // Log start of operation
+    console.log('[FIREBASE] Attempting to submit score for user:', userId);
+    
+    // Validate score
+    if (isNaN(score) || !isFinite(score) || score < 0) {
+      console.error('[FIREBASE] Invalid score value:', score);
+      return null;
+    }
+    
+    // First check if this is a high score for the user
+    const userPreviousBest = await getUserBestScore(userId);
+    
+    // If a previous best exists and the new score isn't higher, don't submit
+    if (userPreviousBest && userPreviousBest.score >= score) {
+      console.log('[FIREBASE] Score not submitted - not a new high score', { 
+        newScore: score, 
+        previousBest: userPreviousBest.score 
+      });
+      return null;
+    }
+    
+    console.log('[FIREBASE] Score will be submitted - either first score or new high score');
+    
+    // Create a new leaderboard entry
+    const leaderboardRef = collection(db, 'leaderboard');
+    const entryData = {
       userId,
       score,
-      timestamp: new Date(),
-      displayName: displayName || null,
-      company: company || null,
-      photoURL: photoURL || null
+      displayName,
+      photoURL,
+      company,
+      timestamp: serverTimestamp()
     };
     
-    const docRef = await addDoc(collection(db, 'leaderboard'), entry);
+    console.log('[FIREBASE] Submitting leaderboard entry:', entryData);
+    
+    const docRef = await addDoc(leaderboardRef, entryData);
+    console.log('[FIREBASE] Score submitted successfully with ID:', docRef.id);
+    
     return docRef.id;
   } catch (error) {
-    console.error('Error submitting score:', error);
+    console.error('[FIREBASE] Error submitting score:', error);
     return null;
   }
 };
@@ -157,45 +200,13 @@ export const generateMockLeaderboardData = (userScore?: number): LeaderboardEntr
 export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEntry[]> => {
   try {
     // For development/testing purposes, return mock data
-    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+    if (!FORCE_REAL_DATA && (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost')) {
       console.log('[Leaderboard] Using mock leaderboard data');
-      // Get the current user's name/company if available
-      let userDisplayName = 'You';
-      let userCompany = 'Your Company';
-      
-      try {
-        // Check if there is mock user data defined in window
-        if (typeof window !== 'undefined' && (window as any).mockUserData) {
-          userDisplayName = (window as any).mockUserData.displayName || userDisplayName;
-          userCompany = (window as any).mockUserData.company || userCompany;
-          console.log('[Leaderboard] Found mock user data:', { userDisplayName, userCompany });
-        }
-      } catch (e) {
-        console.log('[Leaderboard] No custom mock user data found');
-      }
-      
       const mockData = generateMockLeaderboardData();
-      
-      // Include the current user in the mock data if they have a name/company
-      if (userDisplayName !== 'You' || userCompany !== 'Your Company') {
-        // Add the user with a decent score
-        mockData.push({
-          id: 'current-user',
-          userId: 'mock-user-123',
-          score: 4000, // Good score but not top
-          timestamp: new Date(),
-          displayName: userDisplayName,
-          company: userCompany,
-          photoURL: null
-        });
-        
-        // Re-sort to ensure correct order
-        mockData.sort((a, b) => b.score - a.score);
-      }
-      
       return mockData.slice(0, topCount);
     }
     
+    console.log('[Leaderboard] Fetching real leaderboard data from Firebase');
     const q = query(
       collection(db, 'leaderboard'),
       orderBy('score', 'desc'),
@@ -203,11 +214,53 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
     );
     
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...(doc.data() as Omit<LeaderboardEntry, 'id'>),
-      timestamp: doc.data().timestamp.toDate() // Convert Firestore timestamp to JS Date
-    }));
+    console.log(`[Leaderboard] Found ${querySnapshot.docs.length} entries in Firebase`);
+    
+    if (querySnapshot.empty) {
+      console.log('[Leaderboard] No scores found in Firestore, returning empty array');
+      return [];
+    }
+    
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      
+      // Log the raw data to debug
+      console.log(`[Leaderboard] Entry data:`, {
+        id: doc.id,
+        userId: data.userId,
+        score: data.score,
+        displayName: data.displayName,
+        company: data.company,
+        photoURL: data.photoURL,
+        timestamp: data.timestamp ? 'timestamp exists' : 'no timestamp'
+      });
+      
+      // Handle timestamp conversion safely
+      let timestamp = new Date();
+      if (data.timestamp) {
+        if (typeof data.timestamp.toDate === 'function') {
+          timestamp = data.timestamp.toDate();
+        } else if (data.timestamp instanceof Date) {
+          timestamp = data.timestamp;
+        } else if (data.timestamp.seconds) {
+          // Firestore timestamp object with seconds and nanoseconds
+          timestamp = new Date(data.timestamp.seconds * 1000);
+        }
+      } else if (data.createdAt) {
+        // Fall back to createdAt if timestamp is missing
+        timestamp = new Date(data.createdAt);
+      }
+      
+      return {
+        id: doc.id,
+        userId: data.userId,
+        score: data.score || 0,
+        displayName: data.displayName || 'Anonymous',
+        company: data.company || 'Unknown Company',
+        photoURL: data.photoURL || null,
+        timestamp: timestamp
+      };
+    });
   } catch (error) {
     console.error('Error getting top scores:', error);
     return [];
@@ -217,6 +270,13 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
 // Function to get user's best score
 export const getUserBestScore = async (userId: string): Promise<LeaderboardEntry | null> => {
   try {
+    if (!userId) {
+      console.error('[Leaderboard] Cannot get best score: userId is empty or undefined');
+      return null;
+    }
+    
+    console.log(`[Leaderboard] Getting best score for user: ${userId}`);
+    
     const q = query(
       collection(db, 'leaderboard'),
       where('userId', '==', userId),
@@ -225,16 +285,58 @@ export const getUserBestScore = async (userId: string): Promise<LeaderboardEntry
     );
     
     const querySnapshot = await getDocs(q);
+    console.log(`[Leaderboard] User best score query returned ${querySnapshot.docs.length} results`);
     
     if (querySnapshot.empty) {
+      console.log(`[Leaderboard] No scores found for user ${userId}`);
       return null;
     }
     
     const doc = querySnapshot.docs[0];
+    const data = doc.data();
+    
+    console.log(`[Leaderboard] User best score data:`, {
+      id: doc.id,
+      userId: data.userId,
+      score: data.score,
+      displayName: data.displayName,
+      company: data.company,
+      timestamp: data.timestamp ? 'timestamp exists' : 'no timestamp'
+    });
+    
+    // Ensure score is a number
+    const score = typeof data.score === 'number' ? data.score : Number(data.score);
+    if (isNaN(score)) {
+      console.error(`[Leaderboard] Invalid score in document ${doc.id}: ${data.score}`);
+      return null;
+    }
+    
+    // Handle timestamp conversion safely (same as in getTopScores)
+    let timestamp = new Date();
+    if (data.timestamp) {
+      if (typeof data.timestamp.toDate === 'function') {
+        timestamp = data.timestamp.toDate();
+      } else if (data.timestamp instanceof Date) {
+        timestamp = data.timestamp;
+      } else if (data.timestamp.seconds) {
+        // Firestore timestamp object with seconds and nanoseconds
+        timestamp = new Date(data.timestamp.seconds * 1000);
+      }
+    } else if (data.createdAt) {
+      // Fall back to createdAt if timestamp is missing
+      timestamp = new Date(data.createdAt);
+    }
+    
+    console.log(`[Leaderboard] User best score: ${score}, timestamp: ${timestamp}`);
+    
     return {
       id: doc.id,
-      ...(doc.data() as Omit<LeaderboardEntry, 'id'>),
-      timestamp: doc.data().timestamp.toDate()
+      userId: data.userId,
+      score: score,
+      displayName: data.displayName || 'Anonymous',
+      company: data.company || 'Unknown Company',
+      photoURL: data.photoURL || null,
+      timestamp: timestamp
     };
   } catch (error) {
     console.error('Error getting user best score:', error);
@@ -246,7 +348,7 @@ export const getUserBestScore = async (userId: string): Promise<LeaderboardEntry
 export const getUserScoreRank = async (score: number): Promise<number> => {
   try {
     // For development/testing purposes, return mock rank
-    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+    if (!FORCE_REAL_DATA && (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost')) {
       console.log('[Leaderboard] Using mock rank calculation for score:', score);
       
       // Create a consistent mock leaderboard with a fixed set of scores
@@ -270,6 +372,7 @@ export const getUserScoreRank = async (score: number): Promise<number> => {
       return rank;
     }
     
+    console.log('[Leaderboard] Calculating real rank from Firebase for score:', score);
     // Query to count how many scores are higher than the user's score
     const q = query(
       collection(db, 'leaderboard'),
@@ -278,7 +381,9 @@ export const getUserScoreRank = async (score: number): Promise<number> => {
     
     const querySnapshot = await getDocs(q);
     // Rank is the count of higher scores + 1
-    return querySnapshot.size + 1;
+    const rank = querySnapshot.size + 1;
+    console.log(`[Leaderboard] Determined real rank ${rank} for score ${score}`);
+    return rank;
   } catch (error) {
     console.error('Error getting user score rank:', error);
     return 0;
@@ -292,7 +397,7 @@ export const getScoresAroundUser = async (score: number, count: number = 3): Pro
 }> => {
   try {
     // For development/testing purposes, return mock data
-    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+    if (!FORCE_REAL_DATA && (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost')) {
       console.log('[Leaderboard] Using mock nearby scores');
       const mockScores = generateMockLeaderboardData(score);
       
@@ -311,6 +416,7 @@ export const getScoresAroundUser = async (score: number, count: number = 3): Pro
       return { above, below };
     }
     
+    console.log('[Leaderboard] Fetching real nearby scores from Firebase');
     // Get scores above user's score
     const aboveQuery = query(
       collection(db, 'leaderboard'),
@@ -332,17 +438,29 @@ export const getScoresAroundUser = async (score: number, count: number = 3): Pro
       getDocs(belowQuery)
     ]);
     
-    const above = aboveSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...(doc.data() as Omit<LeaderboardEntry, 'id'>),
-      timestamp: doc.data().timestamp.toDate()
-    })).reverse(); // Reverse to show highest scores first
+    console.log(`[Leaderboard] Found ${aboveSnapshot.docs.length} scores above and ${belowSnapshot.docs.length} scores below`);
     
-    const below = belowSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...(doc.data() as Omit<LeaderboardEntry, 'id'>),
-      timestamp: doc.data().timestamp.toDate()
-    }));
+    const above = aboveSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...(data as Omit<LeaderboardEntry, 'id'>),
+        timestamp: data.timestamp ? 
+          (data.timestamp.toDate ? data.timestamp.toDate() : data.timestamp) : 
+          new Date()
+      };
+    }).reverse(); // Reverse to show highest scores first
+    
+    const below = belowSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...(data as Omit<LeaderboardEntry, 'id'>),
+        timestamp: data.timestamp ? 
+          (data.timestamp.toDate ? data.timestamp.toDate() : data.timestamp) : 
+          new Date()
+      };
+    });
     
     return { above, below };
   } catch (error) {

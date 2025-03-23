@@ -63,6 +63,16 @@ export class GameOverScene extends Phaser.Scene {
       // Set up key bindings
       this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       
+      // Check auth status and submit score - add this at the start of create()
+      gameDebugger.info('GameOverScene triggering checkGameAuth event with score:', this.score);
+      const checkAuthEvent = new CustomEvent('checkGameAuth', {
+        detail: {
+          score: this.score,
+          sceneInstance: this
+        }
+      });
+      window.dispatchEvent(checkAuthEvent);
+      
       // Add the game over background image back
       const background = this.add.image(width / 2, height / 2, 'gameOverBG');
       
