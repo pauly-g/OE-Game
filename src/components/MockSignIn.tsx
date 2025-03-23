@@ -70,20 +70,24 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score }) =>
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('Form submission initiated with:', { name, company });
+    // Trim the inputs to remove any extra whitespace
+    const trimmedName = name.trim();
+    const trimmedCompany = company.trim();
+    
+    console.log('Form submission initiated with:', { name: trimmedName, company: trimmedCompany });
     setIsSubmitting(true);
     setError(null);
     
     // Special case for testing - bypass profanity check for specific test values
-    if ((name.toLowerCase() === 'test' && company.toLowerCase() === 'test') ||
-        (name.toLowerCase() === 'john' && company.toLowerCase() === 'acme corp') ||
-        (name.toLowerCase() === 'jane' && company.toLowerCase() === 'example co')) {
+    if ((trimmedName.toLowerCase() === 'test' && trimmedCompany.toLowerCase() === 'test') ||
+        (trimmedName.toLowerCase() === 'john' && trimmedCompany.toLowerCase() === 'acme corp') ||
+        (trimmedName.toLowerCase() === 'jane' && trimmedCompany.toLowerCase() === 'example co')) {
       
       console.log('Bypassing validation for test values');
       
       // Simulate network delay
       setTimeout(() => {
-        console.log('Calling onSuccess with test values:', { name, company });
+        console.log('Calling onSuccess with test values:', { name: trimmedName, company: trimmedCompany });
         
         // Re-enable game inputs before submitting with force reset
         const inputEvent = new CustomEvent('gameInputState', { 
@@ -91,7 +95,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score }) =>
         });
         window.dispatchEvent(inputEvent);
         
-        onSuccess(name, company);
+        onSuccess(trimmedName, trimmedCompany);
         setIsSubmitting(false);
       }, 800);
       
@@ -99,7 +103,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score }) =>
     }
     
     // Validate the inputs
-    const validation = validateUserSubmission(name, company);
+    const validation = validateUserSubmission(trimmedName, trimmedCompany);
     console.log('Validation result:', validation);
     
     if (!validation.isValid) {
@@ -110,7 +114,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score }) =>
     
     // Simulate network delay
     setTimeout(() => {
-      console.log('Calling onSuccess with:', { name, company });
+      console.log('Calling onSuccess with:', { name: trimmedName, company: trimmedCompany });
       
       // Re-enable game inputs before submitting with force reset
       const inputEvent = new CustomEvent('gameInputState', { 
@@ -118,7 +122,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score }) =>
       });
       window.dispatchEvent(inputEvent);
       
-      onSuccess(name, company);
+      onSuccess(trimmedName, trimmedCompany);
       setIsSubmitting(false);
     }, 800);
   };

@@ -100,13 +100,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Store the score in state for potential later use
     setLastSubmittedScore(score);
     
-    return await submitScore(
-      currentUser.uid, 
-      score, 
-      currentUser.displayName, 
-      currentUser.photoURL,
-      userData?.company || null
-    );
+    console.log('Submitting score with userData:', userData);
+    
+    try {
+      // Always make sure we have the latest user data before submitting
+      let userCompany = userData?.company;
+      
+      // If no userData or no company, try to fetch it again
+      if (!userData || userData.company === null || userData.company === undefined) {
+        console.log('Company name missing, attempting to refresh user data');
+        const refreshedUserData = await getUserData(currentUser.uid);
+        
+        if (refreshedUserData) {
+          setUserData(refreshedUserData);
+          userCompany = refreshedUserData.company;
+          console.log('Refreshed user data, company name is now:', userCompany);
+        }
+      }
+      
+      // Ensure we have a string value for company (empty string is better than null)
+      const companyToSubmit = userCompany || '';
+      console.log('Final company name for submission:', companyToSubmit);
+      
+      return await submitScore(
+        currentUser.uid, 
+        score, 
+        currentUser.displayName, 
+        currentUser.photoURL,
+        companyToSubmit // Always pass a string, not null
+      );
+    } catch (error) {
+      console.error('Error submitting score:', error);
+      return null;
+    }
   };
 
   // Context value

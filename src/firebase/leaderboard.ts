@@ -193,10 +193,27 @@ export const getUserScoreRank = async (score: number): Promise<number> => {
   try {
     // For development/testing purposes, return mock rank
     if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
-      console.log('[Leaderboard] Using mock rank calculation');
-      const mockScores = generateMockLeaderboardData(score);
-      const higherScores = mockScores.filter(entry => entry.score > score);
-      return higherScores.length + 1;
+      console.log('[Leaderboard] Using mock rank calculation for score:', score);
+      
+      // Create a consistent mock leaderboard with a fixed set of scores
+      const fixedMockScores = [
+        9750, // Top player's score (much higher than most players will achieve)
+        8500, // Second highest score
+        7200, // Third highest score
+        5800, // Fourth highest score
+        4600, // Fifth highest score
+      ];
+      
+      // Count how many fixed scores are higher than the user's score
+      let rank = 1; // Start at rank 1
+      for (const mockScore of fixedMockScores) {
+        if (mockScore > score) {
+          rank++;
+        }
+      }
+      
+      console.log(`[Leaderboard] Determined rank ${rank} for score ${score}`);
+      return rank;
     }
     
     // Query to count how many scores are higher than the user's score

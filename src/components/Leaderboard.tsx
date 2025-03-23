@@ -95,11 +95,23 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ isOpen, onClose, userScore, i
       // If we have a score, submit it
       if (userScore !== undefined) {
         console.log('[Leaderboard] Submitting score:', userScore);
+        
+        // Small delay to ensure auth context has updated with the new user data
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Submit the score after sign-in is complete
         await submitUserScore(userScore);
+        
+        // Extra logging for debugging
+        console.log('[Leaderboard] Score submitted, company name should be:', company);
       }
       
       // Refresh the leaderboard data
       console.log('[Leaderboard] Refreshing leaderboard data');
+      
+      // Add a small delay to allow Firebase data to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       fetchLeaderboardData();
       
       // Hide the sign-in form
