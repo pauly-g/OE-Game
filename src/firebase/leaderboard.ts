@@ -105,16 +105,16 @@ export const generateMockLeaderboardData = (userScore?: number): LeaderboardEntr
   const mockScores: LeaderboardEntry[] = [];
   
   // Default starting score if userScore not provided
-  const startingScore = userScore ? userScore + Math.floor(Math.random() * 100) + 50 : 1000;
+  const startingScore = userScore ? userScore + Math.floor(Math.random() * 100) + 50 : 10000;
   
-  // Generate 20 random entries
+  // Generate 20 random entries with guaranteed company names
   for (let i = 0; i < 20; i++) {
     // Calculate a score that decreases as we go
     // The first few entries will have higher scores
     const scoreAdjustment = Math.floor(Math.random() * 30) - 5; // Random variation
-    const score = startingScore - (i * 40) + scoreAdjustment;
+    const score = Math.max(0, startingScore - (i * 40) + scoreAdjustment);
     
-    // Randomize the player name and company
+    // Randomize the player name and company, ensuring company is always set
     const nameIndex = Math.floor(Math.random() * playerNames.length);
     const companyIndex = Math.floor(Math.random() * companies.length);
     
@@ -124,9 +124,29 @@ export const generateMockLeaderboardData = (userScore?: number): LeaderboardEntr
       score,
       timestamp: new Date(Date.now() - i * 3600000), // Spread out over the last few hours
       displayName: playerNames[nameIndex],
-      company: companies[companyIndex],
+      company: companies[companyIndex], // This will never be null or undefined
       photoURL: null
     });
+  }
+  
+  // Add current user's mock data if available in window
+  if (typeof window !== 'undefined' && (window as any).mockUserData) {
+    const { displayName, company, userId } = (window as any).mockUserData;
+    
+    // Only add if we have valid data
+    if (displayName && company) {
+      const userScore = Math.floor(Math.random() * 5000) + 3000; // Random good score
+      
+      mockScores.push({
+        id: 'current-user-entry',
+        userId: userId || 'mock-current-user',
+        score: userScore,
+        timestamp: new Date(),
+        displayName,
+        company,
+        photoURL: null
+      });
+    }
   }
   
   // Sort by score, highest first
@@ -139,7 +159,41 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
     // For development/testing purposes, return mock data
     if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
       console.log('[Leaderboard] Using mock leaderboard data');
-      return generateMockLeaderboardData().slice(0, topCount);
+      // Get the current user's name/company if available
+      let userDisplayName = 'You';
+      let userCompany = 'Your Company';
+      
+      try {
+        // Check if there is mock user data defined in window
+        if (typeof window !== 'undefined' && (window as any).mockUserData) {
+          userDisplayName = (window as any).mockUserData.displayName || userDisplayName;
+          userCompany = (window as any).mockUserData.company || userCompany;
+          console.log('[Leaderboard] Found mock user data:', { userDisplayName, userCompany });
+        }
+      } catch (e) {
+        console.log('[Leaderboard] No custom mock user data found');
+      }
+      
+      const mockData = generateMockLeaderboardData();
+      
+      // Include the current user in the mock data if they have a name/company
+      if (userDisplayName !== 'You' || userCompany !== 'Your Company') {
+        // Add the user with a decent score
+        mockData.push({
+          id: 'current-user',
+          userId: 'mock-user-123',
+          score: 4000, // Good score but not top
+          timestamp: new Date(),
+          displayName: userDisplayName,
+          company: userCompany,
+          photoURL: null
+        });
+        
+        // Re-sort to ensure correct order
+        mockData.sort((a, b) => b.score - a.score);
+      }
+      
+      return mockData.slice(0, topCount);
     }
     
     const q = query(

@@ -265,8 +265,32 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ isOpen, onClose, userScore, i
                           <span className="font-bold">{currentUser.displayName || 'You'}</span>
                           <span className="ml-2 bg-yellow-600 text-white text-xs px-2 py-1 rounded">YOU</span>
                         </td>
-                        <td className="py-3 px-4">
-                          {userData?.company || '-'}
+                        <td className="py-3 px-4 font-medium">
+                          {(() => {
+                            console.log('Rendering company name with userData:', userData);
+                            
+                            // For development, also check window.mockUserData
+                            if (typeof window !== 'undefined' && (window as any).mockUserData?.company) {
+                              return (window as any).mockUserData.company;
+                            }
+                            
+                            // If we have userData with company, use that
+                            if (userData?.company) {
+                              return userData.company;
+                            }
+                            
+                            // If that fails, try to find the user's entries in the top scores
+                            const userEntryInTopScores = topScores.find(
+                              entry => entry.userId === currentUser.uid
+                            );
+                            
+                            if (userEntryInTopScores?.company) {
+                              return userEntryInTopScores.company;
+                            }
+                            
+                            // Return dash if nothing found
+                            return '-';
+                          })()}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-bold">{userScore}</td>
                       </tr>

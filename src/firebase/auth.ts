@@ -68,6 +68,16 @@ export const mockSignInWithNameCompany = async (name: string, company: string): 
       photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
     };
     
+    // Store the mock user data in window for other mock functions to access
+    if (typeof window !== 'undefined') {
+      (window as any).mockUserData = {
+        displayName: name,
+        company: company,
+        userId: updatedUser.uid
+      };
+      console.log('MOCK: Stored user data in window.mockUserData:', (window as any).mockUserData);
+    }
+    
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 800));
     
@@ -180,12 +190,14 @@ export const getUserData = async (userId: string): Promise<UserData | null> => {
     console.log('MOCK: Getting user data for', userId);
     
     if (mockAuthenticated && userId === MOCK_USER.uid) {
+      console.log('MOCK: Returning user data with company:', mockUserCompany);
       return {
         userId: MOCK_USER.uid,
         email: MOCK_USER.email,
         marketingOptIn: true,
-        displayName: MOCK_USER.displayName,
-        photoURL: MOCK_USER.photoURL
+        displayName: mockUserName,
+        photoURL: MOCK_USER.photoURL,
+        company: mockUserCompany
       };
     }
     return null;

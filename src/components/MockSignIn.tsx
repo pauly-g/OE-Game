@@ -29,10 +29,17 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score }) =>
   useEffect(() => {
     if (currentUser?.displayName) {
       setName(currentUser.displayName);
+      console.log('[MockSignIn] Pre-filling name:', currentUser.displayName);
     }
     
     if (userData?.company) {
       setCompany(userData.company);
+      console.log('[MockSignIn] Pre-filling company:', userData.company);
+    }
+    
+    // Debug output for window mock data
+    if (typeof window !== 'undefined' && (window as any).mockUserData) {
+      console.log('[MockSignIn] Found window.mockUserData:', (window as any).mockUserData);
     }
   }, [currentUser, userData]);
 
