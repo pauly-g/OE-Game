@@ -40,7 +40,7 @@ export class GameOverScene extends Phaser.Scene {
     gameDebugger.info('GameOverScene preload started');
     try {
       // Load game over background image
-      this.load.image('gameOverBG', 'game/Background/GameOverBG.png');
+      this.load.image('gameOverBG', 'game/Background/GameOverBG2.png');
       gameDebugger.info('GameOverScene preload completed');
     } catch (error) {
       gameDebugger.error('Error in GameOverScene preload:', error);
