@@ -17,80 +17,172 @@
         padding: 0;
         width: 100%;
         height: 100vh;
-        overflow: hidden;
+        overflow-x: hidden;
         background-color: #1a1a1a;
+        font-family: 'Press Start 2P', cursive;
+        color: #fff;
       }
-      #root {
+      
+      .landing-container {
         width: 100%;
-        height: 100vh;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-      }
-      #game-container {
-        width: 100%;
-        height: 100%;
-        max-width: 1280px;
-        max-height: 720px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      canvas {
-        width: 100% !important;
-        height: 100% !important;
-        max-width: 1280px !important;
-        max-height: 720px !important;
-        object-fit: contain;
-      }
-      .game-title {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
+        padding: 2rem 1rem;
         text-align: center;
-        padding: 0.5rem;
-        background: rgba(0, 0, 0, 0.5);
-        margin: 0;
-        z-index: 1;
+      }
+      
+      .game-title {
+        color: #f5f542;
+        text-shadow: 4px 4px 0 #ff00ff, -4px -4px 0 #00ffff;
+        font-size: 2.5rem;
+        margin-bottom: 2rem;
+        animation: textShadowPulse 2s infinite;
+      }
+      
+      .game-story {
+        font-size: 1.2rem;
+        line-height: 1.8;
+        max-width: 800px;
+        margin: 0 auto 3rem auto;
+      }
+      
+      .story-line {
+        margin: 0.8rem 0;
+        text-align: center;
+      }
+      
+      .play-button {
+        background: #ff5733;
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
         font-family: 'Press Start 2P', cursive;
+        font-size: 1.5rem;
+        cursor: pointer;
+        position: relative;
+        text-transform: uppercase;
+        box-shadow: 6px 6px 0 #333;
+        transition: all 0.1s;
+        animation: pulse 1.5s infinite;
       }
-      .instructions-button {
-        position: fixed;
-        bottom: 1rem;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 1;
+      
+      .play-button:hover {
+        transform: scale(1.05);
       }
-      @media (max-width: 1023px) {
-        body::before {
-          content: "This game requires a display width of at least 1024px";
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background: rgba(0, 0, 0, 0.9);
-          color: white;
-          padding: 20px;
-          border-radius: 8px;
-          text-align: center;
-          z-index: 1000;
-          width: 80%;
-          max-width: 600px;
+      
+      .play-button:active {
+        transform: translateY(3px);
+        box-shadow: 3px 3px 0 #333;
+      }
+      
+      .about-section {
+        margin-top: 5rem;
+        padding: 2rem;
+        background-color: #222;
+        max-width: 900px;
+        border-radius: 10px;
+        border: 3px solid #444;
+      }
+      
+      .about-section h2 {
+        color: #00ff00;
+        margin-bottom: 1.5rem;
+      }
+      
+      .about-section p {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 1.5rem;
+      }
+      
+      .website-link {
+        color: #00aaff;
+        text-decoration: none;
+      }
+      
+      .website-link:hover {
+        text-decoration: underline;
+      }
+      
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      
+      @keyframes textShadowPulse {
+        0% {
+          text-shadow: 4px 4px 0 #ff00ff, -4px -4px 0 #00ffff;
+        }
+        50% {
+          text-shadow: 4px 4px 0 #00ffff, -4px -4px 0 #ff00ff;
+        }
+        100% {
+          text-shadow: 4px 4px 0 #ff00ff, -4px -4px 0 #00ffff;
+        }
+      }
+      
+      @media (max-width: 768px) {
+        .game-title {
+          font-size: 1.8rem;
+        }
+        .game-story {
+          font-size: 0.9rem;
+        }
+        .play-button {
+          font-size: 1.2rem;
         }
       }
     </style>
   </head>
   <body>
-    <div id="root">
-      <h1 class="game-title text-4xl font-bold text-white select-none">Super Order Editing</h1>
-      <div id="game-container"></div>
-      <button class="instructions-button mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded select-none">
-        Show Instructions
-      </button>
+    <div class="landing-container">
+      <h1 class="game-title">Order Editing: The Game</h1>
+      
+      <div class="game-story">
+        <p class="story-line">One viral brand moment.</p>
+        <p class="story-line">Hundreds of order issues.</p>
+        <p class="story-line">One hero left in the warehouse.</p>
+      </div>
+      
+      <button id="playButton" class="play-button">Play Now!</button>
+      
+      <div class="about-section">
+        <h2>About Order Editing</h2>
+        <p>Order Editing is a powerful tool that simplifies post-purchase modifications for ecommerce businesses. Our platform allows customer service teams to efficiently handle order changes, refunds, and customer requests without the complexity.</p>
+        <p>Visit <a href="https://www.orderediting.com" class="website-link" target="_blank">www.orderediting.com</a> to learn more about how we can streamline your order management process.</p>
+      </div>
     </div>
-    <script type="module" src="./src/main.tsx"></script>
+    
+    <script>
+      // Check for reset parameter in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const resetParam = urlParams.get('reset');
+      
+      // Clear game state if reset parameter is present or if directly accessed
+      if (resetParam === 'true' || (!document.referrer.includes('game.html') && !document.referrer.includes('intro.html'))) {
+        sessionStorage.removeItem('gameStarted');
+      }
+      
+      // Check if the user has already started the game
+      const hasStartedGame = sessionStorage.getItem('gameStarted');
+      
+      // If the user refreshes during gameplay, skip the intro and go directly to the game
+      if (hasStartedGame === 'true') {
+        window.location.href = 'game.html';
+      }
+      
+      // Add click event to play button
+      document.getElementById('playButton').addEventListener('click', function() {
+        window.location.href = 'intro.html';
+      });
+    </script>
   </body>
 </html>

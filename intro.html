@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/game/Misc-Images/OE-Game-Logo.webp" />
+    <meta property="og:title" content="Order Editing - The Game" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <title>Order Editing - The Game | Intro</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100vh;
+        background-color: #000;
+        font-family: 'Press Start 2P', cursive;
+        color: #fff;
+        overflow-x: hidden;
+      }
+      
+      .intro-container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+      
+      .scene {
+        display: flex;
+        margin-bottom: 4rem;
+        min-height: 300px;
+        opacity: 0;
+        transition: opacity 1s ease;
+      }
+      
+      .scene.visible {
+        opacity: 1;
+      }
+      
+      .scene-image {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .scene-image img {
+        max-width: 100%;
+        max-height: 400px;
+        border: none;
+        padding: 15px 15px 50px 15px;
+        background-color: #fff;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        transform: rotate(-2deg);
+      }
+      
+      .scene2 .scene-image img {
+        transform: rotate(3deg);
+      }
+      
+      .scene-text {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 1.5rem;
+        line-height: 1.8;
+        font-size: 1rem;
+      }
+      
+      .scene-text p {
+        margin: 0;
+        min-height: 7em;
+      }
+      
+      .scene1 {
+        flex-direction: row;
+      }
+      
+      .scene2 {
+        flex-direction: row-reverse;
+      }
+      
+      .typewriter-text {
+        border-right: 0.15em solid #fff;
+        overflow: hidden;
+        white-space: pre-wrap;
+        margin: 0 auto;
+        letter-spacing: 0.05em;
+        padding-right: 0.2em;
+      }
+      
+      .enter-button-container {
+        text-align: center;
+        margin-top: 3rem;
+        opacity: 0;
+        transition: opacity 1s ease;
+      }
+      
+      .enter-button-container.visible {
+        opacity: 1;
+      }
+      
+      .enter-button {
+        background: #3300cc;
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        font-family: 'Press Start 2P', cursive;
+        font-size: 1.2rem;
+        cursor: pointer;
+        position: relative;
+        text-transform: uppercase;
+        box-shadow: 6px 6px 0 #110044;
+        transition: all 0.1s;
+        animation: pulse 1.5s infinite;
+      }
+      
+      .enter-button:hover {
+        transform: scale(1.05);
+      }
+      
+      .enter-button:active {
+        transform: translateY(3px);
+        box-shadow: 3px 3px 0 #110044;
+      }
+      
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      
+      .sound-toggle {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        border: 1px solid #444;
+        padding: 0.5rem;
+        font-family: 'Press Start 2P', cursive;
+        font-size: 0.6rem;
+        cursor: pointer;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+      }
+      
+      .sound-toggle span {
+        margin-left: 0.5rem;
+      }
+      
+      @media (max-width: 768px) {
+        .scene {
+          flex-direction: column !important;
+        }
+        
+        .scene-image, .scene-text {
+          width: 100%;
+        }
+        
+        .scene-text {
+          margin-top: 1.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="intro-container">
+      <button id="soundToggle" class="sound-toggle">
+        <span id="soundIcon">🔊</span> SOUND
+      </button>
+      
+      <div id="scene1" class="scene scene1">
+        <div class="scene-image">
+          <!-- Character image - Ed from IT -->
+          <img src="/game/Misc-Images/ED-IT.png" alt="Ed from IT">
+        </div>
+        <div class="scene-text">
+          <p id="text1">It was supposed to be a normal Friday afternoon. Everyone had left for drinks, but Ed from IT stayed behind to finish up some orders...</p>
+        </div>
+      </div>
+      
+      <div id="scene2" class="scene scene2">
+        <div class="scene-image">
+          <!-- Brand image - Sew and Sow -->
+          <img src="/game/Misc-Images/SewandSow.png" alt="Viral brand moment">
+        </div>
+        <div class="scene-text">
+          <p id="text2">Then it happened. An A-list TikTokker posted a video wearing a FULL OUTFIT from your brand and was gushing about your full range. From there, things went ballistic!
+
+Orders started pouring in. And with them, the customer order adjustment requests. Only Ed can save the day now...</p>
+        </div>
+      </div>
+      
+      <div id="enter-button-container" class="enter-button-container">
+        <button id="enterButton" class="enter-button">Enter Warehouse</button>
+      </div>
+      
+      <!-- Audio elements for typewriter sound -->
+      <audio id="typeSound" preload="auto">
+        <source src="/game/Sound-Effects/typewriter-key.wav" type="audio/wav">
+      </audio>
+      <audio id="bellSound" preload="auto">
+        <source src="/game/Sound-Effects/typewriter-bell.mp3" type="audio/mpeg">
+      </audio>
+    </div>
+    
+    <script>
+      // Set the flag to indicate that the intro has been viewed
+      sessionStorage.setItem('introViewed', 'true');
+      
+      // Function to show scene with fade in
+      function showScene(sceneId, delay) {
+        return new Promise(resolve => {
+          setTimeout(() => {
+            const scene = document.getElementById(sceneId);
+            scene.classList.add('visible');
+            resolve();
+          }, delay);
+        });
+      }
+      
+      // Sequence the animations
+      window.onload = async function() {
+        // Initialize audio elements
+        const typeSound = document.getElementById('typeSound');
+        const bellSound = document.getElementById('bellSound');
+        
+        // Debug audio loading
+        console.log('Audio elements loaded:', !!typeSound, !!bellSound);
+        
+        // Preload sounds
+        try {
+          typeSound.load();
+          bellSound.load();
+          console.log('Audio files loaded successfully');
+        } catch (err) {
+          console.error('Error loading audio:', err);
+        }
+        
+        // Sound toggle functionality
+        let soundEnabled = true;
+        const soundToggle = document.getElementById('soundToggle');
+        const soundIcon = document.getElementById('soundIcon');
+        
+        soundToggle.addEventListener('click', function() {
+          soundEnabled = !soundEnabled;
+          soundIcon.textContent = soundEnabled ? '🔊' : '🔇';
+          
+          // Play a test sound when enabling to verify audio works
+          if (soundEnabled) {
+            typeSound.currentTime = 0;
+            typeSound.play().catch(err => console.log('Test audio error:', err));
+          }
+        });
+        
+        // Show first scene
+        await showScene('scene1', 500);
+        
+        // Get text elements
+        const text1Element = document.getElementById('text1');
+        const text2Element = document.getElementById('text2');
+        const text1Content = text1Element.textContent;
+        const text2Content = text2Element.textContent;
+        
+        // Clear text elements initially
+        text1Element.textContent = '';
+        text2Element.textContent = '';
+        text1Element.classList.add('typewriter-text');
+        
+        // Function for typewriter effect with sound control
+        function typeWriterWithSound(element, text, speed, callback) {
+          let i = 0;
+          element.textContent = '';
+          
+          function typing() {
+            if (i < text.length) {
+              element.textContent += text.charAt(i);
+              
+              // Play sound (if not a space and sound is enabled)
+              if (text.charAt(i) !== ' ' && soundEnabled) {
+                try {
+                  // Reset and play typing sound
+                  typeSound.currentTime = 0;
+                  typeSound.volume = 0.3; // Lower volume for better experience
+                  
+                  // Use async/await to handle the promise
+                  typeSound.play()
+                    .catch(err => {
+                      console.error('Audio play error:', err);
+                      // If autoplay is blocked, we can request user interaction
+                      if (err.name === 'NotAllowedError') {
+                        console.log('Audio playback requires user interaction first');
+                      }
+                    });
+                } catch (err) {
+                  console.error('Error playing typing sound:', err);
+                }
+              }
+              
+              i++;
+              setTimeout(typing, speed);
+            } else if (callback) {
+              // Play bell sound at the end of paragraph
+              if (soundEnabled) {
+                try {
+                  bellSound.currentTime = 0;
+                  bellSound.volume = 0.4;
+                  bellSound.play()
+                    .catch(err => console.error('Bell sound error:', err));
+                } catch (err) {
+                  console.error('Error playing bell sound:', err);
+                }
+              }
+              
+              // Wait for bell sound to finish before continuing
+              setTimeout(() => {
+                callback();
+              }, 500);
+            }
+          }
+          
+          typing();
+        }
+        
+        // Start typing first text (fast - 25ms per character)
+        typeWriterWithSound(text1Element, text1Content, 25, async () => {
+          // Show second scene after first text is done
+          await showScene('scene2', 500);
+          
+          // Prepare second text element
+          text2Element.classList.add('typewriter-text');
+          
+          // Start typing second text
+          typeWriterWithSound(text2Element, text2Content, 25, () => {
+            // Show enter button after second text is done
+            setTimeout(() => {
+              const enterButton = document.getElementById('enter-button-container');
+              enterButton.classList.add('visible');
+            }, 500);
+          });
+        });
+      };
+      
+      // Add click event to enter button
+      document.getElementById('enterButton').addEventListener('click', function() {
+        // Set the flag that the game has started
+        sessionStorage.setItem('gameStarted', 'true');
+        
+        // Redirect to the game
+        window.location.href = 'game.html';
+      });
+    </script>
+  </body>
+</html> 

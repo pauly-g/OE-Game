@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/game/Misc-Images/OE-Game-Logo.webp" />
+    <meta property="og:title" content="Order Editing - The Game" />
+    <meta property="og:description" content="Welcome to Order Editing: The Game. Put yourself in the shoes of an ecommerce customer service representative. Everyone else has finished up for Friday drinks while a lonely rep holds the fort at the warehouse. When the brand goes viral, all hell breaks loose. Can you keep all the customers satisfied??? Play now!" />
+    <meta property="og:image" content="/game/Misc-Images/OE-Game-Logo.webp" />
+    <meta property="og:url" content="https://example.com/game" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <title>Order Editing - The Game</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100vh;
+        overflow: hidden;
+        background-color: #1a1a1a;
+      }
+      #root {
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+      }
+      #game-container {
+        width: 100%;
+        height: 100%;
+        max-width: 1280px;
+        max-height: 720px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      canvas {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 1280px !important;
+        max-height: 720px !important;
+        object-fit: contain;
+      }
+      .game-title {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        padding: 0.5rem;
+        background: rgba(0, 0, 0, 0.5);
+        margin: 0;
+        z-index: 1;
+        font-family: 'Press Start 2P', cursive;
+      }
+      .instructions-button {
+        position: fixed;
+        bottom: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1;
+      }
+      .home-link {
+        position: fixed;
+        bottom: 1rem;
+        right: 1rem;
+        color: #aaa;
+        font-size: 0.7rem;
+        text-decoration: none;
+        font-family: 'Press Start 2P', cursive;
+        z-index: 10;
+      }
+      
+      .home-link:hover {
+        color: #fff;
+        text-decoration: underline;
+      }
+      @media (max-width: 1023px) {
+        body::before {
+          content: "This game requires a display width of at least 1024px";
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: rgba(0, 0, 0, 0.9);
+          color: white;
+          padding: 20px;
+          border-radius: 8px;
+          text-align: center;
+          z-index: 1000;
+          width: 80%;
+          max-width: 600px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <h1 class="game-title text-4xl font-bold text-white select-none">Super Order Editing</h1>
+      <div id="game-container"></div>
+      <button class="instructions-button mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded select-none">
+        Show Instructions
+      </button>
+      <a href="index.html?reset=true" class="home-link">Return to Home</a>
+    </div>
+    
+    <script>
+      // Set the flag to indicate that the game has started
+      sessionStorage.setItem('gameStarted', 'true');
+    </script>
+    
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html> 
