@@ -1286,6 +1286,9 @@ export class Level1Scene extends Phaser.Scene {
       ease: 'Bounce.Out'
     });
     
+    // Add station-specific animation when edit is grabbed
+    this.animateStationOnPickup(station);
+    
     // Add sound effect if sound system exists
     if (this.sound && this.sound.add) {
       try {
@@ -1295,6 +1298,128 @@ export class Level1Scene extends Phaser.Scene {
         console.error('Could not play pickup sound:', error);
       }
     }
+  }
+  
+  // Add a new method for station animations
+  private animateStationOnPickup(station: Station) {
+    // Get the station container which contains all visual elements
+    const container = station.container;
+    
+    // Find the station icon (it's the last element in the container)
+    const components = container.list;
+    const icon = components[components.length - 1];
+    
+    // Create unique animations based on station type
+    switch (station.type) {
+      case 'address':
+        // House icon: subtle bounce + small rotation
+        this.tweens.add({
+          targets: icon,
+          y: { from: 0, to: -15 },
+          angle: { from: 0, to: -5 },
+          duration: 300,
+          ease: 'Sine.Out',
+          yoyo: true,
+          onComplete: () => {
+            // Reset to original state
+            icon.setPosition(0, 0);
+            icon.setAngle(0);
+          }
+        });
+        break;
+        
+      case 'quantity':
+        // Numbers icon: scale effect
+        this.tweens.add({
+          targets: icon,
+          scale: { from: icon.scale, to: icon.scale * 1.2 },
+          duration: 300,
+          ease: 'Back.Out',
+          yoyo: true,
+          onComplete: () => {
+            // Reset to original scale (1.2 is the original scale from createStations)
+            icon.setScale(1.2);
+          }
+        });
+        break;
+        
+      case 'discount':
+        // Tag icon: swing left-right
+        this.tweens.add({
+          targets: icon,
+          x: { from: 0, to: 10 },
+          angle: { from: 0, to: 15 },
+          duration: 400,
+          ease: 'Sine.InOut',
+          yoyo: true,
+          onComplete: () => {
+            // Reset position and angle
+            icon.setPosition(0, 0);
+            icon.setAngle(0);
+          }
+        });
+        break;
+        
+      case 'product':
+        // Change symbol: smooth rotation
+        this.tweens.add({
+          targets: icon,
+          angle: { from: 0, to: 180 },
+          duration: 400,
+          ease: 'Cubic.InOut',
+          onComplete: () => {
+            // Reset rotation
+            icon.setAngle(0);
+          }
+        });
+        break;
+        
+      case 'invoice':
+        // Document icon: slide up and down
+        this.tweens.add({
+          targets: icon,
+          y: { from: 0, to: -20 },
+          duration: 250,
+          ease: 'Power2.Out',
+          yoyo: true,
+          onComplete: () => {
+            // Reset position
+            icon.setPosition(0, 0);
+          }
+        });
+        break;
+        
+      case 'cancel':
+        // X icon: scale and fade slightly
+        this.tweens.add({
+          targets: icon,
+          scale: { from: icon.scale, to: icon.scale * 0.8 },
+          alpha: { from: 1, to: 0.7 },
+          duration: 200,
+          ease: 'Quad.Out',
+          yoyo: true,
+          onComplete: () => {
+            // Reset scale and alpha (1.2 is the original scale from createStations)
+            icon.setScale(1.2);
+            icon.setAlpha(1);
+          }
+        });
+        break;
+    }
+    
+    // Small animation for the entire station table
+    const originalY = container.y;
+    this.tweens.add({
+      targets: container,
+      y: { from: originalY, to: originalY - 5 },
+      duration: 150,
+      ease: 'Sine.Out',
+      yoyo: true,
+      onComplete: () => {
+        // Ensure the container is reset to its original position
+        container.y = originalY;
+      }
+    });
   }
 
   private discardEdits() {

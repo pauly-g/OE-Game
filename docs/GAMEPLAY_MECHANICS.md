@@ -89,6 +89,17 @@
   5. **Need Invoice (📄)** - For adding invoice documentation
   6. **Cancel Order (❌)** - For processing order cancellations
 
+- **Station Animations**:
+  - Each station has a unique, subtle animation when an edit is grabbed:
+    - **Address Edit (🏠)**: House icon bounces slightly with a small rotation
+    - **Quantity Edit (🔢)**: Numbers icon scales up and down
+    - **Discount Code (🏷️)**: Tag icon swings left to right
+    - **Change Product (🔄)**: Icon rotates 180 degrees and back
+    - **Need Invoice (📄)**: Document slides up and down
+    - **Cancel Order (❌)**: Icon scales down slightly with fade effect
+  - All stations have a subtle bounce animation on the table when an edit is grabbed
+  - Animations are brief (200-400ms) and always return to the original state
+
 - **Station Unlocking Progression**:
   - Only the first station (Address Edit) is unlocked at the start of the game
   - A new station is unlocked every 5 successfully applied edits
