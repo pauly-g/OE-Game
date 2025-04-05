@@ -1016,64 +1016,7 @@ export class Level1Scene extends Phaser.Scene {
         28
       );
 
-      // Check collisions with stations
-      this.stations.forEach(station => {
-        if (station.isUnlocked) {
-          const stationBounds = new Phaser.Geom.Rectangle(
-            station.container.x - 50,
-            station.container.y - 50,
-            100, 
-            100
-          );
-          
-          if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
-            // Determine which side of the station the player is coming from
-            const dx = this.player.x - station.container.x;
-            const dy = this.player.y - station.container.y;
-            
-            // Calculate distances to each edge of the station
-            const distToLeft = Math.abs(dx + 50);
-            const distToRight = Math.abs(dx - 50);
-            const distToTop = Math.abs(dy + 50);
-            const distToBottom = Math.abs(dy - 50);
-            
-            // Find the minimum distance to determine which side the player is on
-            const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-            
-            // Add a small buffer to prevent sticking/sliding
-            const buffer = 5;
-            
-            // Apply appropriate displacement with increased push distance
-            if (minDist === distToLeft) {
-              this.player.x = station.container.x - 80; // Increased push distance to 80
-            } else if (minDist === distToRight) {
-              this.player.x = station.container.x + 80; // Increased push distance to 80
-            } else if (minDist === distToTop) {
-              this.player.y = station.container.y - 80; // Increased push distance to 80
-            } else if (minDist === distToBottom) {
-              this.player.y = station.container.y + 80; // Increased push distance to 80
-              
-              // Add additional check for bottom collision to prevent sliding
-              if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
-                // If player is trying to move horizontally while colliding with bottom,
-                // push them slightly further down to avoid the collision zone
-                this.player.y += buffer;
-              }
-            }
-            
-            // Add extra push when trying to move directly into a station
-            if (minDist === distToLeft && this.cursors.right.isDown) {
-              this.player.x -= buffer; // Push little extra left when trying to move right
-            } else if (minDist === distToRight && this.cursors.left.isDown) {
-              this.player.x += buffer; // Push little extra right when trying to move left
-            } else if (minDist === distToTop && this.cursors.down.isDown) {
-              this.player.y -= buffer; // Push little extra up when trying to move down
-            } else if (minDist === distToBottom && this.cursors.up.isDown) {
-              this.player.y += buffer; // Push little extra down when trying to move up
-            }
-          }
-        }
-      });
+      // Check collisions with stations - REMOVED to allow walking over stations
       
       // Update animation based on direction and movement
       if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
@@ -3094,71 +3037,7 @@ export class Level1Scene extends Phaser.Scene {
     if (this.player.y < 30) this.player.y = 30;
     if (this.player.y > this.cameras.main.height - 30) this.player.y = this.cameras.main.height - 30;
 
-    // Check collisions with stations
-    this.stations.forEach(station => {
-      if (station.isUnlocked) {
-        const stationBounds = new Phaser.Geom.Rectangle(
-          station.container.x - 50,
-          station.container.y - 50,
-          100, 
-          100
-        );
-        
-        const playerBounds = new Phaser.Geom.Rectangle(
-          this.player!.x - 20,
-          this.player!.y - 30,
-          40, 
-          60
-        );
-        
-        if (Phaser.Geom.Rectangle.Overlaps(playerBounds, stationBounds)) {
-          // Determine which side of the station the player is coming from
-          const dx = this.player!.x - station.container.x;
-          const dy = this.player!.y - station.container.y;
-          
-          // Calculate distances to each edge of the station
-          const distToLeft = Math.abs(dx + 50);
-          const distToRight = Math.abs(dx - 50);
-          const distToTop = Math.abs(dy + 50);
-          const distToBottom = Math.abs(dy - 50);
-          
-          // Find the minimum distance to determine which side the player is on
-          const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-          
-          // Add a small buffer to prevent sticking/sliding
-          const buffer = 5;
-          
-          // Apply appropriate displacement with increased push distance
-          if (minDist === distToLeft) {
-            this.player!.x = station.container.x - 80; // Increased push distance to 80
-          } else if (minDist === distToRight) {
-            this.player!.x = station.container.x + 80; // Increased push distance to 80
-          } else if (minDist === distToTop) {
-            this.player!.y = station.container.y - 80; // Increased push distance to 80
-          } else if (minDist === distToBottom) {
-            this.player!.y = station.container.y + 80; // Increased push distance to 80
-            
-            // Add additional check for bottom collision to prevent sliding
-            if (this.cursors.left?.isDown || this.cursors.right?.isDown) {
-              // If player is trying to move horizontally while colliding with bottom,
-              // push them slightly further down to avoid the collision zone
-              this.player!.y += buffer;
-            }
-          }
-          
-          // Add extra push when trying to move directly into a station
-          if (minDist === distToLeft && this.cursors.right.isDown) {
-            this.player!.x -= buffer; // Push little extra left when trying to move right
-          } else if (minDist === distToRight && this.cursors.left.isDown) {
-            this.player!.x += buffer; // Push little extra right when trying to move left
-          } else if (minDist === distToTop && this.cursors.down.isDown) {
-            this.player!.y -= buffer; // Push little extra up when trying to move down
-          } else if (minDist === distToBottom && this.cursors.up.isDown) {
-            this.player!.y += buffer; // Push little extra down when trying to move up
-          }
-        }
-      }
-    });
+    // Check collisions with stations - REMOVED to allow walking over stations
     
     // Update tracking of last direction and movement state
     if (direction !== this.lastDirection || (this.lastMoving !== isMoving)) {
