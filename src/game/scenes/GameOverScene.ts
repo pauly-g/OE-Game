@@ -61,7 +61,11 @@ export class GameOverScene extends Phaser.Scene {
       const height = this.cameras.main.height;
       
       // Set up key bindings
-      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      if (this.input.keyboard) {
+        this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      } else {
+        gameDebugger.error('Keyboard input not available in GameOverScene create');
+      }
       
       // Check auth status and submit score - add this at the start of create()
       gameDebugger.info('GameOverScene triggering checkGameAuth event with score:', this.score);
@@ -235,21 +239,50 @@ export class GameOverScene extends Phaser.Scene {
       // Only proceed if leaderboard is not open
       if (!isLeaderboardOpen) {
         gameDebugger.info('Space key pressed in GameOverScene - restarting game');
-        this.scene.start('Level1Scene');
         
-        // Dispatch restart event
-        const restartEvent = new CustomEvent('gameRestart', {
-          detail: { source: 'gameOver' }
-        });
-        window.dispatchEvent(restartEvent);
-        
-        // Create and dispatch a custom event to reset stations
         try {
-          const resetStationsEvent = new CustomEvent('resetStations');
+          // 1. First, dispatch a comprehensive reset event that will be caught by App.tsx
+          const fullResetEvent = new CustomEvent('gameRestartWithStations', { 
+            detail: { 
+              requireStationReset: true,
+              forceRecreate: true,
+              source: 'gameOverSpacebar'
+            } 
+          });
+          window.dispatchEvent(fullResetEvent);
+          gameDebugger.info('Full reset event dispatched (gameRestartWithStations)');
+          
+          // 2. Then explicitly reset stations in stationTracker
+          const resetStationsEvent = new CustomEvent('resetStations', {
+            detail: { source: 'gameOverSpacebar', complete: true }
+          });
           window.dispatchEvent(resetStationsEvent);
           gameDebugger.info('Reset stations event dispatched');
+          
+          // 3. Dispatch event to reset any music/radio state
+          const resetMusicEvent = new CustomEvent('resetMusic', {
+            detail: { source: 'gameOverSpacebar' }
+          });
+          window.dispatchEvent(resetMusicEvent);
+          gameDebugger.info('Reset music event dispatched');
+          
+          // 4. Small delay to ensure events are processed before scene transition
+          setTimeout(() => {
+            // 5. Pass reset flag to Level1Scene
+            this.scene.start('Level1Scene', { reset: true, fullReset: true }); 
+            gameDebugger.info('Level1Scene started with full reset flags');
+            
+            // 6. Finally dispatch the standard restart event
+            const restartEvent = new CustomEvent('gameRestart', {
+              detail: { source: 'gameOver', fullReset: true }
+            });
+            window.dispatchEvent(restartEvent);
+            gameDebugger.info('Standard gameRestart event dispatched');
+          }, 50); // Small delay to ensure events are processed in order
         } catch (error) {
-          gameDebugger.error('Error dispatching station reset event:', error);
+          gameDebugger.error('Error in spacebar restart sequence:', error);
+          // Fallback to basic restart if the enhanced sequence fails
+          this.scene.start('Level1Scene', { reset: true });
         }
       } else {
         gameDebugger.info('Space key pressed but ignored - leaderboard is open');

@@ -105,11 +105,34 @@ const unlockStation = (stationType: string): void => {
 
 // Reset all stations (mainly for testing)
 const resetStations = (): void => {
+  // Remove all station data from localStorage
   localStorage.removeItem(UNLOCKED_STATIONS_KEY);
+  
   // Also clear the reset tracker so next page load will trigger a reset
   localStorage.removeItem(RESET_TRACKER_KEY);
-  console.log('[StationTracker] Reset all stations');
+  
+  // Remove any additional station-related data
+  localStorage.removeItem('oe-game-last-unlock');
+  localStorage.removeItem('oe-game-unlock-timestamp');
+  
+  console.log('[StationTracker] Reset all stations - localStorage cleared');
+  
+  // Re-initialize stations to default state (all locked)
   initializeStations();
+  
+  // Dispatch a global event to notify other components of reset
+  try {
+    const stationResetEvent = new CustomEvent('stationReset', {
+      detail: { timestamp: Date.now() }
+    });
+    window.dispatchEvent(stationResetEvent);
+    console.log('[StationTracker] stationReset event dispatched');
+  } catch (error) {
+    console.error('[StationTracker] Error dispatching stationReset event:', error);
+  }
+  
+  // Log the current state after reset
+  console.log('[StationTracker] Current state after reset:', getUnlockedStations());
 };
 
 // Force unlock a station (for testing)

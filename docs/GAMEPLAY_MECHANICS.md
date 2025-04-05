@@ -288,6 +288,36 @@ For testing and demonstration purposes:
   - Click the "Click to Restart" button to start a new game
   - Press the spacebar to quickly restart the game
 - Final score is displayed on the game over screen
+- "SUBMIT TO LEADERBOARD" button allows players to submit their scores to the global leaderboard
+
+## Game Reset & State Management
+
+### Game Reset Mechanism
+- Complete game state is reset when restarting through various methods:
+  - Page refresh: Full browser-level reset including localStorage reset
+  - Spacebar press: Full game state reset including:
+    - All station unlocks are reset to initial state
+    - All unlocked music tracks are reset
+    - Score and lives counters are reset
+    - All orders are cleared from the screen
+    - All carried edits are discarded
+    - Game difficulty resets to initial values
+    - Any open UI components (leaderboard, etc.) are closed
+- Reset process is orchestrated through a comprehensive event system:
+  1. `gameRestartWithStations`: Triggers full station reset
+  2. `resetStations`: Clears station unlock data from localStorage
+  3. `resetMusic`: Resets the music player state
+  4. `gameRestart`: Resets the game scenes and core gameplay elements
+  5. `stationReset`: Notifies components about the station reset
+
+### State Persistence
+- Game state is deliberately non-persistent between game sessions
+- All game progress is reset when:
+  - A game ends and player restarts
+  - The browser page is refreshed
+  - The spacebar is pressed from the game over screen
+- This design ensures each playthrough starts from a consistent state
+- Authentication state and leaderboard scores are the only data persisted between sessions
 
 ## Game Architecture & Technical Implementation
 

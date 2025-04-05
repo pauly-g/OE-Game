@@ -222,7 +222,7 @@ function AppContent() {
   }, [game]);
 
   // Ensure music plays after page load/refresh using the most direct approach possible
-  useEffect(() => {
+  /* useEffect(() => {
     const playMusic = () => {
       console.log('[App] Direct attempt to force music play');
       
@@ -269,7 +269,7 @@ function AppContent() {
       window.removeEventListener('load', playMusic);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, []); */
 
   // Handle game restart with spacebar to ensure both music and stations work
   useEffect(() => {
@@ -310,18 +310,68 @@ function AppContent() {
     const handleResetStations = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.log('[App] Received resetStations event, source:', 
-                 customEvent.detail?.source || 'unknown');
+                 customEvent.detail?.source || 'unknown', 
+                 'complete:', customEvent.detail?.complete || false);
       
       // Force a complete station reset
       console.log('[App] Forcibly resetting station tracker from App component');
       stationTracker.resetStations();
+      
+      // If complete reset requested, also reset related app state
+      if (customEvent.detail?.complete) {
+        console.log('[App] Performing complete reset of app state');
+        setCurrentScore(undefined);
+        setToastMessage({ type: 'info', message: '' });
+        
+        // Reset UI state if needed
+        if (showLeaderboard) {
+          console.log('[App] Closing leaderboard due to game reset');
+          setShowLeaderboard(false);
+        }
+        
+        // Reset notification state
+        setNotification({
+          title: '',
+          artist: '',
+          isVisible: false
+        });
+      }
     };
     
+    // Add new listener for music reset
+    const handleResetMusic = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[App] Received resetMusic event, source:', 
+                 customEvent.detail?.source || 'unknown');
+      
+      // Dispatch an event to fully reset the radio component
+      const radioResetEvent = new CustomEvent('radioReset', {
+        detail: { source: customEvent.detail?.source || 'App' }
+      });
+      console.log('[App] Dispatching radioReset event to reset Radio component state');
+      window.dispatchEvent(radioResetEvent);
+      
+      // After a short delay, trigger music restart
+      setTimeout(() => {
+        // Force play the warehouse music as a fallback
+        const musicEvent = new CustomEvent('forcePlayMusic', { 
+          detail: { 
+            source: 'resetMusic',
+            trackId: 'warehouse_default' // Default track ID if available
+          } 
+        });
+        console.log('[App] Dispatching forcePlayMusic event after reset');
+        window.dispatchEvent(musicEvent);
+      }, 200);
+    };
+
     window.addEventListener('resetStations', handleResetStations);
-    
+    window.addEventListener('resetMusic', handleResetMusic);
+
     return () => {
       window.removeEventListener('keydown', handleGameRestart);
       window.removeEventListener('resetStations', handleResetStations);
+      window.removeEventListener('resetMusic', handleResetMusic);
     };
   }, [showLeaderboard]);
 
@@ -441,7 +491,7 @@ function AppContent() {
             
             // Set toast message based on result
             setToastMessage({
-              type: result.success ? 'success' : 'info',
+              type: result.isHighScore ? 'success' : 'info',
               message: result.message
             });
             
