@@ -12,7 +12,10 @@ import {
   endBefore,
   limitToLast,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  runTransaction,
+  DocumentReference,
+  setDoc
 } from 'firebase/firestore';
 import { db } from './config';
 
@@ -31,7 +34,8 @@ export interface LeaderboardEntry {
 }
 
 /**
- * Submit a score to the leaderboard
+ * Submit a score to the leaderboard using a Transaction for atomicity.
+ * Ensures score is only added if it's strictly higher than the user's current best.
  * 
  * @param userId - The user's ID
  * @param score - The score to submit
@@ -47,49 +51,129 @@ export const submitScore = async (
   photoURL: string | null,
   company: string | null
 ): Promise<string | null> => {
+  console.log('[FIREBASE Transaction] Attempting to submit score for user:', userId, 'Score:', score);
+
+  // Validate score before starting transaction
+  if (isNaN(score) || !isFinite(score) || score < 0) {
+    console.error('[FIREBASE Transaction] Invalid score value:', score);
+    return null;
+  }
+
   try {
-    // Log start of operation
-    console.log('[FIREBASE] Attempting to submit score for user:', userId);
+    // Make sure the leaderboard collection exists by writing a dummy doc if needed
+    const leaderboardCol = collection(db, 'leaderboard');
     
-    // Validate score
-    if (isNaN(score) || !isFinite(score) || score < 0) {
-      console.error('[FIREBASE] Invalid score value:', score);
+    // Check if the collection exists by trying to get any document
+    const checkQuery = query(leaderboardCol, limit(1));
+    const checkSnapshot = await getDocs(checkQuery);
+    
+    // If collection is empty or doesn't exist, create a placeholder document to ensure it exists
+    // This will be deleted or replaced by the real score if needed
+    if (checkSnapshot.empty) {
+      console.log('[FIREBASE Transaction] Leaderboard collection appears empty, creating placeholder document');
+      try {
+        const placeholderRef = doc(leaderboardCol);
+        await setDoc(placeholderRef, {
+          userId: 'placeholder',
+          score: -1,
+          displayName: 'System',
+          timestamp: serverTimestamp(),
+          placeholderDoc: true
+        });
+        console.log('[FIREBASE Transaction] Created placeholder document to ensure collection exists');
+      } catch (err) {
+        console.error('[FIREBASE Transaction] Error creating placeholder document:', err);
+        // Continue with transaction attempt even if this fails
+      }
+    }
+
+    // 1. Query OUTSIDE transaction to find the reference of the current best score document
+    const userBestScoreQuery = query(
+      leaderboardCol,
+      where('userId', '==', userId),
+      orderBy('score', 'desc'),
+      limit(1)
+    );
+    
+    const querySnapshot = await getDocs(userBestScoreQuery);
+    let bestScoreDocRef: DocumentReference | null = null;
+    
+    if (!querySnapshot.empty) {
+      const bestDoc = querySnapshot.docs[0];
+      bestScoreDocRef = doc(db, 'leaderboard', bestDoc.id); // Get the DocumentReference
+      console.log(`[FIREBASE Pre-Transaction] Found user's current best score doc ref (ID: ${bestScoreDocRef.id})`);
+    } else {
+      console.log(`[FIREBASE Pre-Transaction] No previous score found for user ${userId}.`);
+    }
+
+    // 2. Run the score submission within a transaction
+    const newDocId = await runTransaction(db, async (transaction) => {
+      console.log('[FIREBASE Transaction] Transaction started.');
+      
+      let scoreToCheck = -1; // Default score to check against if no previous entry exists
+
+      // 3. Read the current best score *again* inside the transaction for consistency
+      if (bestScoreDocRef) {
+        const currentBestDocSnap = await transaction.get(bestScoreDocRef);
+        if (currentBestDocSnap.exists()) {
+          // Ensure score field exists and is a number
+          const currentScoreData = currentBestDocSnap.data();
+          if (typeof currentScoreData.score === 'number') {
+             scoreToCheck = currentScoreData.score;
+             console.log(`[FIREBASE Transaction] Read current best score inside transaction: ${scoreToCheck}`);
+          } else {
+             console.warn(`[FIREBASE Transaction] Best score document ${bestScoreDocRef.id} exists but score field is not a number. Treating as -1.`);
+             scoreToCheck = -1;
+          }
+        } else {
+           // Document might have been deleted between the query and the transaction start
+           console.log(`[FIREBASE Transaction] Best score document ${bestScoreDocRef.id} no longer exists.`);
+           scoreToCheck = -1;
+        }
+      } else {
+        console.log('[FIREBASE Transaction] No previous best score document reference.');
+        scoreToCheck = -1; 
+      }
+
+      // 4. Compare the new score with the current best read inside the transaction
+      // Use strict inequality (>)
+      console.log(`[FIREBASE Transaction] Comparing new score ${score} with scoreToCheck ${scoreToCheck}`);
+      if (score > scoreToCheck) {
+        console.log(`[FIREBASE Transaction] New score ${score} IS strictly higher. Proceeding with write.`);
+        
+        // 5. If higher, create the new score document *within the transaction*
+        const newScoreRef = doc(leaderboardCol); // Generate a new doc ref for the new entry
+        transaction.set(newScoreRef, {
+          userId,
+          score, // Use the validated score
+          displayName,
+          photoURL,
+          company,
+          timestamp: serverTimestamp() // Use server timestamp
+        });
+        console.log('[FIREBASE Transaction] New score document queued for write with ID:', newScoreRef.id);
+        return newScoreRef.id; // Return the new document ID from the transaction
+      } else {
+        // 6. If not strictly higher, abort the transaction
+        console.log(`[FIREBASE Transaction] New score ${score} is NOT strictly higher than ${scoreToCheck}. Aborting submission.`);
+        // Returning null signals failure/abort due to not being a high score
+        return null; 
+      }
+    });
+
+    // Transaction completed
+    if (newDocId) {
+      console.log('[FIREBASE Transaction] Submission successful. New document ID:', newDocId);
+      return newDocId;
+    } else {
+      // This means the transaction callback returned null (score not high enough)
+      console.log('[FIREBASE Transaction] Submission aborted (score not strictly higher).');
       return null;
     }
-    
-    // First check if this is a high score for the user
-    const userPreviousBest = await getUserBestScore(userId);
-    
-    // If a previous best exists and the new score isn't higher, don't submit
-    if (userPreviousBest && userPreviousBest.score >= score) {
-      console.log('[FIREBASE] Score not submitted - not a new high score', { 
-        newScore: score, 
-        previousBest: userPreviousBest.score 
-      });
-      return null;
-    }
-    
-    console.log('[FIREBASE] Score will be submitted - either first score or new high score');
-    
-    // Create a new leaderboard entry
-    const leaderboardRef = collection(db, 'leaderboard');
-    const entryData = {
-      userId,
-      score,
-      displayName,
-      photoURL,
-      company,
-      timestamp: serverTimestamp()
-    };
-    
-    console.log('[FIREBASE] Submitting leaderboard entry:', entryData);
-    
-    const docRef = await addDoc(leaderboardRef, entryData);
-    console.log('[FIREBASE] Score submitted successfully with ID:', docRef.id);
-    
-    return docRef.id;
+
   } catch (error) {
-    console.error('[FIREBASE] Error submitting score:', error);
+    // This catches errors during the transaction execution itself
+    console.error('[FIREBASE Transaction] Error running score submission transaction:', error);
     return null;
   }
 };
@@ -271,76 +355,80 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
 export const getUserBestScore = async (userId: string): Promise<LeaderboardEntry | null> => {
   try {
     if (!userId) {
-      console.error('[Leaderboard] Cannot get best score: userId is empty or undefined');
+      console.error('[Leaderboard] getUserBestScore: userId is empty or undefined');
       return null;
     }
     
-    console.log(`[Leaderboard] Getting best score for user: ${userId}`);
+    console.log(`[Leaderboard] getUserBestScore: Getting best score for user: ${userId}`);
+    
+    // Make sure the leaderboard collection exists
+    const leaderboardCol = collection(db, 'leaderboard');
+    
+    // If collection doesn't exist or is empty, it will simply return empty results
+    // which is handled correctly in the code below
     
     const q = query(
-      collection(db, 'leaderboard'),
+      leaderboardCol,
       where('userId', '==', userId),
       orderBy('score', 'desc'),
       limit(1)
     );
     
-    const querySnapshot = await getDocs(q);
-    console.log(`[Leaderboard] User best score query returned ${querySnapshot.docs.length} results`);
+    // Try to execute the query, catching any specific index-related errors
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (error) {
+      console.error('[Leaderboard] getUserBestScore: Error executing query:', error);
+      // Log specific error information to help diagnose index issues
+      if (error instanceof Error) {
+        console.error('[Leaderboard] Error message:', error.message);
+        if (error.message.includes('index')) {
+          console.error('[Leaderboard] This appears to be an index error. Please check Firebase console to create the required index.');
+        }
+      }
+      return null;
+    }
     
     if (querySnapshot.empty) {
-      console.log(`[Leaderboard] No scores found for user ${userId}`);
+      console.log(`[Leaderboard] getUserBestScore: No previous scores found for user ${userId}.`);
       return null;
-    }
-    
-    const doc = querySnapshot.docs[0];
-    const data = doc.data();
-    
-    console.log(`[Leaderboard] User best score data:`, {
-      id: doc.id,
-      userId: data.userId,
-      score: data.score,
-      displayName: data.displayName,
-      company: data.company,
-      timestamp: data.timestamp ? 'timestamp exists' : 'no timestamp'
-    });
-    
-    // Ensure score is a number
-    const score = typeof data.score === 'number' ? data.score : Number(data.score);
-    if (isNaN(score)) {
-      console.error(`[Leaderboard] Invalid score in document ${doc.id}: ${data.score}`);
-      return null;
-    }
-    
-    // Handle timestamp conversion safely (same as in getTopScores)
-    let timestamp = new Date();
-    if (data.timestamp) {
-      if (typeof data.timestamp.toDate === 'function') {
-        timestamp = data.timestamp.toDate();
-      } else if (data.timestamp instanceof Date) {
-        timestamp = data.timestamp;
-      } else if (data.timestamp.seconds) {
-        // Firestore timestamp object with seconds and nanoseconds
-        timestamp = new Date(data.timestamp.seconds * 1000);
+    } else {
+      // Should only be one document due to limit(1)
+      const doc = querySnapshot.docs[0];
+      const data = doc.data();
+      console.log(`[Leaderboard] getUserBestScore: Found previous best score for user ${userId}:`, data);
+      
+      // Handle timestamp conversion safely (copying logic from getTopScores)
+      let timestamp = new Date();
+      if (data.timestamp) {
+        if (typeof data.timestamp.toDate === 'function') {
+          timestamp = data.timestamp.toDate();
+        } else if (data.timestamp instanceof Date) {
+          timestamp = data.timestamp;
+        } else if (data.timestamp.seconds) {
+          timestamp = new Date(data.timestamp.seconds * 1000);
+        }
+      } else if (data.createdAt) {
+        timestamp = new Date(data.createdAt);
       }
-    } else if (data.createdAt) {
-      // Fall back to createdAt if timestamp is missing
-      timestamp = new Date(data.createdAt);
+      
+      const bestScoreEntry: LeaderboardEntry = {
+        id: doc.id,
+        userId: data.userId,
+        score: data.score || 0,
+        displayName: data.displayName || 'Anonymous',
+        company: data.company || 'Unknown Company',
+        photoURL: data.photoURL || null,
+        timestamp: timestamp
+      };
+      
+      console.log(`[Leaderboard] getUserBestScore: Returning best score entry for user ${userId}:`, bestScoreEntry);
+      return bestScoreEntry;
     }
-    
-    console.log(`[Leaderboard] User best score: ${score}, timestamp: ${timestamp}`);
-    
-    return {
-      id: doc.id,
-      userId: data.userId,
-      score: score,
-      displayName: data.displayName || 'Anonymous',
-      company: data.company || 'Unknown Company',
-      photoURL: data.photoURL || null,
-      timestamp: timestamp
-    };
   } catch (error) {
-    console.error('Error getting user best score:', error);
-    return null;
+    console.error(`[Leaderboard] getUserBestScore: Error getting best score for user ${userId}:`, error);
+    return null; // Return null on error
   }
 };
 
@@ -374,19 +462,36 @@ export const getUserScoreRank = async (score: number): Promise<number> => {
     
     console.log('[Leaderboard] Calculating real rank from Firebase for score:', score);
     // Query to count how many scores are higher than the user's score
+    const leaderboardCol = collection(db, 'leaderboard');
+    
     const q = query(
-      collection(db, 'leaderboard'),
+      leaderboardCol,
       where('score', '>', score)
     );
     
-    const querySnapshot = await getDocs(q);
+    // Try to execute the query, catching any specific index-related errors
+    let querySnapshot;
+    try {
+      querySnapshot = await getDocs(q);
+    } catch (error) {
+      console.error('[Leaderboard] getUserScoreRank: Error executing query:', error);
+      // Log specific error information to help diagnose index issues
+      if (error instanceof Error) {
+        console.error('[Leaderboard] Error message:', error.message);
+        if (error.message.includes('index')) {
+          console.error('[Leaderboard] This appears to be an index error. Please check Firebase console to create the required index.');
+        }
+      }
+      return 1; // Default to rank 1 if we can't determine
+    }
+    
     // Rank is the count of higher scores + 1
     const rank = querySnapshot.size + 1;
     console.log(`[Leaderboard] Determined real rank ${rank} for score ${score}`);
     return rank;
   } catch (error) {
     console.error('Error getting user score rank:', error);
-    return 0;
+    return 1; // Default to rank 1 in case of error
   }
 };
 
