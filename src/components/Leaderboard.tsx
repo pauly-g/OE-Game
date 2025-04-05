@@ -11,6 +11,114 @@ interface LeaderboardProps {
   inGameFrame?: boolean; // For styling, true by default
 }
 
+// Add a new CSS class for the golden shimmer effect
+const goldenShimmerStyle = `
+  @keyframes shimmer {
+    0%, 85%, 100% {
+      background-position: 0% 0;
+    }
+    90% {
+      background-position: 100% 0;
+    }
+  }
+  
+  /* Fix formatting issues */
+  .scores-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+  }
+  
+  .scores-table th, .scores-table td {
+    padding: 8px 16px;
+    border: none;
+    text-align: left;
+  }
+  
+  .scores-table th:first-child, .scores-table td:first-child {
+    width: 15%;
+  }
+  
+  .scores-table th:nth-child(2), .scores-table td:nth-child(2) {
+    width: 35%;
+  }
+  
+  .scores-table th:nth-child(3), .scores-table td:nth-child(3) {
+    width: 35%;
+  }
+  
+  .scores-table th:last-child, .scores-table td:last-child {
+    width: 15%;
+    text-align: right;
+  }
+  
+  .scores-table tbody tr {
+    background-color: rgba(30, 41, 59, 0.8);
+  }
+  
+  .scores-table tbody tr:nth-child(even) {
+    background-color: rgba(30, 41, 59, 0.6);
+  }
+  
+  .scores-table .player-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .scores-table .player-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  
+  .scores-table .current-user-badge {
+    background-color: #3b82f6;
+    color: white;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+  }
+  
+  /* Apply golden shimmer effect as an overlay to maintain layout */
+  .golden-shimmer {
+    position: relative;
+    z-index: 0;
+  }
+  
+  .golden-shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg, 
+      rgba(36, 36, 36, 0.9) 0%,
+      rgba(36, 36, 36, 0.9) 10%, 
+      rgba(211, 175, 55, 0.4) 20%, 
+      rgba(255, 223, 0, 0.5) 30%, 
+      rgba(211, 175, 55, 0.4) 40%,
+      rgba(36, 36, 36, 0.9) 50%,
+      rgba(36, 36, 36, 0.9) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 10s infinite ease-in-out;
+    box-shadow: 0 0 3px rgba(255, 215, 0, 0.2);
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    z-index: -1;
+    pointer-events: none;
+  }
+  
+  .current-user-row {
+    font-weight: 500;
+  }
+`;
+
 const Leaderboard: React.FC<LeaderboardProps> = ({ 
   isOpen, 
   onClose, 
@@ -30,6 +138,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showSignIn, setShowSignIn] = useState<boolean>(false);
   const [debug, setDebug] = useState<string>('');
+  // Track the most recent score submission
+  const [mostRecentScoreId, setMostRecentScoreId] = useState<string | null>(null);
 
   // Authentication context
   const { 
@@ -149,10 +259,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
       
       const submissionResult = await submitUserScore(userScore);
       
-      if (submissionResult) {
-        console.log('Score submitted successfully with ID:', submissionResult);
+      if (submissionResult.success && submissionResult.isHighScore) {
+        console.log('Score submitted successfully');
+        // Store ID of most recent score submission
+        if (currentUser) {
+          setMostRecentScoreId(currentUser.uid);
+        }
       } else {
-        console.error('Score submission failed - no document ID returned');
+        console.error('Score submission failed or was not a high score');
         setError('Failed to submit score. Please try again.');
         document.body.removeChild(loadingMsg);
         return;
@@ -217,8 +331,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
     console.log('Current user:', currentUser?.uid);
     console.log('Top scores to render:', topScores);
     
+    // Track if we've already found the user's highest score
+    let foundHighestUserScore = false;
+    
     return (
       <>
+        {/* Inject the shimmer animation CSS */}
+        <style>{goldenShimmerStyle}</style>
+        
         {/* Top Scores Table */}
         <div className="leaderboard-section">
           <h3>TOP 10 SCORES</h3>
@@ -240,12 +360,25 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
                 topScores.map((entry, index) => {
                   // Check if this entry belongs to the current user
                   const isCurrentUser = currentUser && entry.userId === currentUser.uid;
+                  
+                  // This is the user's highest score if it's their first occurrence in the list
+                  // since scores are already sorted in descending order
+                  const isHighestUserScore = isCurrentUser && !foundHighestUserScore;
+                  
+                  // Mark that we've found the highest score for this user
+                  if (isHighestUserScore) {
+                    foundHighestUserScore = true;
+                  }
+                  
                   console.log(`Entry ${index}: userId=${entry.userId}, isCurrentUser=${isCurrentUser}, company=${entry.company}`);
                   
                   return (
                     <tr 
                       key={entry.id} 
-                      className={isCurrentUser ? "current-user-row" : ""}
+                      className={`
+                        ${isCurrentUser ? "current-user-row" : ""}
+                        ${isHighestUserScore ? "golden-shimmer" : ""}
+                      `}
                     >
                       <td>#{index + 1}</td>
                       <td>
@@ -296,29 +429,44 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {/* Scores above user */}
-                {nearbyScores.above.map((entry, index) => (
-                  <tr key={`above-${entry.id}`}>
-                    <td>#{userRank - nearbyScores.above.length + index}</td>
-                    <td>
-                      <div className="player-info">
-                        {entry.photoURL && (
-                          <img 
-                            src={entry.photoURL} 
-                            alt="" 
-                            className="player-avatar"
-                          />
-                        )}
-                        <span>{entry.displayName || 'Anonymous'}</span>
-                      </div>
-                    </td>
-                    <td>{entry.company || '-'}</td>
-                    <td className="score-value">{entry.score}</td>
-                  </tr>
-                ))}
+                {/* Reset the flag as we're now in a different section */}
+                {(() => { foundHighestUserScore = false; return null; })()}
                 
-                {/* User's score */}
-                <tr className="current-user-row">
+                {/* Scores above user */}
+                {nearbyScores.above.map((entry, index) => {
+                  const isCurrentUser = currentUser && entry.userId === currentUser.uid;
+                  const isHighestUserScore = isCurrentUser && !foundHighestUserScore;
+                  
+                  if (isHighestUserScore) {
+                    foundHighestUserScore = true;
+                  }
+                  
+                  return (
+                    <tr 
+                      key={`above-${entry.id}`}
+                      className={isHighestUserScore ? "golden-shimmer" : ""}
+                    >
+                      <td>#{userRank - nearbyScores.above.length + index}</td>
+                      <td>
+                        <div className="player-info">
+                          {entry.photoURL && (
+                            <img 
+                              src={entry.photoURL} 
+                              alt="" 
+                              className="player-avatar"
+                            />
+                          )}
+                          <span>{entry.displayName || 'Anonymous'}</span>
+                        </div>
+                      </td>
+                      <td>{entry.company || '-'}</td>
+                      <td className="score-value">{entry.score}</td>
+                    </tr>
+                  );
+                })}
+                
+                {/* User's score - always highlight with golden shimmer if user scores not found in above entries */}
+                <tr className={`current-user-row ${!foundHighestUserScore ? "golden-shimmer" : ""}`}>
                   <td>#{userRank}</td>
                   <td>
                     <div className="player-info">
