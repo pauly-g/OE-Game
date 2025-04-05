@@ -40,6 +40,12 @@ import { SpeechBubble } from '../ui/SpeechBubble';
 import { regularComments, powerUpComments } from '../data/BuyerComments';
 import { stationTracker } from '../utils/stationTracker';
 
+// Get the RESET_TRACKER_KEY from stationTracker
+import { stationTracker } from '../utils/stationTracker';
+
+// Add this constant definition for when we need to access it directly
+const RESET_TRACKER_KEY = 'oe-game-tracker-reset';
+
 interface Order {
   id: string;
   types: string[];
@@ -175,22 +181,71 @@ export class Level1Scene extends Phaser.Scene {
     this.lives = 3;
   }
 
-  init(data?: { reset: boolean }) {
+  init(data?: { reset: boolean, fullReset?: boolean }) {
     console.log('Level1Scene init called', data);
+    
+    const isFullReset = data?.fullReset === true;
+    
     if (data?.reset) {
-      console.log('Game restarting from game over screen - forcing full reset');
+      console.log(`Game restarting - performing ${isFullReset ? 'FULL' : 'standard'} reset in Level1Scene init`);
       
-      // Force reset of stations in localStorage first
-      stationTracker.resetStations();
+      // Reset internal game state variables
+      this.score = 0;
+      this.lives = 3;
+      this.ordersCompleted = 0;
+      this.totalEditsApplied = 0;        // Reset edit count
+      this.lastUnlockedAtEditCount = 0;  // Reset unlock counter
+      this.manualOrdersCompleted = 0;
+      this.failedOrders = 0;
+      this.orders = [];                  // Clear existing orders
+      this.carriedEdits = [];            // Clear carried edits
+      this.powerUpActive = false;
+      this.powerUpAvailable = false;
+      this.nextOrderDelay = 5000;        // Reset order delay
+      this.orderSpeedMultiplier = 1.0;   // Reset speed multiplier
+      this.conveyorSpeed = 0.5;          // Reset conveyor speed
+      this.recentComments = [];          // Clear recent comments
+      this.activeBubbles.clear();        // Clear active bubbles
       
-      // Then reset all game elements
-      this.reset();
-      
-      // Force a synchronous update to ensure stations are visible
-      stationTracker.initializeStations();
+      // Handle station reset based on fullReset flag
+      if (isFullReset) {
+        console.log('Performing full station reset due to fullReset flag');
+        
+        // For a full reset, force localStorage cleanup
+        localStorage.removeItem(RESET_TRACKER_KEY);
+        localStorage.removeItem('oe-game-unlock-timestamp');
+        localStorage.removeItem('oe-game-last-unlock');
+        localStorage.removeItem('oe-game-reset-done');
+        
+        // Force reset of stations in localStorage
+        stationTracker.resetStations();
+        console.log('Station tracker reset called from Level1Scene init with fullReset');
+        
+        // Re-initialize stations based on the reset state
+        stationTracker.initializeStations(); 
+        console.log('Station tracker initialized after full reset');
+        
+        // Force any existing stations to be cleared and recreated
+        this.stations = [];
+      } else {
+        // Standard reset
+        console.log('Standard reset: Just resetting station tracker');
+        
+        // Force reset of stations in localStorage
+        stationTracker.resetStations();
+        console.log('Station tracker reset called from Level1Scene init');
+        
+        // Re-initialize stations based on the reset state
+        stationTracker.initializeStations(); 
+        console.log('Station tracker initialized after reset');
+      }
       
       // Log the game state after reset
-      console.log('Game reset complete, station state reset to initial conditions');
+      console.log('Game reset complete in Level1Scene init');
+    } else {
+      console.log('Level1Scene init called without reset flag');
+      // Ensure stations are initialized even if not resetting fully
+      stationTracker.initializeStations(); 
     }
   }
 
@@ -317,6 +372,13 @@ export class Level1Scene extends Phaser.Scene {
 
   create() {
     console.log('Level1Scene create called');
+    
+    // --- Reset critical counters at the start of create --- 
+    /* this.totalEditsApplied = 0;
+    this.lastUnlockedAtEditCount = 0;
+    console.log('[Level1Scene Create] Reset edit/unlock counters'); */
+    // --- End Reset --- 
+    
     try {
       // Listen for input disabling events from outside the game (leaderboard, etc)
       const handleInputDisabling = (event: Event) => {
@@ -2449,6 +2511,9 @@ export class Level1Scene extends Phaser.Scene {
             order.completedEdits.push(editType);
             this.markEditAsApplied(order, editType);
             this.totalEditsApplied++;
+            
+            // Award 10 points for each auto-completed edit
+            this.updateScore(10);
           }
           
           // Complete the order
@@ -2708,6 +2773,9 @@ export class Level1Scene extends Phaser.Scene {
           order.completedEdits.push(editType);
           this.markEditAsApplied(order, editType);
           this.totalEditsApplied++;
+          
+          // Award 10 points for each auto-completed edit
+          this.updateScore(10);
         }
         
         // Complete the order

@@ -218,6 +218,7 @@ As time progresses:
 - Completion bonus: 25 points × number of edits in the order
 - Higher scores come from completing complex multi-edit orders
 - Score is displayed prominently in the wooden sign at the top center
+- Auto-completed edits during power-up also award 10 points each, ensuring power-ups provide scoring benefits
 
 ## Visual Feedback
 
@@ -244,6 +245,7 @@ As time progresses:
 - When active, power-ups last for 30 seconds and:
   - Auto-complete new orders as they appear
   - Auto-complete existing orders on the conveyor belt
+  - Award 10 points for each auto-completed edit
   - Display a countdown timer showing remaining time
 - Power-up switch is positioned at 76% from the left and 52% from the top + 50px
 - Power-up system tracks which orders were created during power-up mode
