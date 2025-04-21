@@ -360,149 +360,75 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
           
           console.log(`[Radio] Selected background song: ${songToPlay.title} from source: ${source}`);
           
-          // Mark that we've attempted to play music
-          try {
-            sessionStorage.setItem('musicPlayAttempt', Date.now().toString());
-          } catch (e) {
-            console.error('[Radio] Error setting sessionStorage:', e);
+          // Create a new audio element if needed
+          if (!globalAudio) {
+            console.log('[Radio] Creating new global audio element');
+            globalAudio = new Audio();
+            audioRef.current = globalAudio;
           }
           
-          // Play immediately - don't wait
-          if (globalAudio) {
-            console.log('[Radio] Setting audio source to:', songToPlay.src);
-            globalAudio.src = songToPlay.src;
-            globalAudio.load();
-            
-            // Set global state and component state
-            globalAudioState.currentTrackId = songToPlay.id;
-            setCurrentTrack(songToPlay);
-            
-            // Play with high volume
-            globalAudio.volume = 1.0;
-            
-            const playPromise = globalAudio.play();
-            if (playPromise !== undefined) {
-              playPromise
+          // Set up the audio
+          globalAudio.src = songToPlay.src;
+          globalAudio.volume = 1.0;
+          globalAudio.load();
+          
+          // Update state
+          globalAudioState.currentTrackId = songToPlay.id;
+          setCurrentTrack(songToPlay);
+          
+          // Play with a small delay to ensure loading
+          setTimeout(() => {
+            if (globalAudio) {
+              globalAudio.play()
                 .then(() => {
-                  console.log('[Radio] Successfully played background song:', songToPlay.title);
+                  console.log('[Radio] Successfully played audio');
                   setIsPlaying(true);
                   globalAudioState.isPlaying = true;
                 })
                 .catch(error => {
-                  console.error('[Radio] Error playing background song:', error);
-                  
-                  // Retry once after a short delay
+                  console.error('[Radio] Error playing audio:', error);
+                  // Retry once after a delay
                   setTimeout(() => {
                     if (globalAudio) {
-                      console.log('[Radio] Retrying playback after error');
                       globalAudio.play().catch(e => 
                         console.error('[Radio] Retry also failed:', e)
                       );
                     }
-                  }, 300);
+                  }, 1000);
                 });
             }
-          }
+          }, 100);
         } catch (error) {
-          console.error('[Radio] Error playing random background song:', error);
+          console.error('[Radio] Error in playRandomBackgroundSong:', error);
         }
       }
     };
-    
-    // Handle visibility changes (page refresh)
+
+    // Handle page load event
+    const handleLoad = () => {
+      console.log('[Radio] Window load event detected');
+      playRandomBackgroundSong('page_load');
+    };
+
+    // Handle visibility change (page refresh)
     const handleVisibilityChange = () => {
-      // Only proceed when page becomes visible (coming back from hidden state)
       if (document.visibilityState === 'visible') {
-        console.log('[Radio] Page became visible (possible refresh detected)');
-        
-        // Check if this is a new page load/refresh by looking at timestamps
-        const lastVisibilityTime = sessionStorage.getItem('lastVisibilityTime');
-        const now = Date.now();
-        
-        // Store current timestamp
-        try {
-          sessionStorage.setItem('lastVisibilityTime', now.toString());
-        } catch (e) {
-          console.error('[Radio] Error setting visibility timestamp:', e);
-        }
-        
-        // If no previous timestamp or it was more than 2 seconds ago, likely a refresh
-        const timeDiff = lastVisibilityTime ? now - parseInt(lastVisibilityTime) : Infinity;
-        const isLikelyRefresh = !lastVisibilityTime || timeDiff > 2000;
-        
-        if (isLikelyRefresh) {
-          console.log('[Radio] Refresh detected via visibility change, playing music immediately');
-          
-          // Check if audio is already playing
-          const isAudioPlaying = globalAudio && 
-                               !globalAudio.paused && 
-                               globalAudio.currentTime > 0 && 
-                               !globalAudio.ended &&
-                               globalAudio.src !== '';
-          
-          if (!isAudioPlaying) {
-            console.log('[Radio] No audio playing, starting a song');
-            // Don't delay, play immediately
-            playRandomBackgroundSong('visibility_refresh');
-          } else {
-            console.log('[Radio] Audio already playing, not starting new playback');
-          }
-        }
+        console.log('[Radio] Page became visible');
+        playRandomBackgroundSong('visibility_change');
       }
     };
-    
-    // Handle window load event
-    const handleLoadEvent = () => {
-      console.log('[Radio] Window load event - checking if we need to start music');
-      
-      // Check if audio is already playing
-      const isAudioPlaying = globalAudio && 
-                            !globalAudio.paused && 
-                            globalAudio.currentTime > 0 && 
-                            !globalAudio.ended &&
-                            globalAudio.src !== '';
-      
-      if (!isAudioPlaying) {
-        console.log('[Radio] No audio playing on window load, starting background music');
-        // Small delay to ensure DOM is ready
-        setTimeout(() => playRandomBackgroundSong('window_load'), 100);
-      } else {
-        console.log('[Radio] Audio already playing on window load, not starting new playback');
-      }
-    };
-    
-    // Handle page refreshed event
-    const handlePageRefreshed = () => {
-      console.log('[Radio] Received pageRefreshed event, playing background music');
-      
-      // Don't bother checking if audio is playing - this is an explicit request
-      playRandomBackgroundSong('page_refreshed_event');
-    };
-    
-    // Set up event listeners for refresh scenarios
+
+    // Set up event listeners
+    window.addEventListener('load', handleLoad);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('load', handleLoadEvent);
-    window.addEventListener('pageRefreshed', handlePageRefreshed);
-    
-    // Also try immediately on component mount
-    console.log('[Radio] Component mounted, checking if we need to play music');
-    const isAudioPlaying = globalAudio && 
-                          !globalAudio.paused && 
-                          globalAudio.currentTime > 0 && 
-                          !globalAudio.ended &&
-                          globalAudio.src !== '';
-    
-    if (!isAudioPlaying) {
-      console.log('[Radio] No audio playing on component mount, playing music with delay');
-      // Delay to ensure component is fully mounted
-      setTimeout(() => playRandomBackgroundSong('component_mount'), 500);
-    }
-    
-    // Clean up on unmount
+
+    // Try to play immediately on mount
+    playRandomBackgroundSong('component_mount');
+
+    // Cleanup
     return () => {
+      window.removeEventListener('load', handleLoad);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('load', handleLoadEvent);
-      window.removeEventListener('pageRefreshed', handlePageRefreshed);
     };
   }, []);
   
