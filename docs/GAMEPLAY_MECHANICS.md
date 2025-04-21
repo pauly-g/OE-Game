@@ -281,10 +281,14 @@ The game includes a music player radio system with the following features:
   - Music continues playing when UI is closed
   - Music state is preserved across component remounts
   - Unlocked stations are tracked in localStorage
+  - Music automatically restarts on page refresh
+  - Robust error handling and retry mechanisms for playback
 - **Integration**:
   - Radio button in the main UI
   - Notification system for newly unlocked songs
   - Station tracker syncs game progress with radio availability
+  - Multiple playback recovery strategies for browser restrictions
+  - Automatic background music selection on game start
 
 ## Cheat Codes
 
