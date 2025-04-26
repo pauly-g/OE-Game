@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 
 // Interface for user data stored in Firestore
-interface UserData {
+export interface UserData {
   userId: string;
   displayName: string | null;
   email: string | null;
@@ -242,8 +242,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // First check if this is a high score before submitting
       const bestScore = await fetchUserBestScore(currentUser.uid);
       
-      // If we found a previous score and the new score is not higher, don't submit
-      if (bestScore && bestScore.score >= score) {
+      // If we found a previous score and the new score is not strictly higher, don't submit
+      if (bestScore && score <= bestScore.score) {
         console.log('[FIREBASE] Not a high score:', score, 'vs previous best:', bestScore.score);
         return {
           success: false, 
@@ -278,7 +278,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // If submitScore returns null, the score wasn't submitted (either not a high score or error)
       if (!result) {
         // Check if it's because it wasn't a high score
-        if (bestScore && bestScore.score >= score) {
+        if (bestScore && score <= bestScore.score) {
           return {
             success: false, 
             message: `Sorry, your new score is not a new personal best. Try again!`, 
