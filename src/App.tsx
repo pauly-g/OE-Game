@@ -77,7 +77,9 @@ function AppContent() {
   });
   
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
-  const { currentUser, submitUserScore, isLoading, userData } = useAuth();
+  // Reference to track which scores have been submitted to prevent duplicates
+  const scoreSubmittedRef = useRef<Record<number, boolean>>({});
+  const { currentUser, submitUserScore, isLoading, userData, getUserBestScore } = useAuth();
 
   // Reset stations on page load
   useEffect(() => {
@@ -221,56 +223,6 @@ function AppContent() {
     };
   }, [game]);
 
-  // Ensure music plays after page load/refresh using the most direct approach possible
-  /* useEffect(() => {
-    const playMusic = () => {
-      console.log('[App] Direct attempt to force music play');
-      
-      // Try to use the special forceMusicPlay function if available
-      if (typeof (window as any).forceMusicPlay === 'function') {
-        console.log('[App] Using global forceMusicPlay function');
-        (window as any).forceMusicPlay();
-        return;
-      }
-      
-      // Fallback approach if forceMusicPlay is not available
-      console.log('[App] Fallback to forcePlayMusic event');
-      const playEvent = new CustomEvent('forcePlayMusic', { 
-        detail: { source: 'appFallbackMethod' } 
-      });
-      window.dispatchEvent(playEvent);
-    };
-
-    // First try immediate check on component mount
-    console.log('[App] App component mounted, trying to force play music');
-    
-    // Try immediately
-    playMusic();
-    
-    // Also try after slight delays to ensure Radio component is mounted
-    setTimeout(playMusic, 500);
-    setTimeout(playMusic, 1500);
-    setTimeout(playMusic, 3000);
-    
-    // Also listen for window load event
-    window.addEventListener('load', playMusic);
-    
-    // Use visibility change as another trigger
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[App] Page became visible, trying to play music');
-        playMusic();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      window.removeEventListener('load', playMusic);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []); */
-
   // Handle game restart with spacebar to ensure both music and stations work
   useEffect(() => {
     const handleGameRestart = (event: KeyboardEvent) => {
@@ -408,125 +360,218 @@ function AppContent() {
     };
   }, []);
 
-  // Function to handle authentication check and score submission
-  const handleCheckAuth = useCallback(async () => {
-    console.log('handleCheckAuth called with score:', currentScore);
+  // Function to check auth before submitting score
+  const handleCheckAuth = async (score: number, checkHighScoreOnly = false) => {
+    console.log('[App] handleCheckAuth called with score:', score);
+    console.log('[App] Current user authentication status:', !!currentUser);
+    console.log('[App] checkHighScoreOnly:', checkHighScoreOnly);
     
-    // If user is not authenticated, show sign-in form
-    if (!currentUser) {
-      console.log('User not authenticated, showing sign-in form');
-      setShowAuth(true);
-      return;
-    }
-    
-    // Ensure we have a valid score
-    if (currentScore === undefined) {
-      console.error('Cannot submit undefined score');
+    // Validate score - ensure it's a positive number
+    if (score === undefined || score === null || isNaN(score) || score <= 0) {
+      console.error(`[App] Invalid score value: ${score}. Score must be a positive number.`);
       setToastMessage({
         type: 'error',
-        message: 'No valid score to submit'
+        message: 'Invalid score value. Please try again.'
       });
       return;
     }
     
-    // User is already authenticated, submit the score directly
+    // Check if this score has already been submitted
+    if (scoreSubmittedRef.current[score]) {
+      console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
+      return;
+    }
+    
     try {
-      console.log('User is authenticated, submitting score:', currentScore);
-      
-      // Submit the score and get the result (which includes whether it's a high score)
-      const submissionResult = await submitUserScore(currentScore);
-      
-      console.log('Score submission result:', submissionResult);
-      
-      // Display appropriate notification based on the submission result
-      if (submissionResult.success) {
-        // Show different notifications based on whether it's a high score
-        setToastMessage({
-          type: submissionResult.isHighScore ? 'success' : 'info',
-          message: submissionResult.message
-        });
+      // If user is authenticated, check if score is a high score before submitting
+      if (currentUser && userData) {
+        console.log('[App] User authenticated, checking if high score');
+        
+        // Mark this score as being processed
+        scoreSubmittedRef.current[score] = true;
+        
+        if (checkHighScoreOnly) {
+          // Get user's best score to compare
+          try {
+            const bestScore = await getUserBestScore();
+            
+            // Only submit if it's a new high score
+            if (!bestScore || score > bestScore.score) {
+              console.log('[App] New high score! Submitting to leaderboard');
+              const result = await submitUserScore(score);
+              console.log('[App] High score submission result:', result);
+              
+              // Notify the leaderboard that a score was just submitted
+              // This will trigger a refresh of the leaderboard data
+              const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
+                detail: { 
+                  score: score,
+                  timestamp: new Date(),
+                  success: result.success
+                }
+              });
+              window.dispatchEvent(scoreSubmittedEvent);
+              
+              // Wait a short time for Firebase to update
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            } else {
+              console.log('[App] Not a high score, skipping submission');
+              // Still mark as submitted to avoid duplicate checks
+              scoreSubmittedRef.current[score] = true;
+            }
+          } catch (error) {
+            console.error('[App] Error checking high score:', error);
+            // If error occurs during check, just try to submit the score
+            const result = await submitUserScore(score);
+            console.log('[App] Score submission result after error:', result);
+            
+            // Notify about submission
+            const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
+              detail: { 
+                score: score,
+                timestamp: new Date(),
+                success: result.success
+              }
+            });
+            window.dispatchEvent(scoreSubmittedEvent);
+          }
+        } else {
+          // Direct submission (not checking high score)
+          console.log('[App] Direct score submission requested');
+          const result = await submitUserScore(score);
+          console.log('[App] Score submission result:', result);
+          
+          // Notify about submission
+          const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
+            detail: { 
+              score: score,
+              timestamp: new Date(),
+              success: result.success
+            }
+          });
+          window.dispatchEvent(scoreSubmittedEvent);
+        }
       } else {
-        // Show error notification if submission failed
-        setToastMessage({
-          type: 'error',
-          message: submissionResult.message || 'Failed to submit score'
-        });
+        // Not logged in, we'll check high score after they sign in
+        console.log('[App] User not authenticated, score will be checked after sign-in');
+        // Store the score so it can be submitted after authentication
+        setCurrentScore(score);
+        // Show sign-in form if not authenticated
+        setShowAuth(true);
       }
-      
-      // Always show the leaderboard after submission attempt
-      setShowLeaderboard(true);
     } catch (error) {
-      console.error('Error in handleCheckAuth:', error);
+      console.error('[App] Error in handleCheckAuth:', error);
+      // Keep critical error notification for unexpected errors
       setToastMessage({
         type: 'error',
         message: 'An unexpected error occurred when submitting your score'
       });
     }
-  }, [currentScore, currentUser, submitUserScore, setShowAuth, setToastMessage, setShowLeaderboard]);
+  };
+
+  // Handle game over event
+  const handleGameOver = useCallback((score: number) => {
+    console.log('[App] Game over with score:', score);
+    setCurrentScore(score);
+    
+    // The game over dialog is implemented in GameOverScene
+    // Score submission is handled in handleCheckAuth
+  }, [setCurrentScore]);
+
+  // Handle score submission from GameOverScene
+  const handleSubmitScore = useCallback((score: number, checkHighScoreOnly = false) => {
+    console.log('[App] User requested to submit score:', score);
+    handleCheckAuth(score, checkHighScoreOnly);
+  }, [handleCheckAuth]);
 
   // Handle leaderboard events from GameOverScene
   useEffect(() => {
-    // Event handler for game over - check auth and handle score submission
-    const handleGameOver = (event: Event) => {
+    // Handle authentication status check from GameOverScene
+    const handleAuthStatusCheck = (event: Event) => {
       const customEvent = event as CustomEvent;
       const { score } = customEvent.detail;
       
+      console.log('[App] Received authStatusCheck event, score:', score);
+      
+      // Always record the score
+      handleGameOver(score);
+      
+      // Only proceed with submission if the user is authenticated
+      if (currentUser && userData) {
+        console.log('[App] User is authenticated, checking if high score');
+        // Check if high score and submit if it is
+        handleSubmitScore(score, true); // true = check if high score first
+      } else {
+        console.log('[App] User not authenticated, waiting for leaderboard view');
+        // Just store the score for later use after authentication
+        setCurrentScore(score);
+      }
+    };
+    
+    // Handle game over - check if high score and submit if it is
+    const handleGameOverEvent = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { score, checkHighScoreOnly } = customEvent.detail;
+      
       console.log('[App] Received checkGameAuth event, score:', score);
-      console.log('[App] Current user authentication status:', !!currentUser);
-      console.log('[App] User data available:', !!userData);
       
-      // Set the current score in state
-      setCurrentScore(score);
+      // Record the score
+      handleGameOver(score);
       
-      // Force this code to execute asynchronously to ensure state updates first
-      setTimeout(async () => {
-        console.log('[App] Score set in state, calling handleCheckAuth');
-        
-        try {
-          // Direct call to submitUserScore for logged-in users
-          if (currentUser && userData) {
-            console.log('[App] User authenticated, directly calling submitUserScore');
-            const result = await submitUserScore(score);
-            console.log('[App] Score submission result:', result);
-            
-            // Set toast message based on result
-            setToastMessage({
-              type: result.isHighScore ? 'success' : 'info',
-              message: result.message
-            });
-            
-            // Only show the leaderboard if successful submission AND it was a high score
-            if (result.success && result.isHighScore) {
-              setShowLeaderboard(true);
-            }
-          } else {
-            // Not logged in, show sign-in form
-            console.log('[App] User not authenticated, showing sign-in form');
-            setShowAuth(true);
-          }
-        } catch (error) {
-          console.error('[App] Error in direct score submission:', error);
-          setToastMessage({
-            type: 'error',
-            message: 'An unexpected error occurred when submitting your score'
-          });
-        }
-      }, 100);
+      // If user is authenticated, proceed with submission
+      if (currentUser && userData) {
+        // Check if high score and submit if it is
+        handleSubmitScore(score, checkHighScoreOnly || false);
+      } else {
+        // Just store the score for later
+        setCurrentScore(score);
+      }
     };
     
-    const handleShowLeaderboard = () => {
-      console.log('[App] Received showGameLeaderboard event');
+    // Handle showing the leaderboard
+    const handleShowLeaderboard = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[App] Received showGameLeaderboard event', customEvent.detail);
+      
+      // Extract score from event if available
+      let eventScore: number | undefined;
+      if (customEvent.detail && customEvent.detail.score) {
+        eventScore = customEvent.detail.score;
+        setCurrentScore(eventScore);
+      }
+      
+      // Check authentication status
+      if (!currentUser) {
+        console.log('[App] User not authenticated, will show sign-in form');
+        setShowAuth(true);
+      }
+      
+      // Show the leaderboard
+      console.log('[App] Showing leaderboard');
       setShowLeaderboard(true);
+      
+      // Send an event to notify the Leaderboard component that it's been opened
+      const leaderboardEvent = new CustomEvent('leaderboardOpen', { 
+        detail: { 
+          score: eventScore,
+          submittingScore: false,
+          checkSubmissionStatus: true,
+          requireAuth: !currentUser // Flag to indicate auth is required
+        } 
+      });
+      window.dispatchEvent(leaderboardEvent);
     };
     
-    window.addEventListener('checkGameAuth', handleGameOver);
+    window.addEventListener('authStatusCheck', handleAuthStatusCheck);
+    window.addEventListener('checkGameAuth', handleGameOverEvent);
     window.addEventListener('showGameLeaderboard', handleShowLeaderboard);
     
     return () => {
-      window.removeEventListener('checkGameAuth', handleGameOver);
+      window.removeEventListener('authStatusCheck', handleAuthStatusCheck);
+      window.removeEventListener('checkGameAuth', handleGameOverEvent);
       window.removeEventListener('showGameLeaderboard', handleShowLeaderboard);
     };
-  }, [currentUser, handleCheckAuth]); // Add handleCheckAuth to dependency array
+  }, [handleGameOver, handleSubmitScore, setCurrentScore, setShowLeaderboard, currentUser, userData, setShowAuth]);
 
   const downloadLogs = () => {
     gameDebugger.downloadLogs();

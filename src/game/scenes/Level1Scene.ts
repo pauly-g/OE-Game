@@ -907,7 +907,7 @@ export class Level1Scene extends Phaser.Scene {
       }
       
       // First find out if we're near a station for interaction
-      let nearStation = this.isNearStation();
+      const nearStation = this.isNearStation();
       
       if (!this.player) return;
 
@@ -2791,7 +2791,7 @@ export class Level1Scene extends Phaser.Scene {
               icon.y = -verticalSpacing/2; // Add vertical positioning
             } else {
               // Bottom row with 1-3 items (centered)
-              let positionInRow = index - itemsInTopRow;
+              const positionInRow = index - itemsInTopRow;
               let bottomRowOffset = 0;
               
               if (itemsInBottomRow === 1) {

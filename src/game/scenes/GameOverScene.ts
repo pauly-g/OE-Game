@@ -67,15 +67,16 @@ export class GameOverScene extends Phaser.Scene {
         gameDebugger.error('Keyboard input not available in GameOverScene create');
       }
       
-      // Check auth status and submit score - add this at the start of create()
-      gameDebugger.info('GameOverScene triggering checkGameAuth event with score:', this.score);
-      const checkAuthEvent = new CustomEvent('checkGameAuth', {
+      // Check if user is authenticated by dispatching a check event
+      // We'll let App.tsx handle the actual authentication check and score submission
+      gameDebugger.info('GameOverScene dispatching authStatusCheck event');
+      const authCheckEvent = new CustomEvent('authStatusCheck', {
         detail: {
           score: this.score,
           sceneInstance: this
         }
       });
-      window.dispatchEvent(checkAuthEvent);
+      window.dispatchEvent(authCheckEvent);
       
       // Add the game over background image back
       const background = this.add.image(width / 2, height / 2, 'gameOverBG');
@@ -160,32 +161,34 @@ export class GameOverScene extends Phaser.Scene {
       leaderboardContainer.on('pointerdown', () => {
         gameDebugger.info('Leaderboard button clicked');
         
-        // Simple click feedback (slight scale down and up, no continuous animation)
+        // Simple click feedback (slight scale down)
         this.tweens.add({
           targets: leaderboardContainer,
           scale: { from: 1.0, to: 0.95 },
           duration: 100,
           yoyo: true,
-          onComplete: () => {
-            // Return to original scale
-            this.tweens.add({
-              targets: leaderboardContainer,
-              scale: 1.0,
-              duration: 100
-            });
-          }
+          ease: 'Power1'
         });
         
-        // Dispatch event to show leaderboard WITHIN the game frame, not as a fullscreen page
-        const win = window as Window;
+        // Darker background for visual feedback
+        signBackground.setFillStyle(0x3A2619);
+        
+        // Only dispatch event to show leaderboard (no score submission)
         const showLeaderboardEvent = new CustomEvent('showGameLeaderboard', { 
           detail: { 
             score: this.score,
-            inGameFrame: true // Flag to indicate leaderboard should stay within game frame
+            inGameFrame: true,
+            submittingScore: false  // Don't submit score, just view leaderboard
           } 
         });
+        window.dispatchEvent(showLeaderboardEvent);
         
-        win.dispatchEvent(showLeaderboardEvent);
+        // Reset button state after a short delay
+        setTimeout(() => {
+          if (this.scene.isActive()) {
+            signBackground.setFillStyle(0x4A3629);
+          }
+        }, 200);
       });
       
       // Simple hover effects - brighter feedback
