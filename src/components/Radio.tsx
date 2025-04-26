@@ -134,7 +134,7 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       // Find next track
       if (globalAudioState.currentTrackId) {
         const currentIndex = unlockedTracks.findIndex(t => t.id === globalAudioState.currentTrackId);
-        let nextIndex = (currentIndex + 1) % unlockedTracks.length;
+        const nextIndex = (currentIndex + 1) % unlockedTracks.length;
         
         // Get the next track
         const nextTrack = unlockedTracks[nextIndex];
