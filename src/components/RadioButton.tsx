@@ -4,9 +4,15 @@ interface RadioButtonProps {
   onClick: () => void;
   showRadio: boolean;
   wiggle?: boolean;
+  newSongCount?: number;
 }
 
-const RadioButton: React.FC<RadioButtonProps> = ({ onClick, showRadio, wiggle = false }) => {
+const RadioButton: React.FC<RadioButtonProps> = ({ 
+  onClick, 
+  showRadio, 
+  wiggle = false,
+  newSongCount = 0
+}) => {
   const [isWiggling, setIsWiggling] = useState(false);
   
   useEffect(() => {
@@ -22,11 +28,18 @@ const RadioButton: React.FC<RadioButtonProps> = ({ onClick, showRadio, wiggle = 
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg border-2 border-indigo-500 transition-colors font-pixel text-sm flex items-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] ${isWiggling ? 'animate-wiggle' : ''}`}
+      className={`px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg border-2 border-indigo-500 transition-colors font-pixel text-sm flex items-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] ${isWiggling ? 'animate-wiggle' : ''} relative`}
       aria-label={showRadio ? "Close Radio" : "Open Radio"}
       title={showRadio ? "Close Radio" : "Open Radio"}
     >
       {showRadio ? 'Close Radio' : 'Order Editing Radio'}
+      
+      {/* Badge for new songs */}
+      {newSongCount > 0 && !showRadio && (
+        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+          {newSongCount}
+        </span>
+      )}
     </button>
   );
 };
