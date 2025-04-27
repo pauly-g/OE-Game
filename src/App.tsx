@@ -369,10 +369,7 @@ function AppContent() {
     // Validate score - ensure it's a positive number
     if (score === undefined || score === null || isNaN(score) || score <= 0) {
       console.error(`[App] Invalid score value: ${score}. Score must be a positive number.`);
-      setToastMessage({
-        type: 'error',
-        message: 'Invalid score value. Please try again.'
-      });
+      // Silent validation - don't show error to user
       return;
     }
     

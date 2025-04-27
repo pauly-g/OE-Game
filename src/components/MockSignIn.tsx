@@ -124,7 +124,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
     
     // Validate score - ensure it's a non-negative number
     if (score === undefined || score === null || isNaN(score) || score < 0) {
-      setError('Invalid score. Please try again.');
+      // Silent validation - don't show error to user
       return false;
     }
     
