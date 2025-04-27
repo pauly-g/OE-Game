@@ -17,6 +17,7 @@
  * - Enhanced leaderboard button visibility and removed sign-in button
  * - Fixed linter error with preFX null check
  * - Simplified auth flow with leaderboard as full screen
+ * - Added Game Over music that plays when the scene starts
  */
 import Phaser from 'phaser';
 import { gameDebugger } from '../utils/debug';
@@ -25,6 +26,8 @@ export class GameOverScene extends Phaser.Scene {
   private score: number = 0;
   private spaceKey: Phaser.Input.Keyboard.Key;
   private leaderboardButton: Phaser.GameObjects.Text;
+  private gameOverMusic: HTMLAudioElement | null = null;
+  private isRadioPlaying: boolean = false;
 
   constructor() {
     super({ key: 'GameOverScene' });
@@ -41,6 +44,9 @@ export class GameOverScene extends Phaser.Scene {
     try {
       // Load game over background image
       this.load.image('gameOverBG', 'game/Background/GameOverBG2.png');
+      
+      // Note: We'll load the audio directly in create() using HTML Audio
+      
       gameDebugger.info('GameOverScene preload completed');
     } catch (error) {
       gameDebugger.error('Error in GameOverScene preload:', error);
@@ -50,6 +56,13 @@ export class GameOverScene extends Phaser.Scene {
   init(data: { score: number }) {
     gameDebugger.info('GameOverScene init called', data);
     this.score = data.score;
+    
+    // Reset audio state in init to ensure it works every time
+    this.isRadioPlaying = false;
+    if (this.gameOverMusic) {
+      this.gameOverMusic.pause();
+      this.gameOverMusic = null;
+    }
   }
 
   create() {
@@ -108,6 +121,41 @@ export class GameOverScene extends Phaser.Scene {
         strokeThickness: 4,
         shadow: { color: '#000000', fill: true, offsetX: 2, offsetY: 2, blur: 8 }
       }).setOrigin(0.5).setDepth(1);
+
+      // Check if radio is playing first - preventing the game over music from starting
+      // if the user already has the radio playing
+      try {
+        // Use a custom event to query radio status
+        const radioCheckEvent = new CustomEvent('isRadioPlaying', { 
+          detail: {
+            callback: (isPlaying: boolean) => {
+              console.log('[GameOverScene] Radio playing status check returned:', isPlaying);
+              this.isRadioPlaying = isPlaying;
+              
+              // Only play game over music if radio is not playing
+              if (!this.isRadioPlaying) {
+                // Play game over music now that we know radio status
+                this.playGameOverMusic();
+              } else {
+                console.log('[GameOverScene] Not playing game over music because radio is already playing');
+              }
+            }
+          }
+        });
+        
+        // Dispatch the event to check radio status
+        window.dispatchEvent(radioCheckEvent);
+      } catch (error) {
+        console.error('[GameOverScene] Error checking radio status:', error);
+        
+        // Fallback - just play game over music if we can't check radio
+        this.playGameOverMusic();
+      }
+      
+      // Set up event listener for radio play events - ensure it's removed first to prevent duplicates
+      window.removeEventListener('radioPlayStarted', this.handleRadioPlayStarted); 
+      console.log('[GameOverScene] Setting up radioPlayStarted event listener');
+      window.addEventListener('radioPlayStarted', this.handleRadioPlayStarted);
 
       // Create a wooden sign container for the leaderboard button
       const leaderboardContainer = this.add.container(width * 0.5, height * 0.6);
@@ -227,6 +275,10 @@ export class GameOverScene extends Phaser.Scene {
         repeat: -1
       });
 
+      // Also listen for stopAllAudio events
+      console.log('[GameOverScene] Setting up stopAllAudio event listener');
+      window.addEventListener('stopAllAudio', this.handleStopAllAudio);
+
       gameDebugger.info('GameOverScene create completed');
     } catch (error) {
       gameDebugger.error('Error in GameOverScene create:', error);
@@ -289,6 +341,126 @@ export class GameOverScene extends Phaser.Scene {
         }
       } else {
         gameDebugger.info('Space key pressed but ignored - leaderboard is open');
+      }
+    }
+  }
+
+  // Play the game over music if it's not already playing
+  private playGameOverMusic() {
+    try {
+      console.log('[GameOverScene] Attempting to play game over music with HTML Audio');
+      
+      // Always reset the audio element for each game over
+      if (this.gameOverMusic) {
+        this.gameOverMusic.pause();
+        this.gameOverMusic.remove(); // Remove event listeners
+        this.gameOverMusic = null;
+      }
+      
+      // Create a new HTML Audio element
+      this.gameOverMusic = new Audio('game/Music/BG-Music/Game Over.mp3');
+      this.gameOverMusic.volume = 0.7;
+      
+      // Add event listeners for debugging
+      this.gameOverMusic.addEventListener('canplaythrough', () => {
+        console.log('[GameOverScene] Audio can play through');
+      });
+      
+      this.gameOverMusic.addEventListener('playing', () => {
+        console.log('[GameOverScene] Audio has started playing');
+      });
+      
+      this.gameOverMusic.addEventListener('error', (e) => {
+        console.error('[GameOverScene] Audio error:', e);
+      });
+      
+      // Only play if radio isn't playing
+      if (!this.isRadioPlaying) {
+        console.log('[GameOverScene] Playing game over music with HTML Audio');
+        const playPromise = this.gameOverMusic.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('[GameOverScene] Successfully started playback');
+            })
+            .catch(err => {
+              console.error('[GameOverScene] Error playing audio:', err);
+              
+              // Try one more time with user interaction
+              console.log('[GameOverScene] Adding one-time click handler to play audio');
+              const clickHandler = () => {
+                if (this.gameOverMusic) {
+                  this.gameOverMusic.play().catch(console.error);
+                }
+                document.removeEventListener('click', clickHandler);
+              };
+              document.addEventListener('click', clickHandler);
+            });
+        }
+      } else {
+        console.log('[GameOverScene] Not playing music because radio is already playing');
+      }
+    } catch (error) {
+      console.error('[GameOverScene] Error in playGameOverMusic:', error);
+    }
+  }
+  
+  // Handle radio play events - stop game over music when radio plays
+  private handleRadioPlayStarted = (event: Event) => {
+    console.log('[GameOverScene] Radio play detected, stopping game over music');
+    this.isRadioPlaying = true;
+    
+    // Enhanced stopping logic
+    if (this.gameOverMusic) {
+      try {
+        // Stop the music completely
+        this.gameOverMusic.pause();
+        this.gameOverMusic.currentTime = 0;
+        console.log('[GameOverScene] Game over music stopped due to radio play');
+      } catch (error) {
+        console.error('[GameOverScene] Error stopping game over music:', error);
+      }
+    }
+  }
+  
+  // Add this new handler method
+  private handleStopAllAudio = (event: Event) => {
+    const customEvent = event as CustomEvent;
+    console.log('[GameOverScene] Received stopAllAudio event:', customEvent.detail);
+    
+    // Force stop any game over music immediately
+    if (this.gameOverMusic) {
+      console.log('[GameOverScene] Forcibly stopping game over music due to stopAllAudio event');
+      try {
+        this.gameOverMusic.pause();
+        this.gameOverMusic.currentTime = 0;
+        this.isRadioPlaying = true; // Prevent it from starting again
+      } catch (error) {
+        console.error('[GameOverScene] Error stopping game over music:', error);
+      }
+    }
+  };
+  
+  // Clean up when scene is shut down
+  shutdown() {
+    gameDebugger.info('GameOverScene shutdown');
+    
+    // Make sure to remove the event listener
+    try {
+      window.removeEventListener('radioPlayStarted', this.handleRadioPlayStarted);
+      window.removeEventListener('stopAllAudio', this.handleStopAllAudio);
+    } catch (error) {
+      console.error('[GameOverScene] Error removing event listeners:', error);
+    }
+    
+    // Clean up audio element
+    if (this.gameOverMusic) {
+      try {
+        this.gameOverMusic.pause();
+        this.gameOverMusic = null;
+      } catch (error) {
+        console.error('[GameOverScene] Error cleaning up audio element:', error);
       }
     }
   }
