@@ -2256,16 +2256,16 @@ export class Level1Scene extends Phaser.Scene {
     // Adjust based on player direction
     if (this.lastDirection === 'left') {
       baseOffsetX = -20;
-      baseOffsetY = -5;
+      baseOffsetY = 35; // Much lower position (was 20) to be closer to hands
     } else if (this.lastDirection === 'right') {
       baseOffsetX = 20;
-      baseOffsetY = -5;
+      baseOffsetY = 35; // Much lower position (was 20) to be closer to hands
     } else if (this.lastDirection === 'up') {
       baseOffsetX = 0;
-      baseOffsetY = -20;
+      baseOffsetY = -20; // Keep the same position for up direction
     } else if (this.lastDirection === 'down') {
       baseOffsetX = 0;
-      baseOffsetY = 20;
+      baseOffsetY = 40; // Keep the current position for down direction
     }
     
     // Arrange edits in a small arc above the player
