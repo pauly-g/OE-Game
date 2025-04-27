@@ -884,8 +884,15 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
           </table>
         </div>
         
+        {/* Check if the user is already in the top scores list */}
+        {(() => {
+          const isUserInTopScores = currentUser && topScores.some(entry => entry.userId === currentUser.uid);
+          console.log('Is user in top scores?', isUserInTopScores);
+          return null;
+        })()}
+        
         {/* User's Position Section (if not in top 10) */}
-        {userScore !== undefined && userRank !== null && userRank > 10 && currentUser && (
+        {userScore !== undefined && userRank !== null && userRank > 10 && currentUser && !topScores.some(entry => currentUser && entry.userId === currentUser.uid) && (
           <div className="leaderboard-section user-position mt-8">
             <h3>YOUR POSITION</h3>
             <p className="user-rank">
