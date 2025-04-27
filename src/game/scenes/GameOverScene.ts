@@ -173,12 +173,12 @@ export class GameOverScene extends Phaser.Scene {
         // Darker background for visual feedback
         signBackground.setFillStyle(0x3A2619);
         
-        // Only dispatch event to show leaderboard (no score submission)
+        // Only dispatch event to show leaderboard (explicitly set submittingScore to false)
         const showLeaderboardEvent = new CustomEvent('showGameLeaderboard', { 
           detail: { 
             score: this.score,
             inGameFrame: true,
-            submittingScore: false  // Don't submit score, just view leaderboard
+            submittingScore: false  // Explicitly set to false to prevent duplicate submission
           } 
         });
         window.dispatchEvent(showLeaderboardEvent);

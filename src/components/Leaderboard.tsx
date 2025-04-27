@@ -491,8 +491,16 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
           return;
         }
 
+        // Check if user is logged in but needs to set company name
+        if (currentUser && (!userData || !userData.company)) {
+          console.log('[Leaderboard] User is logged in but missing company information. Showing company form.');
+          setShowSignIn(true); // Show the sign-in form for company info
+          setLoading(false);
+          return;
+        }
+
         if (currentUser) {
-          console.log('[Leaderboard] User is logged in. Checking score...');
+          console.log('[Leaderboard] User is logged in with complete profile. Checking score...');
           setIsSubmitting(true); // Set submission guard
           try {
             const bestScoreData = await getUserBestScore();
@@ -572,7 +580,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
         setUserRank(null);
         setNearbyScores({ above: [], below: [] });
     }
-  }, [isOpen, userScore, currentUser, getUserBestScore, submitUserScore, fetchLeaderboardData]);
+  }, [isOpen, userScore, currentUser, userData, getUserBestScore, submitUserScore, fetchLeaderboardData]);
 
   // Helper functions for loading messages
   const showLoadingMessage = (text: string) => {

@@ -382,6 +382,24 @@ function AppContent() {
       return;
     }
     
+    // Clean up old score submissions - keep only recent scores to prevent memory leaks
+    // This helps ensure the scoreSubmittedRef doesn't grow indefinitely
+    const scoreKeys = Object.keys(scoreSubmittedRef.current);
+    if (scoreKeys.length > 10) { // Only keep the 10 most recent scores
+      // Sort numerically and take the oldest ones
+      const oldestScores = scoreKeys
+        .map(Number)
+        .sort((a, b) => a - b)
+        .slice(0, scoreKeys.length - 10);
+      
+      // Remove the oldest scores from the tracking object
+      oldestScores.forEach(oldScore => {
+        delete scoreSubmittedRef.current[oldScore];
+      });
+      
+      console.log(`[App] Cleaned up ${oldestScores.length} old score entries from tracking`);
+    }
+    
     try {
       // If user is authenticated, check if score is a high score before submitting
       if (currentUser && userData) {
@@ -484,7 +502,7 @@ function AppContent() {
     handleCheckAuth(score, checkHighScoreOnly);
   }, [handleCheckAuth]);
 
-  // Handle leaderboard events from GameOverScene
+  // Centralized Logic Handler: Runs when the component opens with a score
   useEffect(() => {
     // Handle authentication status check from GameOverScene
     const handleAuthStatusCheck = (event: Event) => {
@@ -495,6 +513,12 @@ function AppContent() {
       
       // Always record the score
       handleGameOver(score);
+      
+      // Check if score was already submitted to prevent duplicate submissions
+      if (scoreSubmittedRef.current[score]) {
+        console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
+        return;
+      }
       
       // Only proceed with submission if the user is authenticated
       if (currentUser && userData) {
@@ -515,6 +539,12 @@ function AppContent() {
       
       console.log('[App] Received checkGameAuth event, score:', score);
       
+      // Check if score was already submitted to prevent duplicate submissions
+      if (scoreSubmittedRef.current[score]) {
+        console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
+        return;
+      }
+      
       // Record the score
       handleGameOver(score);
       
@@ -533,12 +563,26 @@ function AppContent() {
       const customEvent = event as CustomEvent;
       console.log('[App] Received showGameLeaderboard event', customEvent.detail);
       
-      // Extract score from event if available
+      // Extract score and submission flag from event if available
       let eventScore: number | undefined;
-      if (customEvent.detail && customEvent.detail.score) {
-        eventScore = customEvent.detail.score;
-        setCurrentScore(eventScore);
+      let submittingScore = false;
+      
+      if (customEvent.detail) {
+        if (customEvent.detail.score !== undefined) {
+          eventScore = customEvent.detail.score;
+          setCurrentScore(eventScore);
+        }
+        
+        // Extract submission flag if present
+        if (customEvent.detail.submittingScore !== undefined) {
+          submittingScore = customEvent.detail.submittingScore;
+        }
       }
+      
+      // Always set leaderboard state to open, regardless of submission status
+      console.log('[App] Showing leaderboard');
+      setShowLeaderboard(true);
+      (window as any).isLeaderboardOpen = true;
       
       // Check authentication status
       if (!currentUser) {
@@ -546,15 +590,11 @@ function AppContent() {
         setShowAuth(true);
       }
       
-      // Show the leaderboard
-      console.log('[App] Showing leaderboard');
-      setShowLeaderboard(true);
-      
       // Send an event to notify the Leaderboard component that it's been opened
       const leaderboardEvent = new CustomEvent('leaderboardOpen', { 
         detail: { 
           score: eventScore,
-          submittingScore: false,
+          submittingScore: submittingScore,
           checkSubmissionStatus: true,
           requireAuth: !currentUser // Flag to indicate auth is required
         } 
