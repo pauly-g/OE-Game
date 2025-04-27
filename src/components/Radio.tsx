@@ -1472,15 +1472,33 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
                 {/* Playlist */}
                 {showPlaylist && (
                   <div className="playlist-panel">
-                    {tracks.map(track => {
-                      // Only use stationTracker to determine if a song is locked, ignore track.locked property
+                    {/* Display free songs (warehouse type) */}
+                    {tracks.filter(track => track.stationType === 'warehouse').map(track => {
+                      const isActive = currentTrack?.id === track.id;
+                      
+                      return (
+                        <div 
+                          key={track.id}
+                          className={`playlist-item ${isActive ? 'active' : ''}`}
+                          onClick={() => changeTrack(track)}
+                        >
+                          {track.title}
+                        </div>
+                      );
+                    })}
+                    
+                    {/* Unlockable Songs Header */}
+                    <div className="playlist-section-header">UNLOCKABLE SONGS</div>
+                    
+                    {/* Display unlockable songs (non-warehouse type) */}
+                    {tracks.filter(track => track.stationType !== 'warehouse').map(track => {
                       const isLocked = !stationTracker.isStationUnlocked(track.stationType);
                       const isActive = currentTrack?.id === track.id;
                       
                       return (
                         <div 
                           key={track.id}
-                          className={`playlist-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+                          className={`playlist-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : 'unlocked'}`}
                           onClick={() => !isLocked && changeTrack(track)}
                         >
                           {isLocked && <span className="lock-icon">🔒 </span>}

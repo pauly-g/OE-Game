@@ -235,10 +235,10 @@
 }
 
 .playlist-item {
-  padding: 4px 8px;
+  padding: 8px;
+  font-size: 10px;
   cursor: pointer;
   border-bottom: 1px solid #333;
-  font-size: 10px;
   font-family: 'Press Start 2P', monospace;
   color: #ddd;
 }
@@ -250,6 +250,7 @@
 .playlist-item.active {
   background-color: #444477;
   color: #33ff33;
+  font-weight: bold;
 }
 
 .playlist-item.locked {
@@ -258,6 +259,14 @@
   opacity: 0.7;
   position: relative;
   background-color: rgba(0, 0, 0, 0.2);
+}
+
+.playlist-item.unlocked {
+  color: #4ddb4d; /* Green color for unlocked songs */
+}
+
+.playlist-item.unlocked:hover {
+  background-color: #333;
 }
 
 .playlist-item.locked::after {
@@ -396,4 +405,18 @@
 .lyrics-panel {
   scrollbar-width: thin;
   scrollbar-color: #555 transparent;
+}
+
+/* Section Headers for Playlist */
+.playlist-section-header {
+  background-color: #222;
+  color: #4ddb4d;
+  padding: 8px;
+  margin: 8px 0 4px 0;
+  font-size: 14px;
+  font-weight: bold;
+  text-align: center;
+  border-top: 2px solid #4ddb4d;
+  border-bottom: 2px solid #4ddb4d;
+  font-family: 'Press Start 2P', monospace;
 } 
