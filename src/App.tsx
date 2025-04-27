@@ -44,6 +44,9 @@ import UserProfileCorner from './components/UserProfileCorner';
 import Toast from './components/Toast';
 import './styles/main.css';
 
+// Keep track of unseen songs (maintained in memory only, no localStorage changes)
+const unseenSongs = new Set();
+
 // Main App component wrapper with AuthProvider
 function AppWithAuth() {
   return (
@@ -62,6 +65,7 @@ function AppContent() {
   const [errorLogs, setErrorLogs] = useState<Array<{level: string, message: string, timestamp?: Date, data?: any}>>([]);
   const [showRadio, setShowRadio] = useState(false);
   const [radioWiggle, setRadioWiggle] = useState(false);
+  const [newSongCount, setNewSongCount] = useState(0);
   const [notification, setNotification] = useState({
     isVisible: false,
     title: '',
@@ -139,6 +143,10 @@ function AppContent() {
             title: unlockedTrack.title,
             artist: unlockedTrack.artist
           });
+          
+          // Add to unseen songs and update count
+          unseenSongs.add(stationType);
+          setNewSongCount(unseenSongs.size);
         }
       }
     };
@@ -359,6 +367,29 @@ function AppContent() {
       window.removeEventListener('keydown', handleDebugKeydown);
     };
   }, []);
+
+  // Listen for game events
+  useEffect(() => {
+    const handleGameRestart = () => {
+      // Clear unseen songs when game restarts
+      unseenSongs.clear();
+      setNewSongCount(0);
+    };
+    
+    window.addEventListener('gameRestart', handleGameRestart);
+    
+    return () => {
+      window.removeEventListener('gameRestart', handleGameRestart);
+    };
+  }, []);
+
+  // Reset badges when radio is opened
+  useEffect(() => {
+    if (showRadio && newSongCount > 0) {
+      unseenSongs.clear();
+      setNewSongCount(0);
+    }
+  }, [showRadio, newSongCount]);
 
   // Function to check auth before submitting score
   const handleCheckAuth = async (score: number, checkHighScoreOnly = false) => {
@@ -689,7 +720,7 @@ function AppContent() {
         )}
       </div>
 
-      {/* Button row - Radio component removed from here */}
+      {/* Button row */}
       <div className="mt-4 flex gap-2">
         <button
           onClick={() => setShowInstructions(!showInstructions)}
@@ -697,6 +728,13 @@ function AppContent() {
         >
           {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
         </button>
+        
+        <RadioButton 
+          onClick={toggleRadio} 
+          showRadio={showRadio} 
+          wiggle={radioWiggle}
+          newSongCount={newSongCount}
+        />
         
         {showDebug && (
           <button
@@ -706,8 +744,6 @@ function AppContent() {
             Download Logs
           </button>
         )}
-        
-        <RadioButton onClick={toggleRadio} showRadio={showRadio} wiggle={radioWiggle} />
       </div>
       
       {/* Radio component in its own container outside the button row */}
@@ -719,7 +755,7 @@ function AppContent() {
           autoplay={true}
         />
       </div>
-
+      
       {/* Song unlock notification */}
       <SongNotification 
         title={notification.title}
