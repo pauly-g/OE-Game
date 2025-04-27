@@ -243,6 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const bestScore = await fetchUserBestScore(currentUser.uid);
       
       // If we found a previous score and the new score is not strictly higher, don't submit
+      // BUT always accept first-time submissions (when bestScore is null)
       if (bestScore && score <= bestScore.score) {
         console.log('[FIREBASE] Not a high score:', score, 'vs previous best:', bestScore.score);
         return {
@@ -250,6 +251,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           message: `Sorry, your new score is not a new personal best. Try again!`, 
           isHighScore: false
         };
+      }
+      
+      // For first-time submission, log that we're accepting it
+      if (!bestScore) {
+        console.log(`[FIREBASE] First-time score submission: ${score}. Accepting score.`);
+      } else {
+        console.log(`[FIREBASE] New high score: ${score} beats previous ${bestScore.score}`);
       }
       
       // Double check the company value

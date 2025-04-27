@@ -138,8 +138,15 @@ export const submitScore = async (
       // 4. Compare the new score with the current best read inside the transaction
       // Use strict inequality (>)
       console.log(`[FIREBASE Transaction] Comparing new score ${score} with scoreToCheck ${scoreToCheck}`);
-      if (score > scoreToCheck) {
-        console.log(`[FIREBASE Transaction] New score ${score} IS strictly higher. Proceeding with write.`);
+      
+      // If this is a first-time submission (scoreToCheck === -1) OR the new score is higher, accept it
+      if (scoreToCheck === -1 || score > scoreToCheck) {
+        // For first-time submissions, provide a clear log message
+        if (scoreToCheck === -1) {
+          console.log(`[FIREBASE Transaction] First score submission for user. Accepting score: ${score}`);
+        } else {
+          console.log(`[FIREBASE Transaction] New score ${score} IS strictly higher. Proceeding with write.`);
+        }
         
         // 5. If higher, create the new score document *within the transaction*
         const newScoreRef = doc(leaderboardCol); // Generate a new doc ref for the new entry

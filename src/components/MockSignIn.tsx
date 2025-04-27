@@ -128,6 +128,11 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
       return false;
     }
     
+    // Special log for zero score to help with debugging
+    if (score === 0) {
+      console.log('[MockSignIn] Zero score detected. This is valid and will be submitted.');
+    }
+    
     return true;
   };
 
@@ -137,35 +142,42 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
     setError('');
     
     try {
+      console.log('[MockSignIn] Attempting Google sign-in...');
       const result = await signInWithGoogle();
       
       if (result) {
+        // Safe general logging to avoid TypeScript errors
+        console.log('[MockSignIn] Google sign-in successful');
+        
         setName(result.displayName || '');
         setCompany(result.company || '');
         
-        console.log('Google sign-in successful, showing company form:', { 
-          user: result.displayName, 
-          company: result.company,
-          currentUser: !!currentUser 
-        });
+        // Log success with detailed information
+        console.log('[MockSignIn] Showing company form, has company:', !!result.company);
         
         // Set form submitted to false to ensure the form is displayed
         setFormSubmitted(false);
         
         // Focus the company input field if it's empty
         if (!result.company) {
+          console.log('[MockSignIn] No company name set, focusing company input field');
           setTimeout(() => {
-            const companyInput = document.getElementById('company-input') as HTMLInputElement;
+            const companyInput = document.getElementById('company') as HTMLInputElement;
             if (companyInput) {
               companyInput.focus();
+            } else {
+              console.warn('[MockSignIn] Could not find company input field to focus');
             }
           }, 100);
+        } else {
+          console.log('[MockSignIn] Company name already set:', result.company);
         }
       } else {
+        console.error('[MockSignIn] Google sign-in failed: No result returned');
         setError('Google sign-in failed. Please try again.');
       }
     } catch (error) {
-      console.error('Google sign-in error:', error);
+      console.error('[MockSignIn] Google sign-in error:', error);
       setError('An error occurred during sign-in');
     } finally {
       setIsLoading(false);
@@ -219,9 +231,13 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Always call onSuccess regardless of whether it's a high score
-        // Adding ts-ignore again to suppress persistent error
-        // @ts-ignore
-        onSuccess(name!.trim(), company!.trim(), marketingOptIn);
+        // Suppress TypeScript error since we've already validated these values
+        // @ts-ignore - name and company are guaranteed non-null here
+        onSuccess(
+          (name || '').trim(), 
+          (company || '').trim(), 
+          marketingOptIn
+        );
         return;
       }
       
@@ -312,7 +328,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
       <div className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white text-center" style={{ fontFamily: 'pixelmix, monospace' }}>
         <h2 className="text-2xl font-bold mb-6">SUBMIT YOUR SCORE</h2>
         
-        {score !== undefined && score !== null && !isNaN(score) && score > 0 && (
+        {score !== undefined && score !== null && !isNaN(score) && score >= 0 && (
           <div className="mb-6">
             <p className="text-lg">Your Score: <span className="font-bold text-yellow-400">{score}</span></p>
           </div>
@@ -352,7 +368,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
       <div className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white" style={{ fontFamily: 'pixelmix, monospace' }}>
         <h2 className="text-2xl font-bold mb-6 text-center">SUBMIT YOUR SCORE</h2>
         
-        {score !== undefined && score !== null && !isNaN(score) && score > 0 && (
+        {score !== undefined && score !== null && !isNaN(score) && score >= 0 && (
           <div className="text-center mb-6">
             <p className="text-lg">Your Score: <span className="font-bold text-yellow-400">{score}</span></p>
           </div>
