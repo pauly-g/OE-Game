@@ -339,6 +339,15 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     const playRandomBackgroundSong = (source = 'visibility_change') => {
       console.log(`[Radio] Playing random background song from source: ${source}`);
       
+      // Don't start a new track if we're already playing something and not at a game over or paused state
+      if (globalAudio && !globalAudio.paused && 
+          globalAudio.currentTime > 0 && 
+          !globalAudio.ended && 
+          globalAudio.src !== '') {
+        console.log('[Radio] Audio already playing, skipping random background song');
+        return;
+      }
+      
       // Find all background songs
       const backgroundSongs = tracks.filter(track => 
         track.stationType === 'warehouse' && 
@@ -414,7 +423,35 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         console.log('[Radio] Page became visible');
-        playRandomBackgroundSong('visibility_change');
+        
+        // Instead of playing a random song, check if we need to resume the current one
+        if (globalAudio && globalAudioState.currentTrackId) {
+          console.log('[Radio] Resuming current track instead of starting a new one');
+          
+          // If the audio was playing before, resume it
+          if (globalAudioState.isPlaying) {
+            globalAudio.play()
+              .then(() => {
+                console.log('[Radio] Successfully resumed audio after tab visibility change');
+                setIsPlaying(true);
+              })
+              .catch(error => {
+                console.error('[Radio] Error resuming audio:', error);
+                // Fall back to playing a random song if resume fails
+                playRandomBackgroundSong('visibility_change_fallback');
+              });
+          }
+        } else {
+          // If no track was playing, start a random one as before
+          playRandomBackgroundSong('visibility_change');
+        }
+      } else if (document.visibilityState === 'hidden') {
+        // When tab becomes hidden, store the current playback state
+        if (globalAudio) {
+          globalAudioState.isPlaying = !globalAudio.paused;
+          globalAudioState.currentTime = globalAudio.currentTime;
+          console.log('[Radio] Page hidden, saved playback state:', globalAudioState);
+        }
       }
     };
 
