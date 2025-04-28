@@ -762,12 +762,43 @@ function AppContent() {
 
       {/* Button row */}
       <div className="mt-4 flex gap-2">
-        <button
-          onClick={() => setShowInstructions(!showInstructions)}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors font-pixel text-sm"
-        >
-          {showInstructions ? 'Hide Instructions' : 'Show Instructions'}
-        </button>
+        <div className="bg-[rgba(23,29,40,0.9)] rounded-[30px] px-4 py-2 flex items-center gap-6 font-pixel text-sm">
+          <div className="flex items-center gap-2">
+            <span>Move</span>
+            <div className="flex gap-1">
+              <div className="w-5 h-5 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 5L5 12H19L12 5Z" fill="white"/>
+                </svg>
+              </div>
+              <div className="w-5 h-5 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 19L5 12H19L12 19Z" fill="white"/>
+                </svg>
+              </div>
+              <div className="w-5 h-5 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5 12L12 5L12 19L5 12Z" fill="white"/>
+                </svg>
+              </div>
+              <div className="w-5 h-5 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19 12L12 5L12 19L19 12Z" fill="white"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="h-6 w-[1px] bg-white/20"></div>
+          <div className="flex items-center gap-2">
+            <span>Grab/Edit</span>
+            <div 
+              className="relative min-w-[44px] h-6 bg-white/15 border-2 border-white/80 rounded-md cursor-pointer flex items-center justify-center px-2"
+              onClick={() => setShowInstructions(!showInstructions)}
+            >
+              <div className="text-xs text-white">SPACE</div>
+            </div>
+          </div>
+        </div>
         
         <RadioButton 
           onClick={toggleRadio} 
