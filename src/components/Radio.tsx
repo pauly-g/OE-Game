@@ -350,8 +350,9 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     const playRandomBackgroundSong = (source = 'visibility_change') => {
       console.log(`[Radio] Playing random background song from source: ${source}`);
       
-      // Don't start a new track if we're already playing something and not at a game over or paused state
-      if (globalAudio && !globalAudio.paused && 
+      // Check if we should skip autoplay (but be more permissive for initial load)
+      if (source !== 'component_mount' && source !== 'page_load' && source !== 'page_load_delayed' && 
+          globalAudio && !globalAudio.paused && 
           globalAudio.currentTime > 0 && 
           !globalAudio.ended && 
           globalAudio.src !== '') {
@@ -359,11 +360,21 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
         return;
       }
       
+      // For component mount and page load, always try to start fresh
+      if ((source === 'component_mount' || source === 'page_load' || source === 'page_load_delayed') && globalAudio) {
+        console.log('[Radio] Component mount/page load - forcing fresh start');
+        globalAudio.pause();
+        globalAudio.currentTime = 0;
+        globalAudio.src = '';
+      }
+      
       // Find all background songs
       const backgroundSongs = tracks.filter(track => 
         track.stationType === 'warehouse' && 
         ['Chilled', 'Frantic', 'Relaxed'].includes(track.title)
       );
+      
+      console.log(`[Radio] Found ${backgroundSongs.length} background songs:`, backgroundSongs.map(s => s.title));
       
       if (backgroundSongs.length > 0) {
         try {
@@ -417,15 +428,10 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
                   }
                 })
                 .catch(error => {
-                  console.error('[Radio] Error playing audio:', error);
-                  // Retry once after a delay
-                  setTimeout(() => {
-                    if (globalAudio) {
-                      globalAudio.play().catch(e => 
-                        console.error('[Radio] Retry also failed:', e)
-                      );
-                    }
-                  }, 1000);
+                  // Only log errors that aren't autoplay restrictions
+                  if (error.name !== 'NotAllowedError' && !error.message.includes('autoplay') && !error.message.includes('interact')) {
+                    console.error('[Radio] Error playing audio:', error);
+                  }
                 });
             }
           }, 100);
@@ -495,8 +501,41 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     window.addEventListener('load', handleLoad);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Try to play immediately on mount
-    playRandomBackgroundSong('component_mount');
+    // Smart autoplay: Try immediately, but set up user interaction fallback
+    let musicStarted = false;
+    
+    const startMusic = () => {
+      if (musicStarted) return;
+      musicStarted = true;
+      
+      // Clear any stale state
+      if (globalAudio) {
+        globalAudio.pause();
+        globalAudio.currentTime = 0;
+        globalAudio.src = '';
+      }
+      globalAudioState.currentTrackId = null;
+      globalAudioState.isPlaying = false;
+      
+      // Start music
+      playRandomBackgroundSong('autostart');
+    };
+
+    // Try immediate autoplay (will work if user has interacted before)
+    setTimeout(startMusic, 100);
+
+    // Fallback: Start music on any user interaction (for fresh page loads)
+    const handleInteraction = () => {
+      startMusic();
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleInteraction, true);
+      document.removeEventListener('keydown', handleInteraction, true);
+      document.removeEventListener('touchstart', handleInteraction, true);
+    };
+
+    document.addEventListener('click', handleInteraction, { capture: true });
+    document.addEventListener('keydown', handleInteraction, { capture: true });
+    document.addEventListener('touchstart', handleInteraction, { capture: true });
 
     // Cleanup
     return () => {

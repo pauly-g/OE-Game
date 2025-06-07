@@ -516,7 +516,7 @@ export class Level1Scene extends Phaser.Scene {
         const textureKeys = this.textures.getTextureKeys();
         console.log(`Available textures: ${textureKeys.length} textures loaded`);
         
-        console.log(`Initial sprite texture set to: idle down 1`);
+        // console.log(`Initial sprite texture set to: idle down 1`);
         
         // Play idle animation
         this.player.anims.play(`idle-${this.lastDirection}`);
@@ -1215,9 +1215,9 @@ export class Level1Scene extends Phaser.Scene {
       
       if (this.textures.exists(textureKey)) {
         this.player.setTexture(textureKey);
-        console.log(`Manual animation: ${textureKey}`);
+        // console.log(`Manual animation: ${textureKey}`);
       } else {
-        console.warn(`Texture not found: ${textureKey}, using fallback`);
+                  // console.warn(`Texture not found: ${textureKey}, using fallback`);
         // Fall back to frame 1
         const fallbackKey = `${prefix} ${this.lastDirection} 1`;
         if (this.textures.exists(fallbackKey)) {
@@ -1557,7 +1557,7 @@ export class Level1Scene extends Phaser.Scene {
       // Failure - wrong edit type
       console.log('Wrong edit type!');
       console.log(`Edit type: ${edit.type}`);
-      console.log(`Order requires: ${order.types.join(', ')}`);
+              // console.log(`Order requires: ${order.types.join(', ')}`);
       console.log(`Already completed: ${order.completedEdits.join(', ')}`);
       
       // Show a red X or failure indicator
@@ -2037,10 +2037,10 @@ export class Level1Scene extends Phaser.Scene {
     this.manualOrdersCompleted = 0;
     console.log('Reset manual orders counter to 0 after power-up ended');
     
-    console.log('Debug sprite state before animations:');
-    console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
-    console.log(`Kiril exists: ${!!this.kirilSprite}, active: ${this.kirilSprite?.active}`);
-    console.log(`OE Logo exists: ${!!this.oeLogoSprite}, active: ${this.oeLogoSprite?.active}`);
+            // console.log('Debug sprite state before animations:');
+        // console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
+        // console.log(`Kiril exists: ${!!this.kirilSprite}, active: ${this.kirilSprite?.active}`);
+        // console.log(`OE Logo exists: ${!!this.oeLogoSprite}, active: ${this.oeLogoSprite?.active}`);
     
     // Animate Hamish and Kiril sliding out
     if (this.hamishSprite && this.hamishSprite.active) {
@@ -2233,7 +2233,7 @@ export class Level1Scene extends Phaser.Scene {
       const height = this.cameras.main.height;
       
       console.log(`Screen dimensions: ${width}x${height}`);
-      console.log(`Logo current position: ${this.oeLogoSprite.x}, ${this.oeLogoSprite.y}`);
+              // console.log(`Logo current position: ${this.oeLogoSprite.x}, ${this.oeLogoSprite.y}`);
       
       // Set up a timer to wiggle every 5 seconds
       this.time.addEvent({
@@ -2623,11 +2623,11 @@ export class Level1Scene extends Phaser.Scene {
 
   private generateOrder = () => {
     try {
-      console.log('Generating new order');
+              // console.log('Generating new order');
       
       // Count how many stations are unlocked
       const unlockedStations = this.stations.filter(station => station.isUnlocked);
-      console.log(`Unlocked stations: ${unlockedStations.map(s => s.type).join(', ')}`);
+              // console.log(`Unlocked stations: ${unlockedStations.map(s => s.type).join(', ')}`);
       
       if (unlockedStations.length === 0) {
         console.log('No unlocked stations available, cannot generate order');
@@ -2644,7 +2644,7 @@ export class Level1Scene extends Phaser.Scene {
       );
       
       if (ordersNearSpawn.length > 0) {
-        console.log('Order in spawn area, delaying generation');
+                  // console.log('Order in spawn area, delaying generation');
         this.time.delayedCall(500, this.generateOrder, [], this);
         return;
       }
@@ -2700,7 +2700,7 @@ export class Level1Scene extends Phaser.Scene {
       const uniqueStationTypes = Array.from(stationTypesSet);
       const selectedTypes: string[] = [];
       
-      console.log(`Available unique station types: ${uniqueStationTypes.join(', ')}`);
+              // console.log(`Available unique station types: ${uniqueStationTypes.join(', ')}`);
       
       // Fisher-Yates shuffle algorithm for true randomness
       function fisherYatesShuffle(array: any[]): any[] {
@@ -2714,7 +2714,7 @@ export class Level1Scene extends Phaser.Scene {
       
       // Shuffle the types using Fisher-Yates for proper randomization
       const shuffledTypes = fisherYatesShuffle(uniqueStationTypes);
-      console.log(`Shuffled station types: ${shuffledTypes.join(', ')}`);
+              // console.log(`Shuffled station types: ${shuffledTypes.join(', ')}`);
       
       // Take the first numEdits types, with explicit duplicate checking
       for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
@@ -2732,7 +2732,7 @@ export class Level1Scene extends Phaser.Scene {
         numEdits = selectedTypes.length;
       }
       
-      console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
+              // console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
       
       // Create container for the order
       const container = this.add.container(orderX, orderY);
@@ -2774,7 +2774,7 @@ export class Level1Scene extends Phaser.Scene {
       const icons = selectedTypes.map((type, index) => {
         // Verify that this icon exists
         const iconText = this.getStationIcon(type);
-        console.log(`Using icon '${iconText}' for type '${type}'`);
+                  // console.log(`Using icon '${iconText}' for type '${type}'`);
         
         const icon = this.add.text(0, 0, iconText, {
           fontSize: '28px',
@@ -2880,9 +2880,9 @@ export class Level1Scene extends Phaser.Scene {
         this.completeOrder(order);
       }
       
-      console.log(`Order created: ${order.id}`);
-      console.log(`Order requires edits: ${order.types.join(', ')}`);
-      console.log(`Order icon types: ${order.types.map(type => `${type}: ${this.getStationIcon(type)}`).join(', ')}`);
+              // console.log(`Order created: ${order.id}`);
+        // console.log(`Order requires edits: ${order.types.join(', ')}`);
+        // console.log(`Order icon types: ${order.types.map(type => `${type}: ${this.getStationIcon(type)}`).join(', ')}`);
     } catch (error) {
       console.error('Error generating order:', error);
     }
@@ -2893,7 +2893,7 @@ export class Level1Scene extends Phaser.Scene {
   private unlockNextStation() {
     // Check how many stations are currently unlocked
     const unlockedCount = this.stations.filter(station => station.isUnlocked).length;
-    console.log(`Currently have ${unlockedCount} unlocked stations`);
+            // console.log(`Currently have ${unlockedCount} unlocked stations`);
     
     // Find the next station to unlock
     const nextStation = this.stations.find(station => !station.isUnlocked);
