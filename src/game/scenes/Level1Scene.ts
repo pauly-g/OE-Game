@@ -155,6 +155,7 @@ export class Level1Scene extends Phaser.Scene {
   private hasTutorialOrder: boolean = false;
   private skipTutorialKey!: Phaser.Input.Keyboard.Key;
   private tutorialTargetOrder?: Order; // Track which order is being highlighted
+  private isRestart: boolean = false; // Track if this is a restart vs new game
 
   // Add a function to create confetti particle effect
   private createConfettiEffect(x: number, y: number) {
@@ -197,6 +198,10 @@ export class Level1Scene extends Phaser.Scene {
     console.log('Level1Scene init called', data);
     
     const isFullReset = data?.fullReset === true;
+    
+    // Track if this is a restart (true) or fresh start (false)
+    this.isRestart = data?.reset === true;
+    console.log('Is restart:', this.isRestart);
     
     if (data?.reset) {
       console.log(`Game restarting - performing ${isFullReset ? 'FULL' : 'standard'} reset in Level1Scene init`);
@@ -3785,8 +3790,13 @@ export class Level1Scene extends Phaser.Scene {
   
   // Tutorial System Methods
   private initializeTutorial() {
-    // Check if player has completed tutorial before (local storage first, then Firebase)
-    const localTutorialCompleted = localStorage.getItem('oe-game-tutorial-completed') === 'true';
+    console.log('Initializing tutorial. Is restart:', this.isRestart);
+    
+    // If this is a restart (continuing from game over), never show tutorial
+    if (this.isRestart) {
+      console.log('This is a restart - skipping tutorial');
+      return;
+    }
     
     // Check if user is logged in and has tutorial completion in Firebase
     const checkFirebaseTutorial = () => {
@@ -3801,10 +3811,25 @@ export class Level1Scene extends Phaser.Scene {
     
     const firebaseTutorialCompleted = checkFirebaseTutorial();
     
-    if (localTutorialCompleted || firebaseTutorialCompleted) {
-      console.log('Player has already completed tutorial, skipping...');
+    // For logged-in users, respect Firebase completion status
+    if (firebaseTutorialCompleted) {
+      console.log('Logged-in user has completed tutorial, skipping...');
       return;
     }
+    
+    // For non-logged-in users, check localStorage (but only if not first time ever)
+    const localTutorialCompleted = localStorage.getItem('oe-game-tutorial-completed') === 'true';
+    const userData = (window as any).firebaseUserData;
+    const isLoggedIn = userData && (window as any).firebaseUser;
+    
+    // If not logged in and has completed locally, skip
+    if (!isLoggedIn && localTutorialCompleted) {
+      console.log('Non-logged-in user has completed tutorial locally, skipping...');
+      return;
+    }
+    
+    // Start tutorial for new players (either new non-logged-in users or logged-in users who haven't completed it)
+    console.log('Starting tutorial for new player');
     
     // Set up skip tutorial key
     this.skipTutorialKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
