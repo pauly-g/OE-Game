@@ -1050,11 +1050,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
       
       {/* Show sign-in form if user needs to authenticate */}
       {showSignIn ? (
-        <MockSignIn 
-          onSuccess={handleMockSignIn} 
-          onClose={handleClose}
-          score={userScore || 0}
-        />
+        <div className="leaderboard-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
+          <MockSignIn 
+            onSuccess={handleMockSignIn} 
+            onClose={handleClose}
+            score={userScore || 0}
+          />
+        </div>
       ) : (
         // Show the main leaderboard content
         renderLeaderboardContent()
