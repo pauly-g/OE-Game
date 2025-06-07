@@ -410,7 +410,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   const { 
     currentUser, 
     userData, 
-    submitUserScore, 
+    submitUserScore,
     updateUserCompany,
     refreshUserData,
     getUserBestScore,
@@ -500,56 +500,64 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
         }
 
         if (currentUser) {
-          console.log('[Leaderboard] User is logged in with complete profile. Checking score...');
-          setIsSubmitting(true); // Set submission guard
+          console.log('[Leaderboard] User is logged in. Checking if score was already submitted...');
           try {
             const bestScoreData = await getUserBestScore();
             setCurrentBestScoreData(bestScoreData); // Store the best score data object
 
             const bestScoreValue = bestScoreData?.score; // Get the numeric score value
 
+            // Check if this score might be a new high score that wasn't submitted yet
             if (bestScoreValue === undefined || userScore > bestScoreValue) {
-              console.log('[Leaderboard] New high score! Submitting:', userScore);
-              // Show loading message immediately
-              let loadingMsg = showLoadingMessage('Submitting your high score...'); // Allow potential re-assignment
-              const result = await submitUserScore(userScore);
-              removeLoadingMessage(loadingMsg); // Remove loading message after submission attempt
+              console.log('[Leaderboard] Potential new high score detected. Checking if already submitted...');
+              
+              // Wait a short time to allow App.tsx submission to complete
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // Re-fetch best score to see if it was updated by App.tsx
+              const updatedBestScore = await getUserBestScore();
+              const updatedBestValue = updatedBestScore?.score;
+              
+              if (updatedBestValue === undefined || userScore > updatedBestValue) {
+                console.log('[Leaderboard] Score was not submitted by App.tsx. Submitting now...');
+                setIsSubmitting(true);
+                
+                let loadingMsg = showLoadingMessage('Submitting your high score...');
+                const result = await submitUserScore(userScore);
+                removeLoadingMessage(loadingMsg);
 
-              if (result.success) {
-                setMostRecentScoreId(currentUser.uid); // Mark user for potential highlight
-                console.log('[Leaderboard] High score submitted successfully.');
-                // Wait briefly for Firebase update before fetching data with the NEW score
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                await fetchLeaderboardData(userScore); // Fetch using the new high score
-                // Show message AFTER data fetch completes
+                if (result.success) {
+                  setMostRecentScoreId(currentUser.uid);
+                  console.log('[Leaderboard] High score submitted successfully from Leaderboard.');
+                  await new Promise(resolve => setTimeout(resolve, 1500));
+                  await fetchLeaderboardData(userScore);
+                  setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
+                  setShowNotHighScoreMessage(true);
+                } else {
+                  console.error('[Leaderboard] Failed to submit high score:', result.message);
+                  setError(`Failed to submit high score: ${result.message || 'Please try again.'}`);
+                  await fetchLeaderboardData(updatedBestValue ?? undefined);
+                }
+                setIsSubmitting(false);
+              } else {
+                console.log('[Leaderboard] Score was already submitted by App.tsx. Just fetching leaderboard...');
+                await fetchLeaderboardData(updatedBestValue);
                 setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
                 setShowNotHighScoreMessage(true);
-              } else {
-                console.error('[Leaderboard] Failed to submit high score:', result.message);
-                setError(`Failed to submit high score: ${result.message || 'Please try again.'}`);
-                // Fetch using old best score value if submission failed
-                await fetchLeaderboardData(bestScoreValue ?? undefined);
-                // No message needed on failure, error is shown
               }
             } else {
               console.log('[Leaderboard] Score is not a high score.');
-              // Fetch using the existing best score value
               await fetchLeaderboardData(bestScoreValue);
-              // Show message AFTER data fetch completes
               setNotHighScoreMessage(`Your score (${userScore}) was not higher than your personal best of ${bestScoreValue}. Keep trying!`);
               setShowNotHighScoreMessage(true);
             }
           } catch (err) {
             console.error('[Leaderboard] Error checking/submitting score:', err);
             setError('Error processing your score. Please try again.');
-            fetchLeaderboardData(); // Fetch generic top 10 on error
-          } finally {
-            setIsSubmitting(false); // Release submission guard
+            fetchLeaderboardData();
           }
         } else {
-          console.log('[Leaderboard] User not logged in. Prompting sign-in.');
-          // Scenario 1 & 2 (Not logged in): Prompt to sign in.
-          // Score submission and subsequent leaderboard fetch will be handled in handleMockSignIn.
+          console.log('[Leaderboard] User not logged in. Prompting sign-in to submit high score.');
           setShowSignIn(true);
           setLoading(false); // Stop loading as we wait for user interaction
         }
@@ -650,42 +658,38 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
 
       // Assume sign-in successful. Now handle the score.
       if (userScore !== undefined) {
-        console.log('[Leaderboard] Processing score submission after sign-in simulation:', userScore);
-        // Since this is the first submission for this "user", it's automatically a high score.
-        // In a real app, you'd call `submitUserScore` which handles the high-score check internally.
+        console.log('[Leaderboard] Processing score submission after sign-in:', userScore);
         let loadingMsg = showLoadingMessage('Submitting your score...');
 
-        // Simulate submission (replace with actual submitUserScore if needed)
-        // const result = await submitUserScore(userScore); // Use this in real auth
-        const result = { success: true, isHighScore: true }; // Mocked result
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
-
-        removeLoadingMessage(loadingMsg); // Remove loading message after submission attempt
+        // Use the real submitUserScore function
+        const result = await submitUserScore(userScore);
+        removeLoadingMessage(loadingMsg);
 
         if (result.success) {
-          // Simulate setting user ID for highlight (won't work without real auth)
-          // setMostRecentScoreId(mockUserId); // You'd get this from the actual auth result
-          console.log('[Leaderboard] Mock score submission successful.');
+          console.log('[Leaderboard] Score submission successful after sign-in.');
 
-          // Dispatch event (useful if other parts of the app listen)
+          // Dispatch event to notify other parts of the app
           const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
             detail: { score: userScore, timestamp: new Date(), success: true }
           });
           window.dispatchEvent(scoreSubmittedEvent);
 
-          // Wait briefly for Firebase update (even in mock)
+          // Wait briefly for Firebase update
           await new Promise(resolve => setTimeout(resolve, 1500));
           // Fetch leaderboard data using the submitted score
           await fetchLeaderboardData(userScore);
 
-          // Show message AFTER data fetch completes
-          setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your first entry on the leaderboard!`);
+          // Show appropriate message based on whether it was a high score
+          if (result.isHighScore) {
+            setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
+          } else {
+            setNotHighScoreMessage(`Your score (${userScore}) has been submitted to the leaderboard!`);
+          }
           setShowNotHighScoreMessage(true);
         } else {
-          console.error('[Leaderboard] Mock score submission failed');
-          setError('Failed to submit score after sign-in. Please try again.');
+          console.error('[Leaderboard] Score submission failed after sign-in:', result.message);
+          setError(`Failed to submit score: ${result.message || 'Please try again.'}`);
           await fetchLeaderboardData(); // Fetch generic top 10 on error
-          // No message needed on failure
         }
       } else {
           // Signed in without a score to submit, just fetch top 10

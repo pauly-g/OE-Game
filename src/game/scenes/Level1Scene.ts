@@ -81,6 +81,7 @@ export class Level1Scene extends Phaser.Scene {
   private cKey!: Phaser.Input.Keyboard.Key;
   private fKey!: Phaser.Input.Keyboard.Key; // New f key for cheat code
   private lKey!: Phaser.Input.Keyboard.Key; // New l key for reducing lives cheat
+  private tKey!: Phaser.Input.Keyboard.Key; // New t key for tutorial cheat
   private playerSpeed: number = 8; // Changed from 4 to 8 for faster movement
   private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
@@ -144,6 +145,18 @@ export class Level1Scene extends Phaser.Scene {
   private firstSongUnlocked: boolean = false;
   private inputsDisabled: boolean = false; // Track if keyboard inputs should be ignored
   
+  // Tutorial System Properties
+  private tutorialActive: boolean = false;
+  private tutorialStep: number = 0;
+  private tutorialOverlay!: Phaser.GameObjects.Container;
+  private tutorialText!: Phaser.GameObjects.Text;
+  private tutorialArrow?: Phaser.GameObjects.Graphics;
+  private tutorialHighlight?: Phaser.GameObjects.Graphics;
+  private hasTutorialOrder: boolean = false;
+  private skipTutorialKey!: Phaser.Input.Keyboard.Key;
+  private tutorialTargetOrder?: Order; // Track which order is being highlighted
+  private isRestart: boolean = false; // Track if this is a restart vs new game
+
   // Add a function to create confetti particle effect
   private createConfettiEffect(x: number, y: number) {
     // Create a particle emitter for the confetti effect
@@ -185,6 +198,10 @@ export class Level1Scene extends Phaser.Scene {
     console.log('Level1Scene init called', data);
     
     const isFullReset = data?.fullReset === true;
+    
+    // Track if this is a restart (true) or fresh start (false)
+    this.isRestart = data?.reset === true;
+    console.log('Is restart:', this.isRestart);
     
     if (data?.reset) {
       console.log(`Game restarting - performing ${isFullReset ? 'FULL' : 'standard'} reset in Level1Scene init`);
@@ -499,7 +516,7 @@ export class Level1Scene extends Phaser.Scene {
         const textureKeys = this.textures.getTextureKeys();
         console.log(`Available textures: ${textureKeys.length} textures loaded`);
         
-        console.log(`Initial sprite texture set to: idle down 1`);
+        // console.log(`Initial sprite texture set to: idle down 1`);
         
         // Play idle animation
         this.player.anims.play(`idle-${this.lastDirection}`);
@@ -516,11 +533,12 @@ export class Level1Scene extends Phaser.Scene {
 
       // Set up input
       this.cursors = this.input.keyboard.createCursorKeys();
-      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-      this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-      this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
-      this.fKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F); // Initialize f key
-      this.lKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L); // Initialize l key
+          this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+    this.fKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F); // Initialize f key
+    this.lKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L); // Initialize l key
+    this.tKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T); // Initialize t key for tutorial cheat
       this.lastSpaceState = false;
       
       // Create UI elements
@@ -541,6 +559,9 @@ export class Level1Scene extends Phaser.Scene {
       
       // Sync tracker with the initial game state
       this.syncTrackerWithGameState();
+      
+      // Initialize tutorial system for new players
+      this.initializeTutorial();
     } catch (error) {
       console.error('Error in create method:', error);
     }
@@ -1096,6 +1117,15 @@ export class Level1Scene extends Phaser.Scene {
         console.log('L key pressed - Reduce to one life');
         this.reduceToOneLifeCheat();
       }
+      
+      // Check for 't' key to force tutorial start (cheat)
+      if (Phaser.Input.Keyboard.JustDown(this.tKey)) {
+        console.log('Cheat code activated: Force Tutorial Start!');
+        this.forceTutorialStartCheat();
+      }
+      
+      // Update tutorial if active
+      this.updateTutorial();
     } catch (error) {
       console.error('Error in update:', error);
     }
@@ -1185,9 +1215,9 @@ export class Level1Scene extends Phaser.Scene {
       
       if (this.textures.exists(textureKey)) {
         this.player.setTexture(textureKey);
-        console.log(`Manual animation: ${textureKey}`);
+        // console.log(`Manual animation: ${textureKey}`);
       } else {
-        console.warn(`Texture not found: ${textureKey}, using fallback`);
+                  // console.warn(`Texture not found: ${textureKey}, using fallback`);
         // Fall back to frame 1
         const fallbackKey = `${prefix} ${this.lastDirection} 1`;
         if (this.textures.exists(fallbackKey)) {
@@ -1527,7 +1557,7 @@ export class Level1Scene extends Phaser.Scene {
       // Failure - wrong edit type
       console.log('Wrong edit type!');
       console.log(`Edit type: ${edit.type}`);
-      console.log(`Order requires: ${order.types.join(', ')}`);
+              // console.log(`Order requires: ${order.types.join(', ')}`);
       console.log(`Already completed: ${order.completedEdits.join(', ')}`);
       
       // Show a red X or failure indicator
@@ -2007,10 +2037,10 @@ export class Level1Scene extends Phaser.Scene {
     this.manualOrdersCompleted = 0;
     console.log('Reset manual orders counter to 0 after power-up ended');
     
-    console.log('Debug sprite state before animations:');
-    console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
-    console.log(`Kiril exists: ${!!this.kirilSprite}, active: ${this.kirilSprite?.active}`);
-    console.log(`OE Logo exists: ${!!this.oeLogoSprite}, active: ${this.oeLogoSprite?.active}`);
+            // console.log('Debug sprite state before animations:');
+        // console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
+        // console.log(`Kiril exists: ${!!this.kirilSprite}, active: ${this.kirilSprite?.active}`);
+        // console.log(`OE Logo exists: ${!!this.oeLogoSprite}, active: ${this.oeLogoSprite?.active}`);
     
     // Animate Hamish and Kiril sliding out
     if (this.hamishSprite && this.hamishSprite.active) {
@@ -2203,7 +2233,7 @@ export class Level1Scene extends Phaser.Scene {
       const height = this.cameras.main.height;
       
       console.log(`Screen dimensions: ${width}x${height}`);
-      console.log(`Logo current position: ${this.oeLogoSprite.x}, ${this.oeLogoSprite.y}`);
+              // console.log(`Logo current position: ${this.oeLogoSprite.x}, ${this.oeLogoSprite.y}`);
       
       // Set up a timer to wiggle every 5 seconds
       this.time.addEvent({
@@ -2593,11 +2623,11 @@ export class Level1Scene extends Phaser.Scene {
 
   private generateOrder = () => {
     try {
-      console.log('Generating new order');
+              // console.log('Generating new order');
       
       // Count how many stations are unlocked
       const unlockedStations = this.stations.filter(station => station.isUnlocked);
-      console.log(`Unlocked stations: ${unlockedStations.map(s => s.type).join(', ')}`);
+              // console.log(`Unlocked stations: ${unlockedStations.map(s => s.type).join(', ')}`);
       
       if (unlockedStations.length === 0) {
         console.log('No unlocked stations available, cannot generate order');
@@ -2614,7 +2644,7 @@ export class Level1Scene extends Phaser.Scene {
       );
       
       if (ordersNearSpawn.length > 0) {
-        console.log('Order in spawn area, delaying generation');
+                  // console.log('Order in spawn area, delaying generation');
         this.time.delayedCall(500, this.generateOrder, [], this);
         return;
       }
@@ -2670,7 +2700,7 @@ export class Level1Scene extends Phaser.Scene {
       const uniqueStationTypes = Array.from(stationTypesSet);
       const selectedTypes: string[] = [];
       
-      console.log(`Available unique station types: ${uniqueStationTypes.join(', ')}`);
+              // console.log(`Available unique station types: ${uniqueStationTypes.join(', ')}`);
       
       // Fisher-Yates shuffle algorithm for true randomness
       function fisherYatesShuffle(array: any[]): any[] {
@@ -2684,7 +2714,7 @@ export class Level1Scene extends Phaser.Scene {
       
       // Shuffle the types using Fisher-Yates for proper randomization
       const shuffledTypes = fisherYatesShuffle(uniqueStationTypes);
-      console.log(`Shuffled station types: ${shuffledTypes.join(', ')}`);
+              // console.log(`Shuffled station types: ${shuffledTypes.join(', ')}`);
       
       // Take the first numEdits types, with explicit duplicate checking
       for (let i = 0; i < numEdits && i < shuffledTypes.length; i++) {
@@ -2702,7 +2732,7 @@ export class Level1Scene extends Phaser.Scene {
         numEdits = selectedTypes.length;
       }
       
-      console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
+              // console.log(`Creating order with ${numEdits} edits: ${selectedTypes.join(', ')}`);
       
       // Create container for the order
       const container = this.add.container(orderX, orderY);
@@ -2744,7 +2774,7 @@ export class Level1Scene extends Phaser.Scene {
       const icons = selectedTypes.map((type, index) => {
         // Verify that this icon exists
         const iconText = this.getStationIcon(type);
-        console.log(`Using icon '${iconText}' for type '${type}'`);
+                  // console.log(`Using icon '${iconText}' for type '${type}'`);
         
         const icon = this.add.text(0, 0, iconText, {
           fontSize: '28px',
@@ -2850,9 +2880,9 @@ export class Level1Scene extends Phaser.Scene {
         this.completeOrder(order);
       }
       
-      console.log(`Order created: ${order.id}`);
-      console.log(`Order requires edits: ${order.types.join(', ')}`);
-      console.log(`Order icon types: ${order.types.map(type => `${type}: ${this.getStationIcon(type)}`).join(', ')}`);
+              // console.log(`Order created: ${order.id}`);
+        // console.log(`Order requires edits: ${order.types.join(', ')}`);
+        // console.log(`Order icon types: ${order.types.map(type => `${type}: ${this.getStationIcon(type)}`).join(', ')}`);
     } catch (error) {
       console.error('Error generating order:', error);
     }
@@ -2863,7 +2893,7 @@ export class Level1Scene extends Phaser.Scene {
   private unlockNextStation() {
     // Check how many stations are currently unlocked
     const unlockedCount = this.stations.filter(station => station.isUnlocked).length;
-    console.log(`Currently have ${unlockedCount} unlocked stations`);
+            // console.log(`Currently have ${unlockedCount} unlocked stations`);
     
     // Find the next station to unlock
     const nextStation = this.stations.find(station => !station.isUnlocked);
@@ -3715,6 +3745,431 @@ export class Level1Scene extends Phaser.Scene {
       });
     } else {
       console.log('Already at zero lives');
+    }
+  }
+  
+  // Cheat to force tutorial start (even if already completed)
+  private forceTutorialStartCheat() {
+    console.log('Cheat: Forcing tutorial start');
+    
+    // Stop any existing tutorial first
+    if (this.tutorialActive) {
+      this.completeTutorial();
+    }
+    
+    // Reset tutorial state
+    this.tutorialActive = false;
+    this.tutorialStep = 0;
+    this.hasTutorialOrder = false;
+    this.tutorialTargetOrder = undefined;
+    
+    // Show cheat activation message
+    const cheatMessage = this.add.text(
+      this.cameras.main.centerX,
+      this.cameras.main.centerY - 100,
+      'CHEAT: Tutorial Starting!',
+      {
+        fontSize: '24px',
+        color: '#00ff00',
+        stroke: '#000000',
+        strokeThickness: 3
+      }
+    ).setOrigin(0.5).setDepth(1000);
+    
+    // Start tutorial after a short delay to allow message to be seen
+    this.time.delayedCall(1500, () => {
+      // Set up skip tutorial key (in case it wasn't initialized)
+      if (!this.skipTutorialKey) {
+        this.skipTutorialKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+      }
+      
+      this.startTutorial();
+      cheatMessage.destroy();
+    });
+  }
+  
+  // Tutorial System Methods
+  private initializeTutorial() {
+    console.log('Initializing tutorial. Is restart:', this.isRestart);
+    
+    // If this is a restart (continuing from game over), never show tutorial
+    if (this.isRestart) {
+      console.log('This is a restart - skipping tutorial');
+      return;
+    }
+    
+    // Check if user is logged in and has tutorial completion in Firebase
+    const checkFirebaseTutorial = () => {
+      // Access Firebase user data through window global (set by App component)
+      const userData = (window as any).firebaseUserData;
+      if (userData && userData.tutorialCompleted) {
+        console.log('Player has completed tutorial (Firebase), skipping...');
+        return true;
+      }
+      return false;
+    };
+    
+    const firebaseTutorialCompleted = checkFirebaseTutorial();
+    
+    // For logged-in users, respect Firebase completion status
+    if (firebaseTutorialCompleted) {
+      console.log('Logged-in user has completed tutorial, skipping...');
+      return;
+    }
+    
+    // For non-logged-in users, check localStorage (but only if not first time ever)
+    const localTutorialCompleted = localStorage.getItem('oe-game-tutorial-completed') === 'true';
+    const userData = (window as any).firebaseUserData;
+    const isLoggedIn = userData && (window as any).firebaseUser;
+    
+    // If not logged in and has completed locally, skip
+    if (!isLoggedIn && localTutorialCompleted) {
+      console.log('Non-logged-in user has completed tutorial locally, skipping...');
+      return;
+    }
+    
+    // Start tutorial for new players (either new non-logged-in users or logged-in users who haven't completed it)
+    console.log('Starting tutorial for new player');
+    
+    // Set up skip tutorial key
+    this.skipTutorialKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    
+    // Start tutorial after a brief delay
+    this.time.delayedCall(1000, () => {
+      this.startTutorial();
+    });
+  }
+  
+  private startTutorial() {
+    console.log('Starting tutorial...');
+    this.tutorialActive = true;
+    this.tutorialStep = 0;
+    
+    // Create minimal tutorial overlay (no full screen cover)
+    this.tutorialOverlay = this.add.container(0, 0);
+    this.tutorialOverlay.setDepth(1000);
+    
+    // Create retro-style tutorial text box (much smaller, bottom only)
+    const textBoxWidth = 600;
+    const textBoxHeight = 80;
+    const textBoxX = this.cameras.main.centerX;
+    const textBoxY = this.cameras.main.height - 60;
+    
+    // Pixelated wooden sign style background (like station signs)
+    const textShadow = this.add.rectangle(textBoxX + 3, textBoxY + 3, textBoxWidth, textBoxHeight, 0x000000, 0.6);
+    const textBg = this.add.rectangle(textBoxX, textBoxY, textBoxWidth, textBoxHeight, 0xC19A6B)
+      .setStrokeStyle(4, 0x8B4513);
+    
+    // Add pixelated border details
+    const borderTop = this.add.rectangle(textBoxX, textBoxY - textBoxHeight/2, textBoxWidth, 4, 0x6B4C3B);
+    const borderBottom = this.add.rectangle(textBoxX, textBoxY + textBoxHeight/2, textBoxWidth, 4, 0x6B4C3B);
+    const borderLeft = this.add.rectangle(textBoxX - textBoxWidth/2, textBoxY, 4, textBoxHeight, 0x6B4C3B);
+    const borderRight = this.add.rectangle(textBoxX + textBoxWidth/2, textBoxY, 4, textBoxHeight, 0x6B4C3B);
+    
+    // Corner nails for retro look
+    const nailSize = 3;
+    const nail1 = this.add.circle(textBoxX - textBoxWidth/2 + 15, textBoxY - textBoxHeight/2 + 15, nailSize, 0x808080);
+    const nail2 = this.add.circle(textBoxX + textBoxWidth/2 - 15, textBoxY - textBoxHeight/2 + 15, nailSize, 0x808080);
+    const nail3 = this.add.circle(textBoxX - textBoxWidth/2 + 15, textBoxY + textBoxHeight/2 - 15, nailSize, 0x808080);
+    const nail4 = this.add.circle(textBoxX + textBoxWidth/2 - 15, textBoxY + textBoxHeight/2 - 15, nailSize, 0x808080);
+    
+    // Create tutorial text with retro font styling
+    this.tutorialText = this.add.text(
+      textBoxX,
+      textBoxY,
+      '',
+      {
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        color: '#000000',
+        align: 'center',
+        fontStyle: 'bold',
+        wordWrap: { width: textBoxWidth - 40 }
+      }
+    ).setOrigin(0.5);
+    
+    this.tutorialOverlay.add([
+      textShadow, textBg, borderTop, borderBottom, borderLeft, borderRight,
+      nail1, nail2, nail3, nail4, this.tutorialText
+    ]);
+    
+    // Start first tutorial step
+    this.showTutorialStep();
+  }
+  
+  private showTutorialStep() {
+    // Clear previous highlights and arrows
+    if (this.tutorialArrow) {
+      this.tutorialArrow.destroy();
+      this.tutorialArrow = undefined;
+    }
+    if (this.tutorialHighlight) {
+      this.tutorialHighlight.destroy();
+      this.tutorialHighlight = undefined;
+    }
+    
+    switch (this.tutorialStep) {
+      case 0:
+        this.tutorialText.setText(
+          'Welcome to Order Editing! Use ARROW KEYS to move around. (ESC to skip)'
+        );
+        break;
+        
+      case 1:
+        this.tutorialText.setText(
+          'Great! Walk near the ADDRESS station and press SPACE to pick up an edit.'
+        );
+        this.highlightStation('address');
+        break;
+        
+      case 2:
+        this.tutorialText.setText(
+          'Excellent! Now find an order that needs ADDRESS edit and press SPACE to apply it!'
+        );
+        this.highlightFirstOrder();
+        break;
+        
+      case 3:
+        this.tutorialText.setText(
+          'Perfect! Keep picking up edits and applying them to orders. Press SPACE to finish.'
+        );
+        break;
+        
+      case 4:
+        this.completeTutorial();
+        break;
+    }
+  }
+  
+  private highlightStation(stationType: string) {
+    const station = this.stations.find(s => s.type === stationType && s.isUnlocked);
+    if (!station) return;
+    
+    // Create subtle pixelated highlight around the station
+    this.tutorialHighlight = this.add.graphics();
+    this.tutorialHighlight.setDepth(999);
+    
+    const bounds = station.container.getBounds();
+    // Use pixelated style highlight with retro colors
+    this.tutorialHighlight.lineStyle(3, 0xFFFF00, 0.8); // Yellow like retro games
+    this.tutorialHighlight.strokeRect(
+      bounds.x - 8, 
+      bounds.y - 8, 
+      bounds.width + 16, 
+      bounds.height + 16
+    );
+    
+    // Add subtle pulsing animation
+    this.tweens.add({
+      targets: this.tutorialHighlight,
+      alpha: { from: 0.8, to: 0.4 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1
+    });
+    
+    // Create retro arrow pointing to station
+    this.createArrowToTarget(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  }
+  
+  private highlightFirstOrder() {
+    if (this.orders.length === 0) return;
+    
+    const order = this.orders[0];
+    this.tutorialTargetOrder = order; // Track this order for position updates
+    
+    // Create subtle pixelated highlight around the order
+    this.tutorialHighlight = this.add.graphics();
+    this.tutorialHighlight.setDepth(999);
+    
+    this.updateOrderHighlightPosition(); // Initial position
+    
+    // Add subtle pulsing animation
+    this.tweens.add({
+      targets: this.tutorialHighlight,
+      alpha: { from: 0.8, to: 0.4 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1
+    });
+    
+    // Create retro arrow pointing to order
+    this.createArrowToTarget(order.x, order.y);
+  }
+  
+  private updateOrderHighlightPosition() {
+    if (!this.tutorialHighlight || !this.tutorialTargetOrder) return;
+    
+    const order = this.tutorialTargetOrder;
+    
+    // Clear and redraw the highlight at the new position
+    this.tutorialHighlight.clear();
+    this.tutorialHighlight.lineStyle(3, 0xFF8800, 0.8);
+    this.tutorialHighlight.strokeRect(
+      order.x - order.width/2 - 8, 
+      order.y - order.height/2 - 8, 
+      order.width + 16, 
+      order.height + 16
+    );
+  }
+  
+  private createArrowToTarget(targetX: number, targetY: number) {
+    this.tutorialArrow = this.add.graphics();
+    this.tutorialArrow.setDepth(1001);
+    
+    // Calculate arrow position (just above the target, much closer)
+    const arrowX = targetX;
+    const arrowY = targetY - 35;
+    
+    // Draw smaller, more subtle pixelated arrow pointing down
+    this.tutorialArrow.fillStyle(0xFFFF00);
+    this.tutorialArrow.fillRect(arrowX - 1, arrowY, 2, 12); // Thinner arrow shaft
+    this.tutorialArrow.fillRect(arrowX - 5, arrowY + 8, 10, 2); // Smaller arrow head horizontal
+    this.tutorialArrow.fillRect(arrowX - 3, arrowY + 10, 6, 2); // Smaller arrow head middle
+    this.tutorialArrow.fillRect(arrowX - 1, arrowY + 12, 2, 2);  // Smaller arrow head tip
+    
+    // Very subtle bouncing animation (much smaller bounce)
+    this.tweens.add({
+      targets: this.tutorialArrow,
+      y: arrowY + 2,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut'
+    });
+  }
+  
+  private updateTutorial() {
+    if (!this.tutorialActive) return;
+    
+    // Update moving elements (highlight and arrow) if we're in step 2
+    if (this.tutorialStep === 2) {
+      // Update highlight position to follow the order
+      this.updateOrderHighlightPosition();
+      
+      // Update arrow position to follow the order
+      if (this.tutorialArrow && this.tutorialTargetOrder) {
+        const targetX = this.tutorialTargetOrder.x;
+        const targetY = this.tutorialTargetOrder.y - 35;
+        
+        // Update arrow position smoothly
+        this.tutorialArrow.x = targetX;
+        this.tutorialArrow.y = targetY;
+      }
+    }
+    
+    // Check for skip tutorial
+    if (Phaser.Input.Keyboard.JustDown(this.skipTutorialKey)) {
+      this.completeTutorial();
+      return;
+    }
+    
+    // Check tutorial progress
+    switch (this.tutorialStep) {
+      case 0:
+        // Check if player has moved
+        if (this.lastDirection !== 'down' || this.lastMoving) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+        
+      case 1:
+        // Check if player picked up an edit
+        if (this.carriedEdits.length > 0) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+        
+      case 2:
+        // Check if player applied an edit
+        if (this.totalEditsApplied > 0) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+        
+      case 3:
+        // Wait for space key to finish (check for just pressed, not just down)
+        if (this.spaceKey.isDown && !this.lastSpaceState) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+    }
+  }
+  
+  private completeTutorial() {
+    console.log('Tutorial completed!');
+    
+    // Clean up tutorial elements
+    if (this.tutorialOverlay) {
+      this.tutorialOverlay.destroy();
+    }
+    if (this.tutorialArrow) {
+      this.tutorialArrow.destroy();
+      this.tutorialArrow = undefined;
+    }
+    if (this.tutorialHighlight) {
+      this.tutorialHighlight.destroy();
+      this.tutorialHighlight = undefined;
+    }
+    
+    // Clear tutorial target reference
+    this.tutorialTargetOrder = undefined;
+    
+    // Mark tutorial as completed
+    this.tutorialActive = false;
+    localStorage.setItem('oe-game-tutorial-completed', 'true');
+    
+    // Store completion in Firebase if user is logged in
+    this.storeTutorialCompletionInFirebase();
+    
+    // Show completion message
+    const completionText = this.add.text(
+      this.cameras.main.centerX,
+      this.cameras.main.centerY,
+      'Tutorial Complete!\nGood luck in the warehouse!',
+      {
+        fontSize: '24px',
+        color: '#00ff00',
+        align: 'center',
+        stroke: '#000000',
+        strokeThickness: 3
+      }
+    ).setOrigin(0.5).setDepth(1000);
+    
+    // Fade out completion message
+    this.tweens.add({
+      targets: completionText,
+      alpha: 0,
+      y: completionText.y - 50,
+      duration: 3000,
+      onComplete: () => completionText.destroy()
+    });
+  }
+  
+  private storeTutorialCompletionInFirebase() {
+    try {
+      // Access Firebase user data through window global (set by App component)
+      const userData = (window as any).firebaseUserData;
+      const firebaseUser = (window as any).firebaseUser;
+      
+      if (firebaseUser && userData) {
+        // Call Firebase update function through window global
+        const updateUserData = (window as any).updateFirebaseUserData;
+        if (updateUserData) {
+          updateUserData({
+            ...userData,
+            tutorialCompleted: true
+          });
+          console.log('Tutorial completion stored in Firebase');
+        }
+      }
+    } catch (error) {
+      console.log('Could not store tutorial completion in Firebase:', error);
+      // This is not critical, so we don't throw - local storage will still work
     }
   }
 }
