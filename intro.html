@@ -281,21 +281,28 @@ Orders started pouring in. And with them, the customer order adjustment requests
         // Function for typewriter effect with sound control
         function typeWriterWithSound(element, text, speed, callback) {
           let i = 0;
+          let isPlayingSound = false;
           element.textContent = '';
           
           function typing() {
             if (i < text.length) {
               element.textContent += text.charAt(i);
               
-              // Play sound (if not a space and sound is enabled)
-              if (text.charAt(i) !== ' ' && soundEnabled) {
+              // Play sound (if not a space and sound is enabled and not already playing)
+              if (text.charAt(i) !== ' ' && soundEnabled && !isPlayingSound) {
                 try {
+                  // Set flag to prevent overlapping sounds
+                  isPlayingSound = true;
+                  
                   // Reset and play typing sound
                   typeSound.currentTime = 0;
                   typeSound.volume = 0.3; // Lower volume for better experience
                   
                   // Use async/await to handle the promise
                   typeSound.play()
+                    .then(() => {
+                      // Sound started playing successfully
+                    })
                     .catch(err => {
                       console.error('Audio play error:', err);
                       // If autoplay is blocked, we can request user interaction
@@ -303,13 +310,23 @@ Orders started pouring in. And with them, the customer order adjustment requests
                         console.log('Audio playback requires user interaction first');
                       }
                     });
+                  
+                  // Wait for sound to finish (typewriter-key.wav is typically short, ~100-200ms)
+                  // Adding minimal buffer time to ensure proper spacing
+                  setTimeout(() => {
+                    isPlayingSound = false;
+                  }, 80); // Reduced timing for faster typing
+                  
                 } catch (err) {
                   console.error('Error playing typing sound:', err);
+                  isPlayingSound = false;
                 }
               }
               
               i++;
-              setTimeout(typing, speed);
+              // Increase speed slightly when sound is playing to account for sound duration
+              const nextSpeed = (text.charAt(i-1) !== ' ' && soundEnabled) ? speed + 20 : speed;
+              setTimeout(typing, nextSpeed);
             } else if (callback) {
               // Play bell sound at the end of paragraph
               if (soundEnabled) {
@@ -333,8 +350,8 @@ Orders started pouring in. And with them, the customer order adjustment requests
           typing();
         }
         
-        // Start typing first text (fast - 25ms per character)
-        typeWriterWithSound(text1Element, text1Content, 25, async () => {
+        // Start typing first text (fast - 15ms per character)
+        typeWriterWithSound(text1Element, text1Content, 15, async () => {
           // Show second scene after first text is done
           await showScene('scene2', 500);
           
@@ -342,7 +359,7 @@ Orders started pouring in. And with them, the customer order adjustment requests
           text2Element.classList.add('typewriter-text');
           
           // Start typing second text
-          typeWriterWithSound(text2Element, text2Content, 25, () => {
+          typeWriterWithSound(text2Element, text2Content, 15, () => {
             // Show enter button after second text is done
             setTimeout(() => {
               const enterButton = document.getElementById('enter-button-container');

@@ -81,6 +81,7 @@ export class Level1Scene extends Phaser.Scene {
   private cKey!: Phaser.Input.Keyboard.Key;
   private fKey!: Phaser.Input.Keyboard.Key; // New f key for cheat code
   private lKey!: Phaser.Input.Keyboard.Key; // New l key for reducing lives cheat
+  private tKey!: Phaser.Input.Keyboard.Key; // New t key for tutorial cheat
   private playerSpeed: number = 8; // Changed from 4 to 8 for faster movement
   private carriedEdits: { type: string, icon: Phaser.GameObjects.Text }[] = [];
   private maxCarriedEdits: number = 3; // Maximum number of edits the player can carry at once
@@ -153,6 +154,7 @@ export class Level1Scene extends Phaser.Scene {
   private tutorialHighlight?: Phaser.GameObjects.Graphics;
   private hasTutorialOrder: boolean = false;
   private skipTutorialKey!: Phaser.Input.Keyboard.Key;
+  private tutorialTargetOrder?: Order; // Track which order is being highlighted
 
   // Add a function to create confetti particle effect
   private createConfettiEffect(x: number, y: number) {
@@ -526,11 +528,12 @@ export class Level1Scene extends Phaser.Scene {
 
       // Set up input
       this.cursors = this.input.keyboard.createCursorKeys();
-      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-      this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-      this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
-      this.fKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F); // Initialize f key
-      this.lKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L); // Initialize l key
+          this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+    this.fKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F); // Initialize f key
+    this.lKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L); // Initialize l key
+    this.tKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T); // Initialize t key for tutorial cheat
       this.lastSpaceState = false;
       
       // Create UI elements
@@ -1108,6 +1111,12 @@ export class Level1Scene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.lKey)) {
         console.log('L key pressed - Reduce to one life');
         this.reduceToOneLifeCheat();
+      }
+      
+      // Check for 't' key to force tutorial start (cheat)
+      if (Phaser.Input.Keyboard.JustDown(this.tKey)) {
+        console.log('Cheat code activated: Force Tutorial Start!');
+        this.forceTutorialStartCheat();
       }
       
       // Update tutorial if active
@@ -3734,12 +3743,65 @@ export class Level1Scene extends Phaser.Scene {
     }
   }
   
+  // Cheat to force tutorial start (even if already completed)
+  private forceTutorialStartCheat() {
+    console.log('Cheat: Forcing tutorial start');
+    
+    // Stop any existing tutorial first
+    if (this.tutorialActive) {
+      this.completeTutorial();
+    }
+    
+    // Reset tutorial state
+    this.tutorialActive = false;
+    this.tutorialStep = 0;
+    this.hasTutorialOrder = false;
+    this.tutorialTargetOrder = undefined;
+    
+    // Show cheat activation message
+    const cheatMessage = this.add.text(
+      this.cameras.main.centerX,
+      this.cameras.main.centerY - 100,
+      'CHEAT: Tutorial Starting!',
+      {
+        fontSize: '24px',
+        color: '#00ff00',
+        stroke: '#000000',
+        strokeThickness: 3
+      }
+    ).setOrigin(0.5).setDepth(1000);
+    
+    // Start tutorial after a short delay to allow message to be seen
+    this.time.delayedCall(1500, () => {
+      // Set up skip tutorial key (in case it wasn't initialized)
+      if (!this.skipTutorialKey) {
+        this.skipTutorialKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+      }
+      
+      this.startTutorial();
+      cheatMessage.destroy();
+    });
+  }
+  
   // Tutorial System Methods
   private initializeTutorial() {
-    // Check if player has completed tutorial before
-    const hasCompletedTutorial = localStorage.getItem('oe-game-tutorial-completed') === 'true';
+    // Check if player has completed tutorial before (local storage first, then Firebase)
+    const localTutorialCompleted = localStorage.getItem('oe-game-tutorial-completed') === 'true';
     
-    if (hasCompletedTutorial) {
+    // Check if user is logged in and has tutorial completion in Firebase
+    const checkFirebaseTutorial = () => {
+      // Access Firebase user data through window global (set by App component)
+      const userData = (window as any).firebaseUserData;
+      if (userData && userData.tutorialCompleted) {
+        console.log('Player has completed tutorial (Firebase), skipping...');
+        return true;
+      }
+      return false;
+    };
+    
+    const firebaseTutorialCompleted = checkFirebaseTutorial();
+    
+    if (localTutorialCompleted || firebaseTutorialCompleted) {
       console.log('Player has already completed tutorial, skipping...');
       return;
     }
@@ -3758,44 +3820,53 @@ export class Level1Scene extends Phaser.Scene {
     this.tutorialActive = true;
     this.tutorialStep = 0;
     
-    // Create semi-transparent overlay
+    // Create minimal tutorial overlay (no full screen cover)
     this.tutorialOverlay = this.add.container(0, 0);
     this.tutorialOverlay.setDepth(1000);
     
-    // Create dark overlay background
-    const overlay = this.add.rectangle(
-      this.cameras.main.centerX, 
-      this.cameras.main.centerY, 
-      this.cameras.main.width, 
-      this.cameras.main.height, 
-      0x000000, 
-      0.7
-    );
+    // Create retro-style tutorial text box (much smaller, bottom only)
+    const textBoxWidth = 600;
+    const textBoxHeight = 80;
+    const textBoxX = this.cameras.main.centerX;
+    const textBoxY = this.cameras.main.height - 60;
     
-    // Create tutorial text background
-    const textBg = this.add.rectangle(
-      this.cameras.main.centerX,
-      this.cameras.main.height - 150,
-      this.cameras.main.width - 40,
-      120,
-      0x1a1a1a,
-      0.9
-    ).setStrokeStyle(3, 0x444444);
+    // Pixelated wooden sign style background (like station signs)
+    const textShadow = this.add.rectangle(textBoxX + 3, textBoxY + 3, textBoxWidth, textBoxHeight, 0x000000, 0.6);
+    const textBg = this.add.rectangle(textBoxX, textBoxY, textBoxWidth, textBoxHeight, 0xC19A6B)
+      .setStrokeStyle(4, 0x8B4513);
     
-    // Create tutorial text
+    // Add pixelated border details
+    const borderTop = this.add.rectangle(textBoxX, textBoxY - textBoxHeight/2, textBoxWidth, 4, 0x6B4C3B);
+    const borderBottom = this.add.rectangle(textBoxX, textBoxY + textBoxHeight/2, textBoxWidth, 4, 0x6B4C3B);
+    const borderLeft = this.add.rectangle(textBoxX - textBoxWidth/2, textBoxY, 4, textBoxHeight, 0x6B4C3B);
+    const borderRight = this.add.rectangle(textBoxX + textBoxWidth/2, textBoxY, 4, textBoxHeight, 0x6B4C3B);
+    
+    // Corner nails for retro look
+    const nailSize = 3;
+    const nail1 = this.add.circle(textBoxX - textBoxWidth/2 + 15, textBoxY - textBoxHeight/2 + 15, nailSize, 0x808080);
+    const nail2 = this.add.circle(textBoxX + textBoxWidth/2 - 15, textBoxY - textBoxHeight/2 + 15, nailSize, 0x808080);
+    const nail3 = this.add.circle(textBoxX - textBoxWidth/2 + 15, textBoxY + textBoxHeight/2 - 15, nailSize, 0x808080);
+    const nail4 = this.add.circle(textBoxX + textBoxWidth/2 - 15, textBoxY + textBoxHeight/2 - 15, nailSize, 0x808080);
+    
+    // Create tutorial text with retro font styling
     this.tutorialText = this.add.text(
-      this.cameras.main.centerX,
-      this.cameras.main.height - 150,
+      textBoxX,
+      textBoxY,
       '',
       {
-        fontSize: '20px',
-        color: '#ffffff',
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        color: '#000000',
         align: 'center',
-        wordWrap: { width: this.cameras.main.width - 80 }
+        fontStyle: 'bold',
+        wordWrap: { width: textBoxWidth - 40 }
       }
     ).setOrigin(0.5);
     
-    this.tutorialOverlay.add([overlay, textBg, this.tutorialText]);
+    this.tutorialOverlay.add([
+      textShadow, textBg, borderTop, borderBottom, borderLeft, borderRight,
+      nail1, nail2, nail3, nail4, this.tutorialText
+    ]);
     
     // Start first tutorial step
     this.showTutorialStep();
@@ -3815,36 +3886,27 @@ export class Level1Scene extends Phaser.Scene {
     switch (this.tutorialStep) {
       case 0:
         this.tutorialText.setText(
-          'Welcome to Order Editing!\n\n' +
-          'Use ARROW KEYS to move your character around the warehouse.\n' +
-          'Try moving now! (Press ESC to skip tutorial)'
+          'Welcome to Order Editing! Use ARROW KEYS to move around. (ESC to skip)'
         );
         break;
         
       case 1:
         this.tutorialText.setText(
-          'Great! Now look for the glowing station on the left.\n\n' +
-          'Walk near the ADDRESS station and press SPACE to pick up an edit.\n' +
-          'You can carry up to 3 edits at once!'
+          'Great! Walk near the ADDRESS station and press SPACE to pick up an edit.'
         );
         this.highlightStation('address');
         break;
         
       case 2:
         this.tutorialText.setText(
-          'Excellent! You picked up an ADDRESS edit.\n\n' +
-          'Now look for a package (order) on the conveyor belt that needs this edit.\n' +
-          'Walk near it and press SPACE to apply your edit!'
+          'Excellent! Now find an order that needs ADDRESS edit and press SPACE to apply it!'
         );
         this.highlightFirstOrder();
         break;
         
       case 3:
         this.tutorialText.setText(
-          'Perfect! You successfully applied your first edit!\n\n' +
-          'Keep picking up edits from stations and applying them to matching orders.\n' +
-          'Complete orders to earn points and unlock new stations!\n\n' +
-          'Press SPACE to finish the tutorial.'
+          'Perfect! Keep picking up edits and applying them to orders. Press SPACE to finish.'
         );
         break;
         
@@ -3858,30 +3920,30 @@ export class Level1Scene extends Phaser.Scene {
     const station = this.stations.find(s => s.type === stationType && s.isUnlocked);
     if (!station) return;
     
-    // Create pulsing highlight around the station
+    // Create subtle pixelated highlight around the station
     this.tutorialHighlight = this.add.graphics();
     this.tutorialHighlight.setDepth(999);
     
     const bounds = station.container.getBounds();
-    this.tutorialHighlight.lineStyle(4, 0x00ff00, 1);
-    this.tutorialHighlight.strokeRoundedRect(
-      bounds.x - 10, 
-      bounds.y - 10, 
-      bounds.width + 20, 
-      bounds.height + 20, 
-      10
+    // Use pixelated style highlight with retro colors
+    this.tutorialHighlight.lineStyle(3, 0xFFFF00, 0.8); // Yellow like retro games
+    this.tutorialHighlight.strokeRect(
+      bounds.x - 8, 
+      bounds.y - 8, 
+      bounds.width + 16, 
+      bounds.height + 16
     );
     
-    // Add pulsing animation
+    // Add subtle pulsing animation
     this.tweens.add({
       targets: this.tutorialHighlight,
-      alpha: { from: 1, to: 0.3 },
-      duration: 1000,
+      alpha: { from: 0.8, to: 0.4 },
+      duration: 800,
       yoyo: true,
       repeat: -1
     });
     
-    // Create arrow pointing to station
+    // Create retro arrow pointing to station
     this.createArrowToTarget(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   }
   
@@ -3889,55 +3951,63 @@ export class Level1Scene extends Phaser.Scene {
     if (this.orders.length === 0) return;
     
     const order = this.orders[0];
+    this.tutorialTargetOrder = order; // Track this order for position updates
     
-    // Create pulsing highlight around the order
+    // Create subtle pixelated highlight around the order
     this.tutorialHighlight = this.add.graphics();
     this.tutorialHighlight.setDepth(999);
     
-    this.tutorialHighlight.lineStyle(4, 0xff6600, 1);
-    this.tutorialHighlight.strokeRoundedRect(
-      order.x - order.width/2 - 10, 
-      order.y - order.height/2 - 10, 
-      order.width + 20, 
-      order.height + 20, 
-      10
-    );
+    this.updateOrderHighlightPosition(); // Initial position
     
-    // Add pulsing animation
+    // Add subtle pulsing animation
     this.tweens.add({
       targets: this.tutorialHighlight,
-      alpha: { from: 1, to: 0.3 },
-      duration: 1000,
+      alpha: { from: 0.8, to: 0.4 },
+      duration: 800,
       yoyo: true,
       repeat: -1
     });
     
-    // Create arrow pointing to order
+    // Create retro arrow pointing to order
     this.createArrowToTarget(order.x, order.y);
+  }
+  
+  private updateOrderHighlightPosition() {
+    if (!this.tutorialHighlight || !this.tutorialTargetOrder) return;
+    
+    const order = this.tutorialTargetOrder;
+    
+    // Clear and redraw the highlight at the new position
+    this.tutorialHighlight.clear();
+    this.tutorialHighlight.lineStyle(3, 0xFF8800, 0.8);
+    this.tutorialHighlight.strokeRect(
+      order.x - order.width/2 - 8, 
+      order.y - order.height/2 - 8, 
+      order.width + 16, 
+      order.height + 16
+    );
   }
   
   private createArrowToTarget(targetX: number, targetY: number) {
     this.tutorialArrow = this.add.graphics();
     this.tutorialArrow.setDepth(1001);
     
-    // Calculate arrow position (above the target)
+    // Calculate arrow position (just above the target, much closer)
     const arrowX = targetX;
-    const arrowY = targetY - 80;
+    const arrowY = targetY - 35;
     
-    // Draw arrow pointing down
-    this.tutorialArrow.fillStyle(0xffff00);
-    this.tutorialArrow.beginPath();
-    this.tutorialArrow.moveTo(arrowX, arrowY + 30);
-    this.tutorialArrow.lineTo(arrowX - 15, arrowY);
-    this.tutorialArrow.lineTo(arrowX + 15, arrowY);
-    this.tutorialArrow.closePath();
-    this.tutorialArrow.fillPath();
+    // Draw smaller, more subtle pixelated arrow pointing down
+    this.tutorialArrow.fillStyle(0xFFFF00);
+    this.tutorialArrow.fillRect(arrowX - 1, arrowY, 2, 12); // Thinner arrow shaft
+    this.tutorialArrow.fillRect(arrowX - 5, arrowY + 8, 10, 2); // Smaller arrow head horizontal
+    this.tutorialArrow.fillRect(arrowX - 3, arrowY + 10, 6, 2); // Smaller arrow head middle
+    this.tutorialArrow.fillRect(arrowX - 1, arrowY + 12, 2, 2);  // Smaller arrow head tip
     
-    // Add bouncing animation
+    // Very subtle bouncing animation (much smaller bounce)
     this.tweens.add({
       targets: this.tutorialArrow,
-      y: arrowY + 10,
-      duration: 500,
+      y: arrowY + 2,
+      duration: 800,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.InOut'
@@ -3946,6 +4016,22 @@ export class Level1Scene extends Phaser.Scene {
   
   private updateTutorial() {
     if (!this.tutorialActive) return;
+    
+    // Update moving elements (highlight and arrow) if we're in step 2
+    if (this.tutorialStep === 2) {
+      // Update highlight position to follow the order
+      this.updateOrderHighlightPosition();
+      
+      // Update arrow position to follow the order
+      if (this.tutorialArrow && this.tutorialTargetOrder) {
+        const targetX = this.tutorialTargetOrder.x;
+        const targetY = this.tutorialTargetOrder.y - 35;
+        
+        // Update arrow position smoothly
+        this.tutorialArrow.x = targetX;
+        this.tutorialArrow.y = targetY;
+      }
+    }
     
     // Check for skip tutorial
     if (Phaser.Input.Keyboard.JustDown(this.skipTutorialKey)) {
@@ -3980,8 +4066,8 @@ export class Level1Scene extends Phaser.Scene {
         break;
         
       case 3:
-        // Wait for space key to finish
-        if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+        // Wait for space key to finish (check for just pressed, not just down)
+        if (this.spaceKey.isDown && !this.lastSpaceState) {
           this.tutorialStep++;
           this.showTutorialStep();
         }
@@ -4005,9 +4091,15 @@ export class Level1Scene extends Phaser.Scene {
       this.tutorialHighlight = undefined;
     }
     
+    // Clear tutorial target reference
+    this.tutorialTargetOrder = undefined;
+    
     // Mark tutorial as completed
     this.tutorialActive = false;
     localStorage.setItem('oe-game-tutorial-completed', 'true');
+    
+    // Store completion in Firebase if user is logged in
+    this.storeTutorialCompletionInFirebase();
     
     // Show completion message
     const completionText = this.add.text(
@@ -4031,5 +4123,28 @@ export class Level1Scene extends Phaser.Scene {
       duration: 3000,
       onComplete: () => completionText.destroy()
     });
+  }
+  
+  private storeTutorialCompletionInFirebase() {
+    try {
+      // Access Firebase user data through window global (set by App component)
+      const userData = (window as any).firebaseUserData;
+      const firebaseUser = (window as any).firebaseUser;
+      
+      if (firebaseUser && userData) {
+        // Call Firebase update function through window global
+        const updateUserData = (window as any).updateFirebaseUserData;
+        if (updateUserData) {
+          updateUserData({
+            ...userData,
+            tutorialCompleted: true
+          });
+          console.log('Tutorial completion stored in Firebase');
+        }
+      }
+    } catch (error) {
+      console.log('Could not store tutorial completion in Firebase:', error);
+      // This is not critical, so we don't throw - local storage will still work
+    }
   }
 }
