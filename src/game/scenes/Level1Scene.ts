@@ -144,6 +144,16 @@ export class Level1Scene extends Phaser.Scene {
   private firstSongUnlocked: boolean = false;
   private inputsDisabled: boolean = false; // Track if keyboard inputs should be ignored
   
+  // Tutorial System Properties
+  private tutorialActive: boolean = false;
+  private tutorialStep: number = 0;
+  private tutorialOverlay!: Phaser.GameObjects.Container;
+  private tutorialText!: Phaser.GameObjects.Text;
+  private tutorialArrow?: Phaser.GameObjects.Graphics;
+  private tutorialHighlight?: Phaser.GameObjects.Graphics;
+  private hasTutorialOrder: boolean = false;
+  private skipTutorialKey!: Phaser.Input.Keyboard.Key;
+
   // Add a function to create confetti particle effect
   private createConfettiEffect(x: number, y: number) {
     // Create a particle emitter for the confetti effect
@@ -541,6 +551,9 @@ export class Level1Scene extends Phaser.Scene {
       
       // Sync tracker with the initial game state
       this.syncTrackerWithGameState();
+      
+      // Initialize tutorial system for new players
+      this.initializeTutorial();
     } catch (error) {
       console.error('Error in create method:', error);
     }
@@ -1096,6 +1109,9 @@ export class Level1Scene extends Phaser.Scene {
         console.log('L key pressed - Reduce to one life');
         this.reduceToOneLifeCheat();
       }
+      
+      // Update tutorial if active
+      this.updateTutorial();
     } catch (error) {
       console.error('Error in update:', error);
     }
@@ -3716,5 +3732,304 @@ export class Level1Scene extends Phaser.Scene {
     } else {
       console.log('Already at zero lives');
     }
+  }
+  
+  // Tutorial System Methods
+  private initializeTutorial() {
+    // Check if player has completed tutorial before
+    const hasCompletedTutorial = localStorage.getItem('oe-game-tutorial-completed') === 'true';
+    
+    if (hasCompletedTutorial) {
+      console.log('Player has already completed tutorial, skipping...');
+      return;
+    }
+    
+    // Set up skip tutorial key
+    this.skipTutorialKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    
+    // Start tutorial after a brief delay
+    this.time.delayedCall(1000, () => {
+      this.startTutorial();
+    });
+  }
+  
+  private startTutorial() {
+    console.log('Starting tutorial...');
+    this.tutorialActive = true;
+    this.tutorialStep = 0;
+    
+    // Create semi-transparent overlay
+    this.tutorialOverlay = this.add.container(0, 0);
+    this.tutorialOverlay.setDepth(1000);
+    
+    // Create dark overlay background
+    const overlay = this.add.rectangle(
+      this.cameras.main.centerX, 
+      this.cameras.main.centerY, 
+      this.cameras.main.width, 
+      this.cameras.main.height, 
+      0x000000, 
+      0.7
+    );
+    
+    // Create tutorial text background
+    const textBg = this.add.rectangle(
+      this.cameras.main.centerX,
+      this.cameras.main.height - 150,
+      this.cameras.main.width - 40,
+      120,
+      0x1a1a1a,
+      0.9
+    ).setStrokeStyle(3, 0x444444);
+    
+    // Create tutorial text
+    this.tutorialText = this.add.text(
+      this.cameras.main.centerX,
+      this.cameras.main.height - 150,
+      '',
+      {
+        fontSize: '20px',
+        color: '#ffffff',
+        align: 'center',
+        wordWrap: { width: this.cameras.main.width - 80 }
+      }
+    ).setOrigin(0.5);
+    
+    this.tutorialOverlay.add([overlay, textBg, this.tutorialText]);
+    
+    // Start first tutorial step
+    this.showTutorialStep();
+  }
+  
+  private showTutorialStep() {
+    // Clear previous highlights and arrows
+    if (this.tutorialArrow) {
+      this.tutorialArrow.destroy();
+      this.tutorialArrow = undefined;
+    }
+    if (this.tutorialHighlight) {
+      this.tutorialHighlight.destroy();
+      this.tutorialHighlight = undefined;
+    }
+    
+    switch (this.tutorialStep) {
+      case 0:
+        this.tutorialText.setText(
+          'Welcome to Order Editing!\n\n' +
+          'Use ARROW KEYS to move your character around the warehouse.\n' +
+          'Try moving now! (Press ESC to skip tutorial)'
+        );
+        break;
+        
+      case 1:
+        this.tutorialText.setText(
+          'Great! Now look for the glowing station on the left.\n\n' +
+          'Walk near the ADDRESS station and press SPACE to pick up an edit.\n' +
+          'You can carry up to 3 edits at once!'
+        );
+        this.highlightStation('address');
+        break;
+        
+      case 2:
+        this.tutorialText.setText(
+          'Excellent! You picked up an ADDRESS edit.\n\n' +
+          'Now look for a package (order) on the conveyor belt that needs this edit.\n' +
+          'Walk near it and press SPACE to apply your edit!'
+        );
+        this.highlightFirstOrder();
+        break;
+        
+      case 3:
+        this.tutorialText.setText(
+          'Perfect! You successfully applied your first edit!\n\n' +
+          'Keep picking up edits from stations and applying them to matching orders.\n' +
+          'Complete orders to earn points and unlock new stations!\n\n' +
+          'Press SPACE to finish the tutorial.'
+        );
+        break;
+        
+      case 4:
+        this.completeTutorial();
+        break;
+    }
+  }
+  
+  private highlightStation(stationType: string) {
+    const station = this.stations.find(s => s.type === stationType && s.isUnlocked);
+    if (!station) return;
+    
+    // Create pulsing highlight around the station
+    this.tutorialHighlight = this.add.graphics();
+    this.tutorialHighlight.setDepth(999);
+    
+    const bounds = station.container.getBounds();
+    this.tutorialHighlight.lineStyle(4, 0x00ff00, 1);
+    this.tutorialHighlight.strokeRoundedRect(
+      bounds.x - 10, 
+      bounds.y - 10, 
+      bounds.width + 20, 
+      bounds.height + 20, 
+      10
+    );
+    
+    // Add pulsing animation
+    this.tweens.add({
+      targets: this.tutorialHighlight,
+      alpha: { from: 1, to: 0.3 },
+      duration: 1000,
+      yoyo: true,
+      repeat: -1
+    });
+    
+    // Create arrow pointing to station
+    this.createArrowToTarget(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  }
+  
+  private highlightFirstOrder() {
+    if (this.orders.length === 0) return;
+    
+    const order = this.orders[0];
+    
+    // Create pulsing highlight around the order
+    this.tutorialHighlight = this.add.graphics();
+    this.tutorialHighlight.setDepth(999);
+    
+    this.tutorialHighlight.lineStyle(4, 0xff6600, 1);
+    this.tutorialHighlight.strokeRoundedRect(
+      order.x - order.width/2 - 10, 
+      order.y - order.height/2 - 10, 
+      order.width + 20, 
+      order.height + 20, 
+      10
+    );
+    
+    // Add pulsing animation
+    this.tweens.add({
+      targets: this.tutorialHighlight,
+      alpha: { from: 1, to: 0.3 },
+      duration: 1000,
+      yoyo: true,
+      repeat: -1
+    });
+    
+    // Create arrow pointing to order
+    this.createArrowToTarget(order.x, order.y);
+  }
+  
+  private createArrowToTarget(targetX: number, targetY: number) {
+    this.tutorialArrow = this.add.graphics();
+    this.tutorialArrow.setDepth(1001);
+    
+    // Calculate arrow position (above the target)
+    const arrowX = targetX;
+    const arrowY = targetY - 80;
+    
+    // Draw arrow pointing down
+    this.tutorialArrow.fillStyle(0xffff00);
+    this.tutorialArrow.beginPath();
+    this.tutorialArrow.moveTo(arrowX, arrowY + 30);
+    this.tutorialArrow.lineTo(arrowX - 15, arrowY);
+    this.tutorialArrow.lineTo(arrowX + 15, arrowY);
+    this.tutorialArrow.closePath();
+    this.tutorialArrow.fillPath();
+    
+    // Add bouncing animation
+    this.tweens.add({
+      targets: this.tutorialArrow,
+      y: arrowY + 10,
+      duration: 500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut'
+    });
+  }
+  
+  private updateTutorial() {
+    if (!this.tutorialActive) return;
+    
+    // Check for skip tutorial
+    if (Phaser.Input.Keyboard.JustDown(this.skipTutorialKey)) {
+      this.completeTutorial();
+      return;
+    }
+    
+    // Check tutorial progress
+    switch (this.tutorialStep) {
+      case 0:
+        // Check if player has moved
+        if (this.lastDirection !== 'down' || this.lastMoving) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+        
+      case 1:
+        // Check if player picked up an edit
+        if (this.carriedEdits.length > 0) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+        
+      case 2:
+        // Check if player applied an edit
+        if (this.totalEditsApplied > 0) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+        
+      case 3:
+        // Wait for space key to finish
+        if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+          this.tutorialStep++;
+          this.showTutorialStep();
+        }
+        break;
+    }
+  }
+  
+  private completeTutorial() {
+    console.log('Tutorial completed!');
+    
+    // Clean up tutorial elements
+    if (this.tutorialOverlay) {
+      this.tutorialOverlay.destroy();
+    }
+    if (this.tutorialArrow) {
+      this.tutorialArrow.destroy();
+      this.tutorialArrow = undefined;
+    }
+    if (this.tutorialHighlight) {
+      this.tutorialHighlight.destroy();
+      this.tutorialHighlight = undefined;
+    }
+    
+    // Mark tutorial as completed
+    this.tutorialActive = false;
+    localStorage.setItem('oe-game-tutorial-completed', 'true');
+    
+    // Show completion message
+    const completionText = this.add.text(
+      this.cameras.main.centerX,
+      this.cameras.main.centerY,
+      'Tutorial Complete!\nGood luck in the warehouse!',
+      {
+        fontSize: '24px',
+        color: '#00ff00',
+        align: 'center',
+        stroke: '#000000',
+        strokeThickness: 3
+      }
+    ).setOrigin(0.5).setDepth(1000);
+    
+    // Fade out completion message
+    this.tweens.add({
+      targets: completionText,
+      alpha: 0,
+      y: completionText.y - 50,
+      duration: 3000,
+      onComplete: () => completionText.destroy()
+    });
   }
 }
