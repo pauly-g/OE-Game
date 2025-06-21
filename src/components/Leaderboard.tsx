@@ -548,6 +548,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
             } else {
               console.log('[Leaderboard] Score is not a high score.');
               await fetchLeaderboardData(bestScoreValue);
+              // Show the "not high score" message
               setNotHighScoreMessage(`Your score (${userScore}) was not higher than your personal best of ${bestScoreValue}. Keep trying!`);
               setShowNotHighScoreMessage(true);
             }
@@ -683,7 +684,19 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
           if (result.isHighScore) {
             setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
           } else {
-            setNotHighScoreMessage(`Your score (${userScore}) has been submitted to the leaderboard!`);
+            // For non-high scores, we need to get the user's actual best score to show the comparison
+            try {
+              const bestScoreData = await getUserBestScore();
+              const bestScore = bestScoreData?.score;
+              if (bestScore !== undefined) {
+                setNotHighScoreMessage(`Your score (${userScore}) was not higher than your personal best of ${bestScore}. Keep trying!`);
+              } else {
+                setNotHighScoreMessage(`Your score (${userScore}) has been submitted to the leaderboard!`);
+              }
+            } catch (error) {
+              console.error('[Leaderboard] Error getting best score for message:', error);
+              setNotHighScoreMessage(`Your score (${userScore}) has been submitted to the leaderboard!`);
+            }
           }
           setShowNotHighScoreMessage(true);
         } else {

@@ -34,7 +34,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
     if (currentUser) {
       setName(currentUser.displayName || '');
       if (userData?.company) {
-        setCompany(userData.company);
+        setCompany(String(userData.company));
       }
       if (userData?.marketingOptIn !== undefined) {
         setMarketingOptIn(userData.marketingOptIn);
@@ -131,6 +131,13 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
     // Special log for zero score to help with debugging
     if (score === 0) {
       console.log('[MockSignIn] Zero score detected. This is valid and will be submitted.');
+    }
+    
+    // Use the comprehensive validation function
+    const validation = validateUserSubmission(name.trim(), company.trim());
+    if (!validation.isValid) {
+      setError(validation.errorMessage || 'Please check your submission and try again');
+      return false;
     }
     
     return true;
@@ -230,14 +237,8 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
         // Wait a moment to ensure Firestore updates
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Always call onSuccess regardless of whether it's a high score
-        // Suppress TypeScript error since we've already validated these values
-        // @ts-ignore - name and company are guaranteed non-null here
-        onSuccess(
-          (name || '').trim(), 
-          (company || '').trim(), 
-          marketingOptIn
-        );
+        // Always call onSuccess - name and company are guaranteed to be strings at this point
+        onSuccess(name.trim(), company.trim(), marketingOptIn);
         return;
       }
       
@@ -313,7 +314,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
         // Try with referrer policy
         const img2 = new Image();
         img2.referrerPolicy = 'no-referrer';
-        img2.src = currentUser.photoURL;
+        img2.src = currentUser.photoURL || '';
       };
       img.referrerPolicy = 'no-referrer';
       img.src = currentUser.photoURL;
