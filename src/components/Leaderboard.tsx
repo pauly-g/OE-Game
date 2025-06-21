@@ -491,6 +491,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
           return;
         }
 
+        // Check if user is logged in but needs to set company name
+        if (currentUser && (!userData || !userData.company)) {
+          console.log('[Leaderboard] User is logged in but missing company information. Showing company form.');
+          setShowSignIn(true); // Show the sign-in form for company info
+          setLoading(false);
+          return;
+        }
+
         if (currentUser) {
           console.log('[Leaderboard] User is logged in. Checking if score was already submitted...');
           try {
@@ -580,7 +588,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
         setUserRank(null);
         setNearbyScores({ above: [], below: [] });
     }
-  }, [isOpen, userScore, currentUser, getUserBestScore, submitUserScore, fetchLeaderboardData]);
+  }, [isOpen, userScore, currentUser, userData, getUserBestScore, submitUserScore, fetchLeaderboardData]);
 
   // Helper functions for loading messages
   const showLoadingMessage = (text: string) => {
@@ -1050,13 +1058,11 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
       
       {/* Show sign-in form if user needs to authenticate */}
       {showSignIn ? (
-        <div className="leaderboard-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
-          <MockSignIn 
-            onSuccess={handleMockSignIn} 
-            onClose={handleClose}
-            score={userScore || 0}
-          />
-        </div>
+        <MockSignIn 
+          onSuccess={handleMockSignIn} 
+          onClose={handleClose}
+          score={userScore || 0}
+        />
       ) : (
         // Show the main leaderboard content
         renderLeaderboardContent()

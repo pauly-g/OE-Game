@@ -148,7 +148,6 @@ button:active {
   overflow-y: auto;
   padding: 24px;
   font-family: 'pixelmix', monospace;
-  max-height: calc(100vh - 200px); /* Ensure it doesn't exceed viewport minus header/footer space */
 }
 
 .loading-spinner {
