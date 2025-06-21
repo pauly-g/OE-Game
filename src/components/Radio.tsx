@@ -447,54 +447,10 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       playRandomBackgroundSong('page_load');
     };
 
-    // Handle visibility change (page refresh)
+    // Handle visibility change (page refresh) - DISABLED to prevent pause on tab switch
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[Radio] Page became visible');
-        
-        // Instead of playing a random song, check if we need to resume the current one
-        if (globalAudio && globalAudioState.currentTrackId) {
-          console.log('[Radio] Resuming current track instead of starting a new one');
-          
-          // If the audio was playing before, resume it
-          if (globalAudioState.isPlaying) {
-            globalAudio.play()
-              .then(() => {
-                console.log('[Radio] Successfully resumed audio after tab visibility change');
-                setIsPlaying(true);
-                
-                // Dispatch event to notify other components that radio is playing
-                try {
-                  console.log('[Radio] Dispatching radioPlayStarted event from resume');
-                  const radioEvent = new CustomEvent('radioPlayStarted', {
-                    detail: { 
-                      trackId: currentTrack?.id || 'unknown', 
-                      title: currentTrack?.title || 'Unknown Track' 
-                    }
-                  });
-                  window.dispatchEvent(radioEvent);
-                } catch (error) {
-                  console.error('[Radio] Error dispatching radioPlayStarted event:', error);
-                }
-              })
-              .catch(error => {
-                console.error('[Radio] Error resuming audio:', error);
-                // Fall back to playing a random song if resume fails
-                playRandomBackgroundSong('visibility_change_fallback');
-              });
-          }
-        } else {
-          // If no track was playing, start a random one as before
-          playRandomBackgroundSong('visibility_change');
-        }
-      } else if (document.visibilityState === 'hidden') {
-        // When tab becomes hidden, store the current playback state
-        if (globalAudio) {
-          globalAudioState.isPlaying = !globalAudio.paused;
-          globalAudioState.currentTime = globalAudio.currentTime;
-          console.log('[Radio] Page hidden, saved playback state:', globalAudioState);
-        }
-      }
+      // No longer pause/resume music when switching tabs
+      console.log('[Radio] Tab visibility changed, but music continues playing');
     };
 
     // Set up event listeners

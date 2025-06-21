@@ -223,6 +223,24 @@ function AppContent() {
       const newGame = new Phaser.Game(config);
       setGame(newGame);
 
+      // Override browser tab pause behavior
+      const originalHidden = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
+      const originalVisibilityState = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+      
+      // Override document.hidden to always return false
+      Object.defineProperty(document, 'hidden', {
+        get: () => false,
+        configurable: true
+      });
+      
+      // Override document.visibilityState to always return 'visible'
+      Object.defineProperty(document, 'visibilityState', {
+        get: () => 'visible',
+        configurable: true
+      });
+      
+      console.log('[App] Overrode document visibility properties to prevent game pause');
+
       // Add error handler for the game
       window.addEventListener('error', (e) => {
         gameDebugger.error('Game Error:', e);

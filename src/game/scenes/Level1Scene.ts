@@ -1956,9 +1956,6 @@ export class Level1Scene extends Phaser.Scene {
             this.lives--;
             this.failedOrders++;
             
-            // Penalize the player for an incomplete order
-            this.updateScore(-50);
-            
             // Update life indicators
             this.updateLivesDisplay();
             
@@ -2668,14 +2665,14 @@ export class Level1Scene extends Phaser.Scene {
         // With 2 stations, 70% chance of 1 edit, 30% chance of 2 edits
         editProbabilities = [0.7, 0.3];
       } else if (unlockedStations.length === 3) {
-        // With 3 stations: 50% for 1 edit, 30% for 2 edits, 20% for 3 edits
-        editProbabilities = [0.5, 0.3, 0.2];
+        // With 3 stations: NO MORE 1-edit orders, 60% for 2 edits, 40% for 3 edits
+        editProbabilities = [0.0, 0.6, 0.4];
       } else if (unlockedStations.length === 4) {
-        // With 4 stations: 40% for 1 edit, 30% for 2 edits, 20% for 3 edits, 10% for 4 edits
-        editProbabilities = [0.4, 0.3, 0.2, 0.1];
+        // With 4 stations: NO MORE 1-2 edit orders, 50% for 3 edits, 50% for 4 edits
+        editProbabilities = [0.0, 0.0, 0.5, 0.5];
       } else {
-        // With 5 stations: 30% for 1 edit, 25% for 2 edits, 25% for 3 edits, 15% for 4 edits, 5% for 5 edits
-        editProbabilities = [0.3, 0.25, 0.25, 0.15, 0.05];
+        // With 5 stations: NO MORE 1-2 edit orders, 40% for 3 edits, 35% for 4 edits, 25% for 5 edits
+        editProbabilities = [0.0, 0.0, 0.4, 0.35, 0.25];
       }
       
       // Determine number of edits using probability table

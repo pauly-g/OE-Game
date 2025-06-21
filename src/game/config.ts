@@ -21,6 +21,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   backgroundColor: '#1a202c',
   transparent: false,
   pixelArt: true,
+  disableContextMenu: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -38,7 +39,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   physics: {
     default: 'arcade',
     arcade: {
-      gravity: { y: 0 },
+      gravity: { x: 0, y: 0 },
       debug: false
     }
   },
