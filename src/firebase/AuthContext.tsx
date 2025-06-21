@@ -323,9 +323,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logScoreRejection(currentUser.uid, score, 'not_high_score', { 
           previousBest: bestScore.score 
         });
+        const message = `Sorry, your score of ${score} is not higher than your previous best score of ${bestScore.score}. Try again!`;
+        console.log('[FIREBASE] Returning message:', message);
         return {
           success: false, 
-          message: `Sorry, your new score is not a new personal best. Try again!`, 
+          message: message, 
           isHighScore: false
         };
       }
@@ -376,22 +378,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // If submitScore returns null, the score wasn't submitted (either not a high score or error)
       if (!result) {
-        // Check if it's because it wasn't a high score
-        if (bestScore && score <= bestScore.score) {
-          return {
-            success: false, 
-            message: `Sorry, your new score is not a new personal best. Try again!`, 
-            isHighScore: false
-          };
-        } else {
-          // Some other error happened
-          logScoreRejection(currentUser.uid, score, 'submission_failed');
-          return {
-            success: false, 
-            message: 'Failed to submit score. Please try again.', 
-            isHighScore: false
-          };
-        }
+        // Some error happened during submission - we already checked if it was a high score above
+        logScoreRejection(currentUser.uid, score, 'submission_failed');
+        return {
+          success: false, 
+          message: 'Failed to submit score. Please try again.', 
+          isHighScore: false
+        };
       }
       
       // Get the previous best score for the success message

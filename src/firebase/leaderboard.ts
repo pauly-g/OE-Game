@@ -23,6 +23,23 @@ import { validateScoreSubmission, logSecurityEvent, detectInjectionAttempt } fro
 // Set this to true to force real Firebase data even in development mode
 const FORCE_REAL_DATA = true;
 
+// Simple cache for leaderboard data to reduce Firebase calls
+let leaderboardCache: {
+  topScores?: { data: LeaderboardEntry[], timestamp: number },
+  userRanks?: Map<string, { rank: number, timestamp: number }>
+} = {
+  userRanks: new Map()
+};
+
+const CACHE_DURATION = 30000; // 30 seconds cache
+
+// Function to clear cache when new scores are submitted
+const clearCache = () => {
+  console.log('[Leaderboard] Clearing cache after score submission');
+  leaderboardCache.topScores = undefined;
+  leaderboardCache.userRanks?.clear();
+};
+
 // Interface for leaderboard entry
 export interface LeaderboardEntry {
   id?: string;
@@ -202,6 +219,10 @@ export const submitScore = async (
     if (newDocId) {
       console.log('[FIREBASE Transaction] ✅ SUBMISSION SUCCESSFUL! New document ID:', newDocId);
       console.log('[FIREBASE Transaction] Score should now appear in leaderboard collection');
+      
+      // Clear cache after successful submission
+      clearCache();
+      
       return newDocId;
     } else {
       // This means the transaction callback returned null (score not high enough)
@@ -342,6 +363,13 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
       return mockData.slice(0, topCount);
     }
     
+    // Check cache first
+    const now = Date.now();
+    if (leaderboardCache.topScores && (now - leaderboardCache.topScores.timestamp) < CACHE_DURATION) {
+      console.log('[Leaderboard] Using cached leaderboard data');
+      return leaderboardCache.topScores.data.slice(0, topCount);
+    }
+    
     console.log('[Leaderboard] Fetching real leaderboard data from Firebase');
     const q = query(
       collection(db, 'leaderboard'),
@@ -357,7 +385,7 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
       return [];
     }
     
-    return querySnapshot.docs.map(doc => {
+    const results = querySnapshot.docs.map(doc => {
       const data = doc.data();
       
       // Log the raw data to debug
@@ -397,6 +425,14 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
         timestamp: timestamp
       };
     });
+    
+    // Cache the results
+    leaderboardCache.topScores = {
+      data: results,
+      timestamp: Date.now()
+    };
+    
+    return results;
   } catch (error) {
     console.error('Error getting top scores:', error);
     return [];

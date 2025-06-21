@@ -137,17 +137,17 @@ export const rateLimiter = new RateLimiter();
 export const RATE_LIMITS = {
   SCORE_SUBMISSION: {
     maxAttempts: 3,
-    windowMs: 30000, // 30 seconds
+    windowMs: 5000, // 5 seconds
     key: (userId: string) => `score_submission:${userId}`
   },
   AUTHENTICATION: {
     maxAttempts: 5,
-    windowMs: 300000, // 5 minutes
+    windowMs: 5000, // 5 seconds
     key: (identifier: string) => `auth:${identifier}`
   },
   FORM_SUBMISSION: {
     maxAttempts: 10,
-    windowMs: 60000, // 1 minute
+    windowMs: 5000, // 5 seconds
     key: (userId: string) => `form:${userId}`
   }
 } as const;

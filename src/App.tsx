@@ -42,6 +42,7 @@ import { tracks } from './data/musicData';
 import { AuthProvider, useAuth } from './firebase/AuthContext';
 import UserProfileCorner from './components/UserProfileCorner';
 import Toast from './components/Toast';
+import ScorePopup from './components/ScorePopup';
 import './styles/main.css';
 
 // Keep track of unseen songs (maintained in memory only, no localStorage changes)
@@ -79,15 +80,27 @@ function AppContent() {
     type: 'info',
     message: ''
   });
+  const [scorePopup, setScorePopup] = useState({
+    isVisible: false,
+    type: 'info' as 'success' | 'error' | 'info',
+    title: '',
+    message: ''
+  });
   
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
   // Reference to track which scores have been submitted to prevent duplicates
   const scoreSubmittedRef = useRef<Record<string, boolean>>({});
+  
   const { currentUser, submitUserScore, isLoading, userData, getUserBestScore } = useAuth();
 
   // Create a unique key for score tracking that includes user ID
   const getScoreKey = useCallback((score: number, userId?: string) => {
     return `${userId || 'anonymous'}_${score}_${Date.now()}`;
+  }, []);
+
+  // Create a simple key for deduplication (without timestamp)
+  const getDeduplicationKey = useCallback((score: number, userId?: string) => {
+    return `${userId || 'anonymous'}_${score}`;
   }, []);
 
   // Reset stations on page load
@@ -409,56 +422,140 @@ function AppContent() {
     console.log('[App] handleCheckAuth called with score:', score);
     console.log('[App] Current user authentication status:', !!currentUser);
     console.log('[App] checkHighScoreOnly:', checkHighScoreOnly);
+    console.log('[App] Call stack:', new Error().stack?.split('\n').slice(0, 10).join('\n'));
+    
+    // Add global deduplication to prevent concurrent calls for the same score/user combination  
+    const processingKey = `${score}-${currentUser?.uid}-${checkHighScoreOnly}`;
+    console.log(`[App] 🔍 DEDUPLICATION CHECK:`);
+    console.log(`[App] Generated processing key: "${processingKey}"`);
+    console.log(`[App] Current window.processingScore: "${(window as any).processingScore}"`);
+    console.log(`[App] Keys match: ${(window as any).processingScore === processingKey}`);
+    
+    if ((window as any).processingScore === processingKey) {
+      console.log(`[App] ❌ DUPLICATE CALL DETECTED - skipping`);
+      console.log(`[App] Call stack:`, new Error().stack);
+      return;
+    }
+    
+    console.log(`[App] ✅ NEW CALL - setting processing key`);
+    (window as any).processingScore = processingKey;
     
     // Validate score - ensure it's a non-negative number (0 is valid)
     if (score === undefined || score === null || isNaN(score) || score < 0) {
       console.error(`[App] Invalid score value: ${score}. Score must be a non-negative number.`);
-      // Silent validation - don't show error to user
+      // Clear processing flag
+      (window as any).processingScore = null;
       return;
     }
     
     // Check if this score has already been submitted
     if (scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)]) {
       console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
+      // Clear processing flag
+      (window as any).processingScore = null;
       return;
     }
     
     try {
-      // If user is authenticated, check if score is a high score before submitting
-      if (currentUser && userData) {
+      // If user is authenticated with company and marketing consent, check if score is a high score before submitting
+      if (currentUser && userData && userData.company && userData.marketingOptIn) {
         console.log('[App] User authenticated, checking if high score');
         
-        // Mark this score as being processed
-        scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)] = true;
+        // Check if this score was already submitted to Firebase
+        const scoreKey = getScoreKey(score, currentUser?.uid);
+        const alreadySubmittedToFirebase = scoreSubmittedRef.current[scoreKey];
+        
+        if (!alreadySubmittedToFirebase) {
+          // Mark this score as being processed only if we're actually submitting
+          scoreSubmittedRef.current[scoreKey] = true;
+        }
         
         if (checkHighScoreOnly) {
           // Get user's best score to compare
           try {
             const bestScore = await getUserBestScore();
             
+            console.log('[App] HIGH SCORE COMPARISON:', {
+              currentScore: score,
+              bestScore: bestScore?.score,
+              bestScoreExists: !!bestScore,
+              isHigher: !bestScore || score > bestScore.score,
+              willSubmit: !bestScore || score > bestScore.score
+            });
+            
             // Only submit if it's a new high score
             if (!bestScore || score > bestScore.score) {
               console.log('[App] New high score! Submitting to leaderboard');
-              const result = await submitUserScore(score);
-              console.log('[App] High score submission result:', result);
               
-              // Notify the leaderboard that a score was just submitted
-              // This will trigger a refresh of the leaderboard data
-              const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
-                detail: { 
-                  score: score,
-                  timestamp: new Date(),
-                  success: result.success
-                }
-              });
-              window.dispatchEvent(scoreSubmittedEvent);
-              
-              // Wait a short time for Firebase to update
-              await new Promise(resolve => setTimeout(resolve, 1500));
+              // Only actually submit if we haven't already submitted this score
+              if (!alreadySubmittedToFirebase) {
+                const result = await submitUserScore(score);
+                console.log('[App] High score submission result:', result);
+                
+                // Don't show popup - leaderboard will handle all score messages
+                console.log('[App] Score submission completed, leaderboard will handle messaging');
+                
+                // Notify the leaderboard that a score was just submitted
+                // This will trigger a refresh of the leaderboard data
+                const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
+                  detail: { 
+                    score: score,
+                    timestamp: new Date(),
+                    success: result.success,
+                    isHighScore: result.isHighScore,
+                    message: result.message
+                  }
+                });
+                console.log('[App] Dispatching scoreSubmitted event:', scoreSubmittedEvent.detail);
+                window.dispatchEvent(scoreSubmittedEvent);
+                
+                // Wait a short time for Firebase to update
+                await new Promise(resolve => setTimeout(resolve, 500));
+              } else {
+                console.log('[App] High score already submitted, just showing success message');
+                // Still show the success message even if already submitted
+                const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
+                  detail: { 
+                    score: score,
+                    timestamp: new Date(),
+                    success: true,
+                    isHighScore: true,
+                    message: `🎉 Congratulations! New high score: ${score}!`
+                  }
+                });
+                console.log('[App] Dispatching high score message event:', scoreSubmittedEvent.detail);
+                window.dispatchEvent(scoreSubmittedEvent);
+              }
             } else {
-              console.log('[App] Not a high score, skipping submission');
-              // Still mark as submitted to avoid duplicate checks
-              scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)] = true;
+              console.log('[App] Not a high score, creating failure event for leaderboard');
+              console.log('[App] Current score:', score, 'Best score:', bestScore?.score);
+              
+              // Only mark as submitted if we haven't already marked it
+              if (!alreadySubmittedToFirebase) {
+                scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)] = true;
+              }
+              
+              console.log('[App] Showing not-high-score message');
+              
+              // Dispatch event so leaderboard can show "not a high score" message
+              const message = `Sorry, your score of ${score} is not higher than your previous best score of ${bestScore?.score || 'unknown'}. Try again!`;
+              const eventDetail = { 
+                score: score,
+                timestamp: new Date(),
+                success: false,
+                isHighScore: false,
+                message: message
+              };
+              const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
+                detail: eventDetail
+              });
+              console.log('[App] *** DISPATCHING NOT-HIGH-SCORE EVENT ***');
+              console.log('[App] Event detail:', JSON.stringify(eventDetail, null, 2));
+              console.log('[App] Processing key was:', (window as any).processingScore);
+              console.log('[App] Current timestamp:', new Date().toISOString());
+              console.log('[App] About to dispatch event...');
+              window.dispatchEvent(scoreSubmittedEvent);
+              console.log('[App] Event dispatched successfully');
             }
           } catch (error) {
             console.error('[App] Error checking high score:', error);
@@ -466,12 +563,17 @@ function AppContent() {
             const result = await submitUserScore(score);
             console.log('[App] Score submission result after error:', result);
             
+            // Don't show popup - leaderboard will handle all score messages
+            console.log('[App] Score submission after error completed, leaderboard will handle messaging');
+            
             // Notify about submission
             const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
               detail: { 
                 score: score,
                 timestamp: new Date(),
-                success: result.success
+                success: result.success,
+                isHighScore: result.isHighScore,
+                message: result.message
               }
             });
             window.dispatchEvent(scoreSubmittedEvent);
@@ -482,12 +584,17 @@ function AppContent() {
           const result = await submitUserScore(score);
           console.log('[App] Score submission result:', result);
           
+          // Don't show popup - leaderboard will handle all score messages
+          console.log('[App] Direct score submission completed, leaderboard will handle messaging');
+          
           // Notify about submission
           const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
             detail: { 
               score: score,
               timestamp: new Date(),
-              success: result.success
+              success: result.success,
+              isHighScore: result.isHighScore,
+              message: result.message
             }
           });
           window.dispatchEvent(scoreSubmittedEvent);
@@ -507,6 +614,11 @@ function AppContent() {
         type: 'error',
         message: 'An unexpected error occurred when submitting your score'
       });
+    } finally {
+      // Clear processing flag immediately after event dispatch
+      console.log(`[App] 🧹 CLEARING processing key: "${(window as any).processingScore}"`);
+      (window as any).processingScore = null;
+      console.log(`[App] Processing key cleared`);
     }
   };
 
@@ -543,14 +655,14 @@ function AppContent() {
         return;
       }
       
-      // Only proceed with submission if the user is authenticated
-      if (currentUser && userData) {
-        console.log('[App] User is authenticated, checking if high score');
+      // Only proceed with submission if the user is fully authenticated AND has company AND accepted marketing
+      if (currentUser && userData && userData.company && userData.marketingOptIn) {
+        console.log('[App] User is fully authenticated with company and marketing consent, checking if high score');
         // Check if high score and submit if it is
         handleSubmitScore(score, true); // true = check if high score first
       } else {
-        console.log('[App] User not authenticated, waiting for leaderboard view');
-        // Just store the score for later use after authentication
+        console.log('[App] User not fully ready for submission (missing auth/company/marketing), waiting for leaderboard view');
+        // Just store the score for later use after authentication/company/marketing setup
         setCurrentScore(score);
       }
     };
@@ -571,8 +683,8 @@ function AppContent() {
       // Record the score
       handleGameOver(score);
       
-      // If user is authenticated, proceed with submission
-      if (currentUser && userData) {
+      // If user is fully authenticated with company and marketing consent, proceed with submission
+      if (currentUser && userData && userData.company && userData.marketingOptIn) {
         // Check if high score and submit if it is
         handleSubmitScore(score, checkHighScoreOnly || false);
       } else {
@@ -585,6 +697,19 @@ function AppContent() {
     const handleShowLeaderboard = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.log('[App] Received showGameLeaderboard event', customEvent.detail);
+      
+      // Debounce rapid clicks - only allow one leaderboard open per 1 second
+      const now = Date.now();
+      const lastOpen = (window as any).lastLeaderboardOpen || 0;
+      const timeSinceLastOpen = now - lastOpen;
+      
+      if (lastOpen !== 0 && timeSinceLastOpen < 1000) {
+        console.log('[App] Debouncing rapid leaderboard open request, time since last:', timeSinceLastOpen);
+        return;
+      }
+      
+      console.log('[App] Allowing leaderboard open, time since last:', timeSinceLastOpen);
+      (window as any).lastLeaderboardOpen = now;
       
       // Extract score and submission flag from event if available
       let eventScore: number | undefined;
@@ -611,6 +736,34 @@ function AppContent() {
       if (!currentUser) {
         console.log('[App] User not authenticated, will show sign-in form');
         setShowAuth(true);
+      } else if (currentUser && userData && userData.company && userData.marketingOptIn && eventScore !== undefined) {
+        // User is fully authenticated and we have a score - check if it should be submitted
+        console.log('[App] User is authenticated, checking if score should be submitted:', eventScore);
+        
+        // Check if score was already submitted to prevent duplicate submissions
+        const deduplicationKey = getDeduplicationKey(eventScore, currentUser?.uid);
+        console.log('[App] Checking if score already submitted:', {
+          score: eventScore,
+          userId: currentUser?.uid,
+          deduplicationKey,
+          alreadySubmitted: scoreSubmittedRef.current[deduplicationKey]
+        });
+        
+        if (!scoreSubmittedRef.current[deduplicationKey]) {
+          console.log('[App] Score not yet submitted, marking as submitted to prevent duplicates');
+          
+          // Mark as submitted immediately to prevent duplicate calls
+          scoreSubmittedRef.current[deduplicationKey] = true;
+          
+          console.log('[App] Score marked as submitted, proceeding with submission');
+          
+          // Add a small delay to ensure leaderboard is open and listening for events
+          setTimeout(() => {
+            handleSubmitScore(eventScore, true); // true = check if high score first
+          }, 100);
+        } else {
+          console.log('[App] Score already submitted, skipping duplicate submission check');
+        }
       }
       
       // Send an event to notify the Leaderboard component that it's been opened
@@ -625,14 +778,35 @@ function AppContent() {
       window.dispatchEvent(leaderboardEvent);
     };
     
+    // Handle user sign-in completion from leaderboard
+    const handleUserSignedIn = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { score, name, company, marketingOptInAccepted } = customEvent.detail;
+      
+      console.log('[App] User signed in from leaderboard, submitting score:', score);
+      
+      // Check if score was already submitted to prevent duplicate submissions
+      if (scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)]) {
+        console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
+        return;
+      }
+      
+      // Submit the score now that user has signed in
+      if (score !== undefined) {
+        handleSubmitScore(score, true); // true = check if high score first
+      }
+    };
+
     window.addEventListener('authStatusCheck', handleAuthStatusCheck);
     window.addEventListener('checkGameAuth', handleGameOverEvent);
     window.addEventListener('showGameLeaderboard', handleShowLeaderboard);
+    window.addEventListener('userSignedIn', handleUserSignedIn);
     
     return () => {
       window.removeEventListener('authStatusCheck', handleAuthStatusCheck);
       window.removeEventListener('checkGameAuth', handleGameOverEvent);
       window.removeEventListener('showGameLeaderboard', handleShowLeaderboard);
+      window.removeEventListener('userSignedIn', handleUserSignedIn);
     };
   }, [handleGameOver, handleSubmitScore, setCurrentScore, setShowLeaderboard, currentUser, userData, setShowAuth]);
 
@@ -733,6 +907,15 @@ function AppContent() {
           onClose={() => setToastMessage({ type: 'info', message: '' })}
         />
       )}
+      
+      {/* Score popup notifications */}
+      <ScorePopup
+        isVisible={scorePopup.isVisible}
+        type={scorePopup.type}
+        title={scorePopup.title}
+        message={scorePopup.message}
+        onClose={() => setScorePopup({ isVisible: false, type: 'info', title: '', message: '' })}
+      />
       
       {/* Game container at full size regardless of radio player status */}
       <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden relative">
