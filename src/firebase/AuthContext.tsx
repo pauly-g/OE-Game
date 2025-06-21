@@ -125,17 +125,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
+      console.log('[AUTH] Google sign-in successful:', {
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL
+      });
+      
       // Check if the user already exists in Firestore
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
       if (userSnap.exists()) {
-        // Update last login time
+        console.log('[AUTH] Updating existing user document');
+        // Update existing user with any new information and last login time
         await setDoc(userRef, {
+          displayName: user.displayName, // Update in case it changed
+          email: user.email, // Update in case it changed
+          photoURL: user.photoURL, // Update in case it changed
           lastLogin: serverTimestamp()
         }, { merge: true });
       } else {
-        // Create new user document
+        console.log('[AUTH] Creating new user document');
+        // Create new user document with all available data
         await setDoc(userRef, {
           userId: user.uid,
           displayName: user.displayName,
@@ -144,13 +156,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           company: null, // Will be set later
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
-          marketingOptIn: true // Default to true, can be changed
+          marketingOptIn: false // Default to false, user must explicitly opt in
         });
       }
       
       // Fetch the complete user data
       const userData = await fetchUserData(user.uid);
       setUserData(userData);
+      
+      console.log('[AUTH] Final user data:', userData);
       
       return userData;
     } catch (error) {
@@ -173,14 +187,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser) return false;
     
     try {
+      console.log('[AUTH] Updating user company to:', company);
       const userRef = doc(db, 'users', currentUser.uid);
       await setDoc(userRef, {
         company,
         updatedAt: serverTimestamp()
       }, { merge: true });
       
-      // Update local userData
-      setUserData(prev => prev ? { ...prev, company } : null);
+      console.log('[AUTH] Company updated in Firestore successfully');
+      
+      // Update local userData immediately
+      setUserData(prev => {
+        const updated = prev ? { ...prev, company } : null;
+        console.log('[AUTH] Updated local userData:', updated);
+        return updated;
+      });
+      
+      // Also refresh from Firestore to ensure consistency
+      const refreshedData = await fetchUserData(currentUser.uid);
+      if (refreshedData) {
+        setUserData(refreshedData);
+        console.log('[AUTH] Refreshed userData from Firestore:', refreshedData);
+      }
       
       return true;
     } catch (error) {
@@ -231,7 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Function to submit user's score to leaderboard
   const submitUserScore = async (score: number): Promise<{success: boolean, message: string, isHighScore: boolean}> => {
-    if (!currentUser || !userData) {
+    if (!currentUser) {
       console.error('Cannot submit score: No authenticated user');
       return {success: false, message: 'You must be signed in to submit a score', isHighScore: false};
     }
@@ -260,27 +288,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log(`[FIREBASE] New high score: ${score} beats previous ${bestScore.score}`);
       }
       
-      // Double check the company value
-      const companyToUse = userData?.company && userData.company.trim() !== '' ? 
-        userData.company : (await fetchUserData(currentUser.uid))?.company || '';
+      // CRITICAL: Always refresh user data before submission to get the latest company info
+      console.log('[FIREBASE] Refreshing user data before score submission...');
+      const freshUserData = await refreshUserData();
       
-      console.log('[FIREBASE] Company value being used:', companyToUse || 'No company set');
+      // Get the most up-to-date user data or use fallbacks
+      let finalDisplayName = freshUserData?.displayName || currentUser.displayName || 'Anonymous Player';
+      let finalPhotoURL = freshUserData?.photoURL || currentUser.photoURL || null;
+      let finalCompany = freshUserData?.company || 'Unknown Company';
       
-      // Submit score to leaderboard with user data
-      console.log('[FIREBASE] Submitting high score to Firebase:', {
+      // If we still don't have fresh data, try fetching directly
+      if (!freshUserData) {
+        console.log('[FIREBASE] No fresh userData, attempting direct fetch...');
+        const directFetchData = await fetchUserData(currentUser.uid);
+        if (directFetchData) {
+          finalDisplayName = directFetchData.displayName || finalDisplayName;
+          finalPhotoURL = directFetchData.photoURL || finalPhotoURL;
+          finalCompany = directFetchData.company || finalCompany;
+        }
+      }
+      
+      console.log('[FIREBASE] Final values being used for submission:', {
         userId: currentUser.uid,
         score,
-        displayName: userData.displayName || currentUser.displayName,
-        photoURL: userData.photoURL || currentUser.photoURL,
-        company: companyToUse || 'No company set'
+        displayName: finalDisplayName,
+        photoURL: finalPhotoURL,
+        company: finalCompany
       });
       
+      // Submit score to leaderboard with user data
       const result = await submitScore(
         currentUser.uid,
         score,
-        userData.displayName || currentUser.displayName,
-        userData.photoURL || currentUser.photoURL,
-        companyToUse || 'No company set' // Use our verified company value
+        finalDisplayName,
+        finalPhotoURL,
+        finalCompany
       );
       
       // If submitScore returns null, the score wasn't submitted (either not a high score or error)

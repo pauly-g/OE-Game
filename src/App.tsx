@@ -82,8 +82,13 @@ function AppContent() {
   
   const radioRef = useRef<{ playTrack: (trackId: string) => void } | null>(null);
   // Reference to track which scores have been submitted to prevent duplicates
-  const scoreSubmittedRef = useRef<Record<number, boolean>>({});
+  const scoreSubmittedRef = useRef<Record<string, boolean>>({});
   const { currentUser, submitUserScore, isLoading, userData, getUserBestScore } = useAuth();
+
+  // Create a unique key for score tracking that includes user ID
+  const getScoreKey = useCallback((score: number, userId?: string) => {
+    return `${userId || 'anonymous'}_${score}_${Date.now()}`;
+  }, []);
 
   // Reset stations on page load
   useEffect(() => {
@@ -105,6 +110,14 @@ function AppContent() {
       delete (window as any).resetStations;
     };
   }, []);
+
+  // Clear score tracking when user changes
+  useEffect(() => {
+    if (currentUser) {
+      console.log('[App] User changed, clearing score tracking');
+      scoreSubmittedRef.current = {};
+    }
+  }, [currentUser?.uid]);
 
   // Enable debug mode
   useEffect(() => {
@@ -397,35 +410,17 @@ function AppContent() {
     console.log('[App] Current user authentication status:', !!currentUser);
     console.log('[App] checkHighScoreOnly:', checkHighScoreOnly);
     
-    // Validate score - ensure it's a positive number
-    if (score === undefined || score === null || isNaN(score) || score <= 0) {
-      console.error(`[App] Invalid score value: ${score}. Score must be a positive number.`);
+    // Validate score - ensure it's a non-negative number (0 is valid)
+    if (score === undefined || score === null || isNaN(score) || score < 0) {
+      console.error(`[App] Invalid score value: ${score}. Score must be a non-negative number.`);
       // Silent validation - don't show error to user
       return;
     }
     
     // Check if this score has already been submitted
-    if (scoreSubmittedRef.current[score]) {
+    if (scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)]) {
       console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
       return;
-    }
-    
-    // Clean up old score submissions - keep only recent scores to prevent memory leaks
-    // This helps ensure the scoreSubmittedRef doesn't grow indefinitely
-    const scoreKeys = Object.keys(scoreSubmittedRef.current);
-    if (scoreKeys.length > 10) { // Only keep the 10 most recent scores
-      // Sort numerically and take the oldest ones
-      const oldestScores = scoreKeys
-        .map(Number)
-        .sort((a, b) => a - b)
-        .slice(0, scoreKeys.length - 10);
-      
-      // Remove the oldest scores from the tracking object
-      oldestScores.forEach(oldScore => {
-        delete scoreSubmittedRef.current[oldScore];
-      });
-      
-      console.log(`[App] Cleaned up ${oldestScores.length} old score entries from tracking`);
     }
     
     try {
@@ -434,7 +429,7 @@ function AppContent() {
         console.log('[App] User authenticated, checking if high score');
         
         // Mark this score as being processed
-        scoreSubmittedRef.current[score] = true;
+        scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)] = true;
         
         if (checkHighScoreOnly) {
           // Get user's best score to compare
@@ -463,7 +458,7 @@ function AppContent() {
             } else {
               console.log('[App] Not a high score, skipping submission');
               // Still mark as submitted to avoid duplicate checks
-              scoreSubmittedRef.current[score] = true;
+              scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)] = true;
             }
           } catch (error) {
             console.error('[App] Error checking high score:', error);
@@ -543,7 +538,7 @@ function AppContent() {
       handleGameOver(score);
       
       // Check if score was already submitted to prevent duplicate submissions
-      if (scoreSubmittedRef.current[score]) {
+      if (scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)]) {
         console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
         return;
       }
@@ -568,7 +563,7 @@ function AppContent() {
       console.log('[App] Received checkGameAuth event, score:', score);
       
       // Check if score was already submitted to prevent duplicate submissions
-      if (scoreSubmittedRef.current[score]) {
+      if (scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)]) {
         console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
         return;
       }

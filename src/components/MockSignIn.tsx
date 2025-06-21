@@ -234,8 +234,9 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
           console.log('Marketing opt-in status updated successfully:', marketingOptIn);
         }
         
-        // Wait a moment to ensure Firestore updates
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Wait longer to ensure Firestore updates propagate
+        console.log('[MockSignIn] Waiting for Firestore updates to propagate...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Always call onSuccess - name and company are guaranteed to be strings at this point
         onSuccess(name.trim(), company.trim(), marketingOptIn);

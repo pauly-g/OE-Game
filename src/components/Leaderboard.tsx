@@ -500,51 +500,30 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
         }
 
         if (currentUser) {
-          console.log('[Leaderboard] User is logged in. Checking if score was already submitted...');
+          console.log('[Leaderboard] User is logged in. Loading leaderboard data...');
           try {
             const bestScoreData = await getUserBestScore();
             setCurrentBestScoreData(bestScoreData); // Store the best score data object
-
             const bestScoreValue = bestScoreData?.score; // Get the numeric score value
 
-            // Check if this score might be a new high score that wasn't submitted yet
+            // Simply fetch leaderboard data and show appropriate message
             if (bestScoreValue === undefined || userScore > bestScoreValue) {
-              console.log('[Leaderboard] Potential new high score detected. Checking if already submitted...');
+              // This is a potential high score - wait a bit for App.tsx to handle submission
+              console.log('[Leaderboard] Potential high score detected. Waiting for submission to complete...');
+              await new Promise(resolve => setTimeout(resolve, 2000));
               
-              // Wait a short time to allow App.tsx submission to complete
-              await new Promise(resolve => setTimeout(resolve, 500));
-              
-              // Re-fetch best score to see if it was updated by App.tsx
+              // Re-fetch to get updated data after submission
               const updatedBestScore = await getUserBestScore();
               const updatedBestValue = updatedBestScore?.score;
               
-              if (updatedBestValue === undefined || userScore > updatedBestValue) {
-                console.log('[Leaderboard] Score was not submitted by App.tsx. Submitting now...');
-                setIsSubmitting(true);
-                
-                let loadingMsg = showLoadingMessage('Submitting your high score...');
-                const result = await submitUserScore(userScore);
-                removeLoadingMessage(loadingMsg);
-
-                if (result.success) {
-                  setMostRecentScoreId(currentUser.uid);
-                  console.log('[Leaderboard] High score submitted successfully from Leaderboard.');
-                  await new Promise(resolve => setTimeout(resolve, 1500));
-                  await fetchLeaderboardData(userScore);
-                  setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
-                  setShowNotHighScoreMessage(true);
-                } else {
-                  console.error('[Leaderboard] Failed to submit high score:', result.message);
-                  setError(`Failed to submit high score: ${result.message || 'Please try again.'}`);
-                  await fetchLeaderboardData(updatedBestValue ?? undefined);
-                }
-                setIsSubmitting(false);
-              } else {
-                console.log('[Leaderboard] Score was already submitted by App.tsx. Just fetching leaderboard...');
-                await fetchLeaderboardData(updatedBestValue);
+              await fetchLeaderboardData(updatedBestValue);
+              
+              if (updatedBestValue !== undefined && userScore <= updatedBestValue) {
                 setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
-                setShowNotHighScoreMessage(true);
+              } else {
+                setNotHighScoreMessage(`Your score (${userScore}) was processed. Check your ranking above!`);
               }
+              setShowNotHighScoreMessage(true);
             } else {
               console.log('[Leaderboard] Score is not a high score.');
               await fetchLeaderboardData(bestScoreValue);
@@ -553,8 +532,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
               setShowNotHighScoreMessage(true);
             }
           } catch (err) {
-            console.error('[Leaderboard] Error checking/submitting score:', err);
-            setError('Error processing your score. Please try again.');
+            console.error('[Leaderboard] Error loading leaderboard:', err);
+            setError('Error loading leaderboard. Please try again.');
             fetchLeaderboardData();
           }
         } else {
