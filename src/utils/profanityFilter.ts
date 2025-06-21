@@ -7,6 +7,7 @@
 
 // Import the profanity-cleaner library for additional checking
 import * as profanityCleaner from 'profanity-cleaner';
+import { logProfanityDetection } from './securityMonitor';
 
 // Import a comprehensive list of profane words (this is just a small sample for the code)
 // In the real implementation, this would contain 1000+ words and variations
@@ -140,6 +141,7 @@ export const containsProfanity = (text: string): boolean => {
   
   // Check for competitor content first
   if (containsCompetitorContent(text)) {
+    logProfanityDetection(text);
     return true;
   }
   
@@ -164,6 +166,7 @@ export const containsProfanity = (text: string): boolean => {
   const analRegex = /\banal\b/i;
   if (analRegex.test(lowerText)) {
     console.log('Profanity detected: "anal" as a standalone word');
+    logProfanityDetection(text);
     return true;
   }
   
@@ -178,6 +181,7 @@ export const containsProfanity = (text: string): boolean => {
     const wordRegex = new RegExp(`\\b${escapeRegex(word)}\\b`, 'i');
     if (wordRegex.test(lowerText)) {
       console.log(`Explicit profanity detected: "${word}"`);
+      logProfanityDetection(text);
       return true;
     }
   }
@@ -186,6 +190,7 @@ export const containsProfanity = (text: string): boolean => {
   try {
     if (profanityCleaner.isProfane(text)) {
       console.log('Profanity detected by profanity-cleaner library');
+      logProfanityDetection(text);
       return true;
     }
   } catch (error) {

@@ -1,1 +1,112 @@
- 
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // SECURITY: Helper functions for validation and authorization
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is accessing their own data
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Validate score data structure and values
+    function isValidScore(data) {
+      return data.keys().hasAll(['userId', 'score', 'displayName', 'timestamp']) &&
+             data.userId is string &&
+             data.score is number &&
+             data.score >= 0 &&
+             data.score <= 1000000 &&  // Maximum reasonable score
+             data.displayName is string &&
+             data.displayName.size() <= 50 &&
+             data.timestamp is timestamp;
+    }
+    
+    // Validate user data structure
+    function isValidUserData(data) {
+      return data.keys().hasAll(['userId', 'displayName', 'email']) &&
+             data.userId is string &&
+             data.displayName is string &&
+             data.displayName.size() <= 50 &&
+             data.email is string &&
+             data.email.matches('.*@.*\\..*') &&  // Basic email validation
+             (!('company' in data) || (data.company is string && data.company.size() <= 100)) &&
+             (!('marketingOptIn' in data) || data.marketingOptIn is bool);
+    }
+    
+    // Check if the score is higher than user's current best
+    function isHigherScore(userId, newScore) {
+      let currentBest = get(/databases/$(database)/documents/leaderboard/$(userId));
+      return !exists(/databases/$(database)/documents/leaderboard/$(userId)) || 
+             newScore > currentBest.data.score;
+    }
+    
+    // Rate limiting: Check if user hasn't submitted too recently
+    function isWithinRateLimit(userId) {
+      let lastSubmission = get(/databases/$(database)/documents/users/$(userId));
+      return !exists(/databases/$(database)/documents/users/$(userId)) ||
+             !('lastScoreSubmission' in lastSubmission.data) ||
+             request.time > lastSubmission.data.lastScoreSubmission + duration.value(30, 's');
+    }
+    
+    // USERS COLLECTION: User profile data
+    match /users/{userId} {
+      // Users can read and write their own data
+      allow read, write: if isOwner(userId) && isValidUserData(resource.data);
+      
+      // Allow creation of new user documents during sign-up
+      allow create: if isOwner(userId) && 
+                       isValidUserData(request.resource.data) &&
+                       request.resource.data.userId == userId;
+      
+      // Allow updates to own profile
+      allow update: if isOwner(userId) && 
+                       isValidUserData(request.resource.data) &&
+                       request.resource.data.userId == userId &&
+                       // Prevent changing userId
+                       request.resource.data.userId == resource.data.userId;
+    }
+    
+    // LEADERBOARD COLLECTION: Score submissions and leaderboard data
+    match /leaderboard/{scoreId} {
+      
+      // Anyone can read leaderboard entries (for displaying leaderboard)
+      allow read: if true;
+      
+      // Only authenticated users can create score entries
+      allow create: if isAuthenticated() && 
+                       isValidScore(request.resource.data) &&
+                       // User can only submit scores for themselves
+                       request.resource.data.userId == request.auth.uid &&
+                       // Rate limiting: prevent spam submissions
+                       isWithinRateLimit(request.auth.uid) &&
+                       // Only allow higher scores (business logic)
+                       isHigherScore(request.auth.uid, request.resource.data.score);
+      
+      // Prevent updates and deletes to maintain leaderboard integrity
+      allow update, delete: if false;
+    }
+    
+    // SECURITY LOGS COLLECTION: Security event logging (if implemented server-side)
+    match /security_logs/{logId} {
+      // Only server-side functions can write security logs
+      allow read, write: if false;
+    }
+    
+    // ADMIN COLLECTION: Admin-only data (if needed in future)
+    match /admin/{document=**} {
+      // Only specific admin users can access
+      allow read, write: if false; // Disabled for now, would check admin role
+    }
+    
+    // DEFAULT DENY: All other paths are denied
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

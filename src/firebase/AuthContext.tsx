@@ -7,6 +7,8 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, db } from './config';
 import { submitScore, getUserBestScore as fetchUserBestScore } from './leaderboard';
+import { checkScoreSubmissionLimit, checkAuthLimit } from '../utils/rateLimiter';
+import { logAuthSuccess, logAuthFailure, logScoreSubmission, logScoreRejection, logRateLimitHit } from '../utils/securityMonitor';
 import { 
   doc, 
   getDoc, 
@@ -122,6 +124,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Function to sign in with Google
   const signInWithGoogle = async (): Promise<UserData | null> => {
     try {
+      // Check rate limiting for authentication attempts
+      const clientId = 'browser_' + (navigator.userAgent || 'unknown').slice(0, 20);
+      const rateLimitCheck = checkAuthLimit(clientId);
+      
+      if (!rateLimitCheck.allowed) {
+        console.warn(`[SECURITY] Authentication rate limited for client ${clientId}`);
+        logRateLimitHit('AUTH', undefined, { 
+          clientId, 
+          retryAfter: rateLimitCheck.retryAfter 
+        });
+        throw new Error(`Too many authentication attempts. Please wait ${rateLimitCheck.retryAfter} seconds before trying again.`);
+      }
+      
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
@@ -166,9 +181,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       console.log('[AUTH] Final user data:', userData);
       
+      // Log successful authentication
+      logAuthSuccess(user.uid, {
+        displayName: user.displayName,
+        email: user.email,
+        isNewUser: !userSnap.exists()
+      });
+      
       return userData;
     } catch (error) {
       console.error('Google sign-in error:', error);
+      logAuthFailure({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        provider: 'google'
+      });
       return null;
     }
   };
@@ -264,6 +290,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return {success: false, message: 'You must be signed in to submit a score', isHighScore: false};
     }
     
+          // Check rate limiting first
+      const rateLimitCheck = checkScoreSubmissionLimit(currentUser.uid);
+      if (!rateLimitCheck.allowed) {
+        console.warn(`[SECURITY] Score submission rate limited for user ${currentUser.uid}`);
+        logRateLimitHit('SCORE', currentUser.uid, { 
+          retryAfter: rateLimitCheck.retryAfter,
+          score 
+        });
+        return {
+          success: false, 
+          message: `Too many score submissions. Please wait ${rateLimitCheck.retryAfter} seconds before trying again.`, 
+          isHighScore: false
+        };
+      }
+    
+    // Log rate limit status for monitoring
+    if (rateLimitCheck.attemptsRemaining !== undefined && rateLimitCheck.attemptsRemaining <= 1) {
+      console.warn(`[SECURITY] User ${currentUser.uid} approaching rate limit. Attempts remaining: ${rateLimitCheck.attemptsRemaining}`);
+    }
+    
     console.log('[FIREBASE] Submitting score for authenticated user:', score, 'User ID:', currentUser.uid);
     
     try {
@@ -274,6 +320,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // BUT always accept first-time submissions (when bestScore is null)
       if (bestScore && score <= bestScore.score) {
         console.log('[FIREBASE] Not a high score:', score, 'vs previous best:', bestScore.score);
+        logScoreRejection(currentUser.uid, score, 'not_high_score', { 
+          previousBest: bestScore.score 
+        });
         return {
           success: false, 
           message: `Sorry, your new score is not a new personal best. Try again!`, 
@@ -336,6 +385,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         } else {
           // Some other error happened
+          logScoreRejection(currentUser.uid, score, 'submission_failed');
           return {
             success: false, 
             message: 'Failed to submit score. Please try again.', 
@@ -350,6 +400,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (bestScore) {
         message = `New high score! You beat your previous best of ${bestScore.score}!`;
       }
+      
+      // Log successful score submission
+      logScoreSubmission(currentUser.uid, score, {
+        isFirstScore: !bestScore,
+        previousBest: bestScore?.score || 0,
+        company: finalCompany
+      });
       
       return {
         success: true, 
