@@ -922,7 +922,7 @@ export class Level1Scene extends Phaser.Scene {
       case 'quantity': return 'Quantity Edit';
       case 'discount': return 'Add Discount';
       case 'product': return 'Change Product';
-      case 'invoice': return 'Invoice Edit';
+      case 'invoice': return 'Invoice PDF';
       case 'cancel': return 'Cancel Order';
       default: return 'Unknown Station';
     }
