@@ -2077,9 +2077,10 @@ export class Level1Scene extends Phaser.Scene {
       this.powerUpReadyText.setVisible(false);
     }
     
-    // Implement exponential difficulty - each use makes it harder
+    // Implement exponential difficulty - each use makes it harder, but cap at 80 edits
     this.powerUpUsedCount++;
-    this.powerUpRequirement = Math.floor(10 * Math.pow(2, this.powerUpUsedCount)); // Steeper exponential growth
+    const exponentialRequirement = Math.floor(10 * Math.pow(2, this.powerUpUsedCount));
+    this.powerUpRequirement = Math.min(exponentialRequirement, 80); // Cap at 80 edits max
     this.powerUpProgress = 0; // Reset progress to 0 - no banking allowed
     
     // Update progress bar to show empty
