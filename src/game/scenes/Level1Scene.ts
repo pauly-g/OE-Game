@@ -223,6 +223,9 @@ export class Level1Scene extends Phaser.Scene {
       this.carriedEdits = [];            // Clear carried edits
       this.powerUpActive = false;
       this.powerUpAvailable = false;
+      this.powerUpProgress = 0;          // Reset power-up progress
+      this.powerUpUsedCount = 0;         // Reset power-up usage count
+      this.powerUpRequirement = 10;      // Reset to initial requirement
       this.nextOrderDelay = 5000;        // Reset order delay
       this.orderSpeedMultiplier = 1.0;   // Reset speed multiplier
       this.conveyorSpeed = 0.5;          // Reset conveyor speed
@@ -1831,7 +1834,7 @@ export class Level1Scene extends Phaser.Scene {
     this.powerUpTimer = 0;
     this.powerUpAvailable = false;
     this.powerUpProgress = 0;
-    this.powerUpRequirement = 5; // Reset to initial requirement
+    this.powerUpRequirement = 10; // Reset to initial requirement
     this.powerUpUsedCount = 0; // Reset usage count
     
     // Reset progress bar
