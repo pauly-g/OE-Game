@@ -2,8 +2,12 @@
  * Profanity Filter Utility
  * 
  * A comprehensive utility to silently detect and filter profanity in user submissions,
- * including leet speak and common evasion tactics.
+ * including leet speak and common evasion tactics, competitor names, and negative business content.
  */
+
+// Import the profanity-cleaner library for additional checking
+import * as profanityCleaner from 'profanity-cleaner';
+import { logProfanityDetection } from './securityMonitor';
 
 // Import a comprehensive list of profane words (this is just a small sample for the code)
 // In the real implementation, this would contain 1000+ words and variations
@@ -47,13 +51,13 @@ const normalizeText = (text: string): string => {
   normalized = normalized.replace(/</g, 'c');
   normalized = normalized.replace(/>/g, 'o');
   normalized = normalized.replace(/\|/g, 'i');
+  normalized = normalized.replace(/\*/g, '');
   
   // Remove separators and other characters
   normalized = normalized.replace(/_/g, '');
   normalized = normalized.replace(/-/g, '');
   normalized = normalized.replace(/\./g, '');
   normalized = normalized.replace(/,/g, '');
-  normalized = normalized.replace(/\*/g, '');
   normalized = normalized.replace(/\?/g, '');
   normalized = normalized.replace(/#/g, 'h');
   
@@ -61,6 +65,50 @@ const normalizeText = (text: string): string => {
   normalized = normalized.replace(/\s+/g, '');
   
   return normalized;
+};
+
+/**
+ * Check for competitor names and negative business phrases
+ * @param text Text to check
+ * @returns True if contains competitor content or negative business phrases
+ */
+const containsCompetitorContent = (text: string): boolean => {
+  if (!text) return false;
+  
+  const lowerText = text.toLowerCase().trim();
+  
+  // Specific competitor patterns
+  const competitorPatterns = [
+    /\b(hulk|shoppad|orderdesk|orderhive|ordermetrics|orderprinter|ordersify|ordertify|editify)\b/i,
+    /\b(cartboost|upsellify|crosssell|oneclick|clickfunnels|reconvert|zipify|honeycomb|rebuy|bold|vitals)\b/i,
+    /\b(edit\s*order|modify\s*order|change\s*order|update\s*order|revise\s*order|amend\s*order)\b/i,
+    /\b(alternative|competitor|competing|better\s*than|worse\s*than|instead\s*of|replacement\s*for)\b/i,
+    /\b(dont\s*use|don't\s*use|avoid|stay\s*away)\b/i
+  ];
+  
+  for (const pattern of competitorPatterns) {
+    if (pattern.test(lowerText)) {
+      console.log(`Competitor content detected: pattern matched in "${text}"`);
+      return true;
+    }
+  }
+  
+  // Negative business phrases specifically about Order Editing
+  const negativePatterns = [
+    /\border\s*editing\s*(sucks|is\s*bad|is\s*terrible|is\s*awful|is\s*horrible|is\s*worst|is\s*useless|is\s*worthless|is\s*garbage|is\s*trash|is\s*junk|is\s*crap|is\s*poo|is\s*shit)/i,
+    /\b(overpriced|expensive|costly|too\s*much|rip\s*off|ripoff|scam|fraud|steal|stolen)\b/i,
+    /\b(buggy|broken|doesnt\s*work|doesn't\s*work|not\s*working|slow|laggy|crashes|freezes|unreliable)\b/i,
+    /\b(bad\s*support|poor\s*support|no\s*help|unhelpful|waste\s*of\s*money|waste\s*money|not\s*worth)\b/i
+  ];
+  
+  for (const pattern of negativePatterns) {
+    if (pattern.test(lowerText)) {
+      console.log(`Negative business content detected: pattern matched in "${text}"`);
+      return true;
+    }
+  }
+  
+  return false;
 };
 
 /**
@@ -73,14 +121,28 @@ export const containsProfanity = (text: string): boolean => {
   
   // Safelist of common test words that should never be flagged
   const safeTestWords = [
+    'order editing', 'orderediting', 'order-editing',
     'test', 'tester', 'testing', 'testable', 'contest', 'latest',
     'analysis', 'analyst', 'analytical', 'analytics', 'analyze', 'analyzed', 'analyzing', 'analyses'
   ];
   
   // If the exact input is one of our safe test words, allow it
-  if (safeTestWords.includes(text.toLowerCase())) {
+  if (safeTestWords.includes(text.toLowerCase().trim())) {
     console.log(`Safe word detected: "${text}" - bypassing profanity check`);
     return false;
+  }
+  
+  // Special handling for "Order Editing" - allow it by itself but not with negative words
+  const orderEditingPattern = /^order\s*editing$/i;
+  if (orderEditingPattern.test(text.trim())) {
+    console.log(`"Order Editing" detected as standalone - allowing`);
+    return false;
+  }
+  
+  // Check for competitor content first
+  if (containsCompetitorContent(text)) {
+    logProfanityDetection(text);
+    return true;
   }
   
   // Get all words in the text for individual checking
@@ -104,14 +166,36 @@ export const containsProfanity = (text: string): boolean => {
   const analRegex = /\banal\b/i;
   if (analRegex.test(lowerText)) {
     console.log('Profanity detected: "anal" as a standalone word');
+    logProfanityDetection(text);
     return true;
   }
   
-  // Simple profanity check - this is our primary check for profanity
-  // Check if the input contains common profanity words like "fuck"
-  if (/\b(fuck|shit|cunt|damn|bitch|ass)\b/i.test(lowerText)) {
-    console.log('Common profanity detected through direct check');
-    return true;
+  // Enhanced profanity check - explicitly check for common profanity including "poo"
+  const explicitProfanityWords = [
+    'fuck', 'shit', 'bullshit', 'cunt', 'damn', 'bitch', 'ass', 'asshole',
+    'bastard', 'piss', 'cock', 'dick', 'pussy', 'whore', 'slut',
+    'poo', 'poop', 'crap', 'fart', 'butt', 'stupid', 'idiot', 'moron', 'dumb', 'loser'
+  ];
+  
+  for (const word of explicitProfanityWords) {
+    const wordRegex = new RegExp(`\\b${escapeRegex(word)}\\b`, 'i');
+    if (wordRegex.test(lowerText)) {
+      console.log(`Explicit profanity detected: "${word}"`);
+      logProfanityDetection(text);
+      return true;
+    }
+  }
+  
+  // Use profanity-cleaner library as additional check
+  try {
+    if (profanityCleaner.isProfane(text)) {
+      console.log('Profanity detected by profanity-cleaner library');
+      logProfanityDetection(text);
+      return true;
+    }
+  } catch (error) {
+    console.error('Error using profanity-cleaner library:', error);
+    // Continue with our own checks if library fails
   }
   
   try {
@@ -138,10 +222,17 @@ export const containsProfanity = (text: string): boolean => {
         // For normalized text, check if any word in our text normalizes to a profane word
         for (const originalWord of wordsToCheck) {
           const normalizedWord = normalizeText(originalWord);
-          if (normalizedWord === word) {
+          if (normalizedWord === word.toLowerCase()) {
             console.log(`Profanity detected: '${word}' in normalized word: ${originalWord} → ${normalizedWord}`);
             return true;
           }
+        }
+        
+        // Check for partial matches in longer text (for spaced out words)
+        const spacedText = lowerText.replace(/\s+/g, '');
+        if (spacedText.includes(word.toLowerCase()) && word.length > 3) {
+          console.log(`Profanity detected: '${word}' in spaced text: ${spacedText}`);
+          return true;
         }
         
         return false;
@@ -163,8 +254,8 @@ export const containsProfanity = (text: string): boolean => {
     // If there's an error in the profanity check, log it and default to blocking suspicious content
     console.error('Error in profanity check:', error);
     
-    // As a fallback, check for obvious profanity
-    const containsObviousProfanity = /fuck|shit|cunt|ass|damn|bitch/i.test(text);
+    // As a fallback, check for obvious profanity including bullshit and poo
+    const containsObviousProfanity = /\b(fuck|shit|bullshit|cunt|ass|damn|bitch|poo|crap|stupid|idiot)\b/i.test(text);
     return containsObviousProfanity;
   }
 };
@@ -198,44 +289,37 @@ export const validateUserSubmission = (
       errorMessage: 'Company field is required'
     };
   }
-  
-  // Check if name is too long
-  if (name.length > 20) {
-    console.log('Validation failed: Name too long');
+
+  // Check for profanity in name
+  if (containsProfanity(name)) {
+    console.log('Validation failed: Name contains profanity');
     return {
       isValid: false,
-      errorMessage: 'Name must be 20 characters or less'
+      errorMessage: 'Please enter an appropriate name'
     };
   }
   
-  // Check if company is too long
-  if (company && company.length > 30) {
-    console.log('Validation failed: Company too long');
+  // Check for profanity in company
+  if (containsProfanity(company)) {
+    console.log('Validation failed: Company contains profanity or inappropriate content');
     return {
       isValid: false,
-      errorMessage: 'Company must be 30 characters or less'
+      errorMessage: 'Please enter an appropriate company name'
     };
   }
   
-  try {
-    // Check for profanity in name or company - SILENTLY reject with a generic message
-    if (containsProfanity(name) || containsProfanity(company)) {
-      console.log('Validation failed: Profanity detected (silent rejection)');
-      return {
-        isValid: false,
-        errorMessage: 'Please check your submission and try again'
-      };
-    }
-  } catch (error) {
-    console.error('Error during profanity validation:', error);
-    // If an error occurs, reject the submission to be safe
+  // Check for URLs in company name
+  const urlPattern = /(https?:\/\/|www\.)/i;
+  if (urlPattern.test(company)) {
+    console.log('Validation failed: Company contains URL');
     return {
       isValid: false,
-      errorMessage: 'Please check your submission and try again'
+      errorMessage: 'Company name cannot contain web addresses'
     };
   }
   
-  console.log('Validation passed!');
-  // All checks passed
-  return { isValid: true };
+  console.log('Validation passed: All checks successful');
+  return {
+    isValid: true
+  };
 }; 

@@ -40,10 +40,25 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   preload() {
+    console.log('[GameOverScene] PRELOAD METHOD CALLED');
     gameDebugger.info('GameOverScene preload started');
     try {
-      // Load game over background image
-      this.load.image('gameOverBG', 'game/Background/GameOverBG2.png');
+      // Add event listeners to catch loading errors
+      this.load.on('loaderror', (file: any) => {
+        console.error('[GameOverScene] Load error for file:', file);
+        gameDebugger.error('Load error for file:', file);
+      });
+      
+      this.load.on('filecomplete', (key: string) => {
+        console.log('[GameOverScene] File loaded successfully:', key);
+        gameDebugger.info('File loaded successfully:', key);
+      });
+      
+      // Load game over background image with a new, unique key to bust cache
+      console.log('[GameOverScene] Loading image with path: game/Background/GameOverBG.png');
+      console.log('[GameOverScene] Loader baseURL:', this.load.baseURL);
+      console.log('[GameOverScene] Loader path:', this.load.path);
+      this.load.image('gameOverBG_new', 'game/Background/GameOverBG.png');
       
       // Note: We'll load the audio directly in create() using HTML Audio
       
@@ -91,14 +106,48 @@ export class GameOverScene extends Phaser.Scene {
       });
       window.dispatchEvent(authCheckEvent);
       
-      // Add the game over background image back
-      const background = this.add.image(width / 2, height / 2, 'gameOverBG');
+      // Try to load the image directly if it doesn't exist
+      console.log('[GameOverScene] Checking if texture exists:', this.textures.exists('gameOverBG_new'));
+      gameDebugger.info('Texture exists check:', this.textures.exists('gameOverBG_new'));
       
-      // Scale the background to cover the screen while maintaining aspect ratio
-      const scaleX = width / background.width;
-      const scaleY = height / background.height;
-      const scale = Math.max(scaleX, scaleY);
-      background.setScale(scale).setDepth(0);
+      if (!this.textures.exists('gameOverBG_new')) {
+        console.error('[GameOverScene] Texture gameOverBG_new does not exist! Loading it now...');
+        gameDebugger.error('Texture gameOverBG_new does not exist! Loading it now...');
+        
+                 // Load the image directly in create method
+         this.load.image('gameOverBG_new', 'game/Background/GameOverBG.png');
+        
+        // Set up a one-time complete handler for this specific load
+        this.load.once('complete', () => {
+          console.log('[GameOverScene] Image loaded in create method, adding to scene');
+          if (this.textures.exists('gameOverBG_new')) {
+            const background = this.add.image(width / 2, height / 2, 'gameOverBG_new');
+            const scaleX = width / background.width;
+            const scaleY = height / background.height;
+            const scale = Math.max(scaleX, scaleY);
+            background.setScale(scale).setDepth(0);
+          } else {
+            console.error('[GameOverScene] Still no texture after loading!');
+            const background = this.add.rectangle(width / 2, height / 2, width, height, 0x333333);
+            background.setDepth(0);
+          }
+        });
+        
+        // Start the load
+        this.load.start();
+        
+        // For now, show a placeholder
+        const background = this.add.rectangle(width / 2, height / 2, width, height, 0x333333);
+        background.setDepth(0);
+      } else {
+        const background = this.add.image(width / 2, height / 2, 'gameOverBG_new');
+        
+        // Scale the background to cover the screen while maintaining aspect ratio
+        const scaleX = width / background.width;
+        const scaleY = height / background.height;
+        const scale = Math.max(scaleX, scaleY);
+        background.setScale(scale).setDepth(0);
+      }
       
       // Add semi-transparent overlay to ensure text is readable
       this.add.rectangle(0, 0, width, height, 0x000000, 0.4).setOrigin(0, 0).setDepth(0.5);

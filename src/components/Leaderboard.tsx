@@ -4,6 +4,52 @@ import { useAuth, UserData } from '../firebase/AuthContext';
 import MockSignIn from './MockSignIn';
 import '../styles/customScrollbar.css';
 
+// Isolated Score Message Overlay Component to prevent render loops
+const ScoreMessageOverlay: React.FC<{
+  show: boolean;
+  message: string;
+  onDismiss: () => void;
+}> = React.memo(({ show, message, onDismiss }) => {
+  const renderCount = useRef(0);
+  const prevProps = useRef({ show, message, onDismiss: onDismiss.toString() });
+  
+  renderCount.current++;
+  const currentProps = { show, message, onDismiss: onDismiss.toString() };
+  
+  console.log(`[ScoreMessageOverlay] 🎨 RENDER #${renderCount.current}`);
+  console.log(`[ScoreMessageOverlay] Props:`, currentProps);
+  
+  if (renderCount.current > 1) {
+    console.log(`[ScoreMessageOverlay] Props changed:`, {
+      show: prevProps.current.show !== currentProps.show,
+      message: prevProps.current.message !== currentProps.message,
+      onDismiss: prevProps.current.onDismiss !== currentProps.onDismiss
+    });
+  }
+  
+  prevProps.current = currentProps;
+  
+  if (!show) {
+    console.log(`[ScoreMessageOverlay] Not showing (show=${show})`);
+    return null;
+  }
+  
+  console.log(`[ScoreMessageOverlay] 🚨 CREATING OVERLAY DOM ELEMENT`);
+  
+  return (
+    <div className="not-high-score-overlay">
+      <div className="not-high-score-message">
+        <p>{message}</p>
+        <div className="buttons">
+          <button onClick={onDismiss}>
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 interface LeaderboardProps {
   isOpen: boolean;
   onClose: () => void;
@@ -369,6 +415,82 @@ const goldenShimmerStyle = `
     font-weight: bold;
     color: #93c5fd;
   }
+  
+  .score-message-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .score-message-popup {
+    background: #1f2937;
+    border: 2px solid;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 400px;
+    text-align: center;
+    font-family: inherit;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+  
+  .score-message-popup.success {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #1f2937 0%, rgba(16, 185, 129, 0.1) 100%);
+  }
+  
+  .score-message-popup.error {
+    border-color: #ef4444;
+    background: linear-gradient(135deg, #1f2937 0%, rgba(239, 68, 68, 0.1) 100%);
+  }
+  
+  .score-message-popup.info {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, #1f2937 0%, rgba(59, 130, 246, 0.1) 100%);
+  }
+  
+  .score-message-popup p {
+    color: #ffffff;
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0 0 20px 0;
+  }
+  
+  .score-message-popup .buttons {
+    display: flex;
+    justify-content: center;
+  }
+  
+  .score-message-popup button {
+    background: #3b82f6;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .score-message-popup.success button {
+    background: #10b981;
+  }
+  
+  .score-message-popup.error button {
+    background: #ef4444;
+  }
+  
+  .score-message-popup button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
 `;
 
 const Leaderboard: React.FC<LeaderboardProps> = ({ 
@@ -392,19 +514,19 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   const [debug, setDebug] = useState<string>('');
   // Track the most recent score submission
   const [mostRecentScoreId, setMostRecentScoreId] = useState<string | null>(null);
-  // Add state for non-high-score message
-  const [showNotHighScoreMessage, setShowNotHighScoreMessage] = useState<boolean>(false);
-  const [notHighScoreMessage, setNotHighScoreMessage] = useState<string>('');
   const [showLeaderboardAfterError, setShowLeaderboardAfterError] = useState(false);
-  // Add a separate loading state for score submission
-  const [submittingScore, setSubmittingScore] = useState<boolean>(false);
-  const [submissionComplete, setSubmissionComplete] = useState<boolean>(false);
-  // Track which scores have been submitted to prevent double submissions
-  const [submittedScores, setSubmittedScores] = useState<Record<number, boolean>>({});
-  // Store user's best score data (object containing score and timestamp)
-  const [currentBestScoreData, setCurrentBestScoreData] = useState<{ score: number; timestamp: Date } | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Guard for submission
   const processedScoreRef = useRef<boolean>(false); // Use ref for the flag
+  
+  // Score message popup state (leaderboard-style popup)
+  const [showScoreMessage, setShowScoreMessage] = useState<boolean>(false);
+  const [scoreMessage, setScoreMessage] = useState<string>('');
+  const [scoreMessageType, setScoreMessageType] = useState<'success' | 'error' | 'info'>('info');
+  const [lastProcessedEventId, setLastProcessedEventId] = useState<string>('');
+  const [isProcessingScore, setIsProcessingScore] = useState<boolean>(false);
+  const [lastClickTime, setLastClickTime] = useState<number>(0);
+  
+  // Add ref to prevent showing the same message multiple times
+  const lastShownMessageRef = useRef<string>('');
 
   // Authentication context
   const { 
@@ -416,6 +538,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
     getUserBestScore,
     updateMarketingOptIn
   } = useAuth();
+
+
 
   // Function to fetch all leaderboard data, using a specific score for rank/nearby
   const fetchLeaderboardData = useCallback(async (scoreForRank?: number) => {
@@ -468,26 +592,42 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [currentUser]); // Add currentUser dependency
+  }, [currentUser?.uid]); // Add currentUser uid dependency
+
+  // Refs to track current values for event handlers
+  const isOpenRef = useRef(isOpen);
+  const fetchLeaderboardDataRef = useRef(fetchLeaderboardData);
+  
+  // Update refs when values change
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+  
+  useEffect(() => {
+    fetchLeaderboardDataRef.current = fetchLeaderboardData;
+  }, [fetchLeaderboardData]);
 
   // Centralized Logic Handler: Runs when the component opens with a score
   useEffect(() => {
     if (isOpen && userScore !== undefined) {
       console.log('[Leaderboard] Component opened with score:', userScore);
-      // Reset submission guard and processing flag when opening
-      setIsSubmitting(false);
+      // Reset processing flag when opening
       processedScoreRef.current = false; // Reset ref value
       (window as any).isLeaderboardOpen = true;
       setLoading(true); // Start loading
       setError(null);
       setShowSignIn(false); // Reset sign-in state
-      setShowNotHighScoreMessage(false); // Reset message state
-      setCurrentBestScoreData(null); // Reset best score state
 
       const handleScoreLogic = async () => {
-        // Prevent multiple simultaneous submissions
-        if (isSubmitting) {
-          console.log('[Leaderboard] Submission already in progress, skipping...');
+        setIsProcessingScore(true);
+        
+        // Check if user is logged in but needs to set company name or accept marketing
+        const currentUserData = userData; // Get current userData value
+        if (currentUser && (!currentUserData || !currentUserData.company || !currentUserData.marketingOptIn)) {
+          console.log('[Leaderboard] User is logged in but missing company information or marketing consent. Showing company form.');
+          setShowSignIn(true); // Show the sign-in form for company info and marketing consent
+          setLoading(false);
+          setIsProcessingScore(false);
           return;
         }
 
@@ -500,67 +640,32 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
         }
 
         if (currentUser) {
-          console.log('[Leaderboard] User is logged in. Checking if score was already submitted...');
+          console.log('[Leaderboard] User is logged in. Loading leaderboard data...');
           try {
-            const bestScoreData = await getUserBestScore();
-            setCurrentBestScoreData(bestScoreData); // Store the best score data object
-
-            const bestScoreValue = bestScoreData?.score; // Get the numeric score value
-
-            // Check if this score might be a new high score that wasn't submitted yet
-            if (bestScoreValue === undefined || userScore > bestScoreValue) {
-              console.log('[Leaderboard] Potential new high score detected. Checking if already submitted...');
-              
-              // Wait a short time to allow App.tsx submission to complete
-              await new Promise(resolve => setTimeout(resolve, 500));
-              
-              // Re-fetch best score to see if it was updated by App.tsx
-              const updatedBestScore = await getUserBestScore();
-              const updatedBestValue = updatedBestScore?.score;
-              
-              if (updatedBestValue === undefined || userScore > updatedBestValue) {
-                console.log('[Leaderboard] Score was not submitted by App.tsx. Submitting now...');
-                setIsSubmitting(true);
-                
-                let loadingMsg = showLoadingMessage('Submitting your high score...');
-                const result = await submitUserScore(userScore);
-                removeLoadingMessage(loadingMsg);
-
-                if (result.success) {
-                  setMostRecentScoreId(currentUser.uid);
-                  console.log('[Leaderboard] High score submitted successfully from Leaderboard.');
-                  await new Promise(resolve => setTimeout(resolve, 1500));
-                  await fetchLeaderboardData(userScore);
-                  setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
-                  setShowNotHighScoreMessage(true);
-                } else {
-                  console.error('[Leaderboard] Failed to submit high score:', result.message);
-                  setError(`Failed to submit high score: ${result.message || 'Please try again.'}`);
-                  await fetchLeaderboardData(updatedBestValue ?? undefined);
-                }
-                setIsSubmitting(false);
-              } else {
-                console.log('[Leaderboard] Score was already submitted by App.tsx. Just fetching leaderboard...');
-                await fetchLeaderboardData(updatedBestValue);
-                setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
-                setShowNotHighScoreMessage(true);
-              }
-            } else {
-              console.log('[Leaderboard] Score is not a high score.');
-              await fetchLeaderboardData(bestScoreValue);
-              setNotHighScoreMessage(`Your score (${userScore}) was not higher than your personal best of ${bestScoreValue}. Keep trying!`);
-              setShowNotHighScoreMessage(true);
+            // Simply fetch and display leaderboard data with the user's score for proper positioning
+            await fetchLeaderboardDataRef.current(userScore);
+            setLoading(false);
+            
+            console.log('[Leaderboard] Leaderboard data loaded successfully');
+            
+            // Check if there's a pending success message to show
+            if (scoreMessage && scoreMessageType === 'success' && !showScoreMessage) {
+              console.log('[Leaderboard] 🎬 Found pending success message after loading, showing it now');
+              console.log('[Leaderboard] Success message:', scoreMessage);
+              setShowScoreMessage(true);
             }
           } catch (err) {
-            console.error('[Leaderboard] Error checking/submitting score:', err);
-            setError('Error processing your score. Please try again.');
-            fetchLeaderboardData();
+            console.error('[Leaderboard] Error loading leaderboard:', err);
+            setError('Error loading leaderboard. Please try again.');
+            setLoading(false);
           }
         } else {
           console.log('[Leaderboard] User not logged in. Prompting sign-in to submit high score.');
           setShowSignIn(true);
           setLoading(false); // Stop loading as we wait for user interaction
         }
+        
+        setIsProcessingScore(false);
       };
 
       // Only run the score processing logic ONCE per opening with a score
@@ -583,12 +688,15 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
         setLoading(true);
         setError(null);
         setShowSignIn(false);
-        setShowNotHighScoreMessage(false);
         setTopScores([]);
         setUserRank(null);
         setNearbyScores({ above: [], below: [] });
+        // Clear any stored score messages
+        setShowScoreMessage(false);
+        setScoreMessage('');
+        setLastProcessedEventId(''); // Clear event tracking
     }
-  }, [isOpen, userScore, currentUser, userData, getUserBestScore, submitUserScore, fetchLeaderboardData]);
+  }, [isOpen, userScore, currentUser?.uid]);
 
   // Helper functions for loading messages
   const showLoadingMessage = (text: string) => {
@@ -618,29 +726,110 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   useEffect(() => {
     // Set up event listeners
     const handleScoreSubmitted = (e: CustomEvent) => {
-        console.log('[Leaderboard] Score submitted event received (potentially from outside)', e.detail);
-        // If a score was successfully submitted elsewhere, refresh the view
-        if (e.detail && e.detail.success && isOpen) {
-            console.log('[Leaderboard] Refreshing leaderboard due to external score submission event');
-            fetchLeaderboardData(e.detail.score); // Fetch using the submitted score
+        const eventTimestamp = new Date().toISOString();
+        console.log(`[Leaderboard] ==================== EVENT RECEIVED ====================`);
+        console.log(`[Leaderboard] Timestamp: ${eventTimestamp}`);
+        console.log(`[Leaderboard] Event detail:`, JSON.stringify(e.detail, null, 2));
+        console.log(`[Leaderboard] isOpen (ref):`, isOpenRef.current);
+        console.log(`[Leaderboard] Current lastProcessedEventId:`, lastProcessedEventId);
+        
+        // Simple deduplication - use score and success status only
+        const eventKey = `${e.detail.score}-${e.detail.success}`;
+        console.log(`[Leaderboard] Generated event key:`, eventKey);
+        
+        // Skip if we already processed this exact score/success combination
+        if (eventKey === lastProcessedEventId) {
+            console.log(`[Leaderboard] ❌ SKIPPING DUPLICATE - already processed:`, eventKey);
+            console.log(`[Leaderboard] ========================================================`);
+            return;
+        }
+        
+        console.log(`[Leaderboard] ✅ PROCESSING NEW EVENT:`, eventKey);
+        console.log(`[Leaderboard] Setting lastProcessedEventId from "${lastProcessedEventId}" to "${eventKey}"`);
+        setLastProcessedEventId(eventKey);
+        
+        // Clear any existing message first to prevent stale messages
+        console.log(`[Leaderboard] 🧹 Clearing existing messages`);
+        setShowScoreMessage(false);
+        setScoreMessage('');
+        
+        // Store the message for when the leaderboard opens (if it's not open yet)
+        if (e.detail && !e.detail.success && e.detail.message) {
+            // Hard-deduplicate: if this exact message was already shown, do nothing
+            if (lastShownMessageRef.current === e.detail.message) {
+                console.log(`[Leaderboard] 🔂 Duplicate message detected, already shown -> skipping`);
+                return;
+            }
+            console.log(`[Leaderboard] 📝 Processing ERROR message:`, e.detail.message);
+            console.log(`[Leaderboard] Setting scoreMessage state`);
+            // Store the message in component state even if leaderboard isn't open yet
+            setScoreMessage(e.detail.message);
+            setScoreMessageType('error');
+            
+            // Only show immediately if leaderboard is open
+            if (isOpenRef.current) {
+                console.log(`[Leaderboard] 👁️ Leaderboard IS OPEN - checking if we should show message`);
+                
+                // Prevent showing the exact same message multiple times
+                if (lastShownMessageRef.current !== e.detail.message) {
+                    console.log(`[Leaderboard] 🆕 NEW MESSAGE - showing it`);
+                    console.log(`[Leaderboard] Previous message: "${lastShownMessageRef.current}"`);
+                    console.log(`[Leaderboard] New message: "${e.detail.message}"`);
+                    lastShownMessageRef.current = e.detail.message;
+                    setShowScoreMessage(true);
+                } else {
+                    console.log(`[Leaderboard] 🚫 SAME MESSAGE - not showing again`);
+                    console.log(`[Leaderboard] Message: "${e.detail.message}"`);
+                }
+            } else {
+                console.log(`[Leaderboard] 👁️ Leaderboard NOT OPEN - message will show when opened`);
+            }
+            
+            // Auto-clear the message after 30 seconds to prevent stale messages
+            setTimeout(() => {
+                console.log('[Leaderboard] Auto-clearing old error message');
+                if (scoreMessage === e.detail.message) {
+                    setShowScoreMessage(false);
+                    setScoreMessage('');
+                }
+            }, 30000);
+            
+        } else if (e.detail && e.detail.success) {
+            console.log('[Leaderboard] Processing success event, leaderboard open:', isOpenRef.current);
+            
+            // Always refresh leaderboard data for success events
+            if (isOpenRef.current) {
+                fetchLeaderboardDataRef.current(e.detail.score); // Fetch using the submitted score
+            }
+            
+            // Show success message regardless of whether leaderboard is open
+            const successMessage = `🎉 Congratulations! New high score: ${e.detail.score}!`;
+            console.log('[Leaderboard] Setting success message:', successMessage);
+            setScoreMessage(successMessage);
+            setScoreMessageType('success');
+            lastShownMessageRef.current = successMessage;
+            
+            // Show the message if leaderboard is open, otherwise it will show when opened
+            if (isOpenRef.current) {
+                console.log('[Leaderboard] Leaderboard is open, showing success message immediately');
+                setShowScoreMessage(true);
+            } else {
+                console.log('[Leaderboard] Leaderboard not open, message will show when opened');
+            }
         }
     };
 
+    console.log('[Leaderboard] Setting up scoreSubmitted event listener');
     window.addEventListener('scoreSubmitted', handleScoreSubmitted as EventListener);
 
     return () => {
+      console.log('[Leaderboard] Removing scoreSubmitted event listener');
       window.removeEventListener('scoreSubmitted', handleScoreSubmitted as EventListener);
     };
-  }, [isOpen, fetchLeaderboardData]); // Added dependencies
+  }, []); // Remove dependencies to prevent re-creating listeners
 
-  // Handle mock sign-in (Adjusted score submission logic)
+  // Handle mock sign-in (Simplified - no score submission logic)
   const handleMockSignIn = async (name: string, company: string, marketingOptInAccepted: boolean) => {
-    // Prevent multiple simultaneous submissions
-    if (isSubmitting) {
-      console.log('[Leaderboard] Submission already in progress via sign-in, skipping...');
-      return;
-    }
-
     try {
       console.log('[Leaderboard] Sign-in form submitted with:', { name, company, marketingOptInAccepted });
 
@@ -650,65 +839,29 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
           return; // Stop processing
       }
 
-      setIsSubmitting(true); // Set submission guard
       setShowSignIn(false); // Hide sign-in form immediately
 
       // Mock sign-in doesn't actually create a user, so we simulate actions.
       // In a real scenario, you'd call Firebase auth here.
 
-      // Assume sign-in successful. Now handle the score.
+      // After sign-in, just load the leaderboard with the user's score - App.tsx handles score submission
+      console.log('[Leaderboard] Sign-in completed, loading leaderboard data...');
+      await fetchLeaderboardData(userScore);
+      
+      // Dispatch event to notify App.tsx that user has signed in and it should handle score submission
       if (userScore !== undefined) {
-        console.log('[Leaderboard] Processing score submission after sign-in:', userScore);
-        let loadingMsg = showLoadingMessage('Submitting your score...');
-
-        // Use the real submitUserScore function
-        const result = await submitUserScore(userScore);
-        removeLoadingMessage(loadingMsg);
-
-        if (result.success) {
-          console.log('[Leaderboard] Score submission successful after sign-in.');
-
-          // Dispatch event to notify other parts of the app
-          const scoreSubmittedEvent = new CustomEvent('scoreSubmitted', {
-            detail: { score: userScore, timestamp: new Date(), success: true }
-          });
-          window.dispatchEvent(scoreSubmittedEvent);
-
-          // Wait briefly for Firebase update
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          // Fetch leaderboard data using the submitted score
-          await fetchLeaderboardData(userScore);
-
-          // Show appropriate message based on whether it was a high score
-          if (result.isHighScore) {
-            setNotHighScoreMessage(`Congratulations! Your score (${userScore}) is your new personal best and has been submitted!`);
-          } else {
-            setNotHighScoreMessage(`Your score (${userScore}) has been submitted to the leaderboard!`);
-          }
-          setShowNotHighScoreMessage(true);
-        } else {
-          console.error('[Leaderboard] Score submission failed after sign-in:', result.message);
-          setError(`Failed to submit score: ${result.message || 'Please try again.'}`);
-          await fetchLeaderboardData(); // Fetch generic top 10 on error
-        }
-      } else {
-          // Signed in without a score to submit, just fetch top 10
-          await fetchLeaderboardData();
-          // No message needed here
+        const signInCompleteEvent = new CustomEvent('userSignedIn', {
+          detail: { score: userScore, name, company, marketingOptInAccepted }
+        });
+        window.dispatchEvent(signInCompleteEvent);
       }
     } catch (error) {
-      console.error('[Leaderboard] Error during mock sign-in/submission:', error);
-      setError('An error occurred during sign-in/submission. Please try again.');
-      fetchLeaderboardData(); // Fetch generic top 10 on error
-    } finally {
-      setIsSubmitting(false); // Release submission guard
+      console.error('[Leaderboard] Error in handleMockSignIn:', error);
+      setError('An error occurred during sign-in. Please try again.');
     }
   };
 
-  // Handle dismissing the not-high-score message
-  const dismissNotHighScoreMessage = () => {
-    setShowNotHighScoreMessage(false);
-  };
+
 
   // Close the leaderboard and re-enable game inputs
   const handleClose = () => {
@@ -729,35 +882,35 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   const dismissErrorAndShowLeaderboard = async () => {
     try {
       setError(null);
-      setShowLeaderboardAfterError(false);
       
       console.log('[Leaderboard] Attempting to fetch leaderboard data after error dismissal');
-      // Fetch using the current best score if available, otherwise the userScore, or fallback to generic fetch
-      await fetchLeaderboardData(currentBestScoreData?.score ?? userScore ?? undefined);
+      // Fetch using the userScore, or fallback to generic fetch
+      await fetchLeaderboardData(userScore ?? undefined);
       console.log('[Leaderboard] Successfully fetched leaderboard data after error dismissal');
     } catch (error) {
       console.error('[Leaderboard] Error fetching leaderboard data after error dismissal:', error);
       setError('Failed to refresh leaderboard data. Please try again.');
-      setShowLeaderboardAfterError(true); // Keep error state if fetch fails again
     }
   };
 
+  // Helper function to dismiss score message (memoized to prevent breaking React.memo)
+  const dismissScoreMessage = useCallback(() => {
+    setShowScoreMessage(false);
+    setScoreMessage('');
+    // Clear the last shown message ref so the same message can be shown again later if needed
+    lastShownMessageRef.current = '';
+    // Don't clear lastProcessedEventId here - we want to remember processed events
+  }, []);
+
+
+
   // Reset component state when receiving a new score or when component is closed
   useEffect(() => {
-    // If the component is closed, reset states on next open
+    // Component state management for open/close
     if (!isOpen) {
-      setSubmissionComplete(false);
-      setSubmittingScore(false);
-      // Don't reset submittedScores here to maintain which scores were already submitted
+      // Component is closed, clean up
+      console.log('[Leaderboard] Component closed, cleaning up state');
     }
-    
-    // If user score changes, reset submission states
-    return () => {
-      if (!isOpen) {
-        // Clear submitted scores when component is unmounted to avoid stale data on next game
-        setSubmittedScores({});
-      }
-    };
   }, [isOpen, userScore]);
 
   // Clean up resources when component unmounts
@@ -770,11 +923,6 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
       setLoading(false);
       setError(null);
       setShowSignIn(false);
-      setShowNotHighScoreMessage(false);
-      setNotHighScoreMessage('');
-      setShowLeaderboardAfterError(false);
-      setSubmittingScore(false);
-      setSubmissionComplete(false);
       
       // Reset global flag
       (window as any).isLeaderboardOpen = false;
@@ -785,14 +933,24 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
 
   // Render the leaderboard content with loading state
   const renderLeaderboardContent = () => {
-    if (loading && !showSignIn) {
+    if ((loading || isProcessingScore) && !showSignIn) {
+      const loadingText = isProcessingScore 
+        ? "Processing your score..." 
+        : "Loading leaderboard data...";
+      const subText = isProcessingScore 
+        ? "Checking for high scores and updating rankings" 
+        : "Retrieving latest scores";
+        
       return (
         <div className="loading-spinner-container">
           <div className="loading-spinner">
             <div className="spinner"></div>
           </div>
-          <p className="loading-text">Loading leaderboard data...</p>
-          <p className="text-sm text-gray-400 mt-2">Retrieving latest scores</p>
+          <p className="loading-text">{loadingText}</p>
+          <p className="text-sm text-gray-400 mt-2">{subText}</p>
+          {isProcessingScore && (
+            <p className="text-xs text-blue-400 mt-2">Please wait, this may take a few seconds...</p>
+          )}
         </div>
       );
     }
@@ -908,7 +1066,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
           <div className="leaderboard-section user-position mt-8">
             <h3>YOUR POSITION</h3>
             <p className="user-rank">
-              Your rank for score {currentBestScoreData?.score && userScore <= currentBestScoreData.score ? currentBestScoreData.score : userScore}: <span>#{userRank}</span>
+              Your rank for score {userScore}: <span>#{userRank}</span>
             </p>
             
             <table className="scores-table">
@@ -961,7 +1119,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
                 })}
                 
                 {/* User's score row - Ensure it shows the correct score (best or new) */}
-                 <tr className={`current-user-row ${currentBestScoreData?.score && userScore > currentBestScoreData.score ? 'golden-shimmer' : ''}`}>
+                 <tr className="current-user-row">
                     <td>#{userRank}</td>
                     <td>
                         <div className="player-info">
@@ -983,7 +1141,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
                     </td>
                     <td>{userData?.company || '-'}</td>
                     {/* Show the score that determined the rank */}
-                    <td className="score-value">{currentBestScoreData?.score && userScore <= currentBestScoreData.score ? currentBestScoreData.score : userScore}</td>
+                    <td className="score-value">{userScore}</td>
                 </tr>
                 
                 {/* Scores below user */}
@@ -1068,27 +1226,14 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
         renderLeaderboardContent()
       )}
 
-      {/* Display submission status */}
-      {submittingScore && (
-        <div className="submission-status">
-          <div className="spinner"></div>
-          <p>Submitting your score...</p>
-        </div>
-      )}
-      
-      {/* Show not high score message as overlay */}
-      {showNotHighScoreMessage && (
-        <div className="not-high-score-overlay">
-          <div className="not-high-score-message">
-            <p>{notHighScoreMessage}</p>
-            <div className="buttons">
-              <button onClick={dismissNotHighScoreMessage}>
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
+
+      {/* Score message overlay - ISOLATED RENDERING */}
+      <ScoreMessageOverlay 
+        show={showScoreMessage}
+        message={scoreMessage}
+        onDismiss={dismissScoreMessage}
+      />
 
       {/* Show error as overlay */}
       {showLeaderboardAfterError && (

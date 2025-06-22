@@ -7,6 +7,8 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, db } from './config';
 import { submitScore, getUserBestScore as fetchUserBestScore } from './leaderboard';
+import { checkScoreSubmissionLimit, checkAuthLimit } from '../utils/rateLimiter';
+import { logAuthSuccess, logAuthFailure, logScoreSubmission, logScoreRejection, logRateLimitHit } from '../utils/securityMonitor';
 import { 
   doc, 
   getDoc, 
@@ -122,20 +124,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Function to sign in with Google
   const signInWithGoogle = async (): Promise<UserData | null> => {
     try {
+      // Check rate limiting for authentication attempts
+      const clientId = 'browser_' + (navigator.userAgent || 'unknown').slice(0, 20);
+      const rateLimitCheck = checkAuthLimit(clientId);
+      
+      if (!rateLimitCheck.allowed) {
+        console.warn(`[SECURITY] Authentication rate limited for client ${clientId}`);
+        logRateLimitHit('AUTH', undefined, { 
+          clientId, 
+          retryAfter: rateLimitCheck.retryAfter 
+        });
+        throw new Error(`Too many authentication attempts. Please wait ${rateLimitCheck.retryAfter} seconds before trying again.`);
+      }
+      
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
+      
+      console.log('[AUTH] Google sign-in successful:', {
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL
+      });
       
       // Check if the user already exists in Firestore
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
       if (userSnap.exists()) {
-        // Update last login time
+        console.log('[AUTH] Updating existing user document');
+        // Update existing user with any new information and last login time
         await setDoc(userRef, {
+          displayName: user.displayName, // Update in case it changed
+          email: user.email, // Update in case it changed
+          photoURL: user.photoURL, // Update in case it changed
           lastLogin: serverTimestamp()
         }, { merge: true });
       } else {
-        // Create new user document
+        console.log('[AUTH] Creating new user document');
+        // Create new user document with all available data
         await setDoc(userRef, {
           userId: user.uid,
           displayName: user.displayName,
@@ -144,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           company: null, // Will be set later
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
-          marketingOptIn: true // Default to true, can be changed
+          marketingOptIn: false // Default to false, user must explicitly opt in
         });
       }
       
@@ -152,9 +179,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userData = await fetchUserData(user.uid);
       setUserData(userData);
       
+      console.log('[AUTH] Final user data:', userData);
+      
+      // Log successful authentication
+      logAuthSuccess(user.uid, {
+        displayName: user.displayName,
+        email: user.email,
+        isNewUser: !userSnap.exists()
+      });
+      
       return userData;
     } catch (error) {
       console.error('Google sign-in error:', error);
+      logAuthFailure({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        provider: 'google'
+      });
       return null;
     }
   };
@@ -173,14 +213,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser) return false;
     
     try {
+      console.log('[AUTH] Updating user company to:', company);
       const userRef = doc(db, 'users', currentUser.uid);
       await setDoc(userRef, {
         company,
         updatedAt: serverTimestamp()
       }, { merge: true });
       
-      // Update local userData
-      setUserData(prev => prev ? { ...prev, company } : null);
+      console.log('[AUTH] Company updated in Firestore successfully');
+      
+      // Update local userData immediately
+      setUserData(prev => {
+        const updated = prev ? { ...prev, company } : null;
+        console.log('[AUTH] Updated local userData:', updated);
+        return updated;
+      });
+      
+      // Also refresh from Firestore to ensure consistency
+      const refreshedData = await fetchUserData(currentUser.uid);
+      if (refreshedData) {
+        setUserData(refreshedData);
+        console.log('[AUTH] Refreshed userData from Firestore:', refreshedData);
+      }
       
       return true;
     } catch (error) {
@@ -231,9 +285,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Function to submit user's score to leaderboard
   const submitUserScore = async (score: number): Promise<{success: boolean, message: string, isHighScore: boolean}> => {
-    if (!currentUser || !userData) {
+    if (!currentUser) {
       console.error('Cannot submit score: No authenticated user');
       return {success: false, message: 'You must be signed in to submit a score', isHighScore: false};
+    }
+    
+          // Check rate limiting first
+      const rateLimitCheck = checkScoreSubmissionLimit(currentUser.uid);
+      if (!rateLimitCheck.allowed) {
+        console.warn(`[SECURITY] Score submission rate limited for user ${currentUser.uid}`);
+        logRateLimitHit('SCORE', currentUser.uid, { 
+          retryAfter: rateLimitCheck.retryAfter,
+          score 
+        });
+        return {
+          success: false, 
+          message: `Too many score submissions. Please wait ${rateLimitCheck.retryAfter} seconds before trying again.`, 
+          isHighScore: false
+        };
+      }
+    
+    // Log rate limit status for monitoring
+    if (rateLimitCheck.attemptsRemaining !== undefined && rateLimitCheck.attemptsRemaining <= 1) {
+      console.warn(`[SECURITY] User ${currentUser.uid} approaching rate limit. Attempts remaining: ${rateLimitCheck.attemptsRemaining}`);
     }
     
     console.log('[FIREBASE] Submitting score for authenticated user:', score, 'User ID:', currentUser.uid);
@@ -246,9 +320,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // BUT always accept first-time submissions (when bestScore is null)
       if (bestScore && score <= bestScore.score) {
         console.log('[FIREBASE] Not a high score:', score, 'vs previous best:', bestScore.score);
+        logScoreRejection(currentUser.uid, score, 'not_high_score', { 
+          previousBest: bestScore.score 
+        });
+        const message = `Sorry, your score of ${score} is not higher than your previous best score of ${bestScore.score}. Try again!`;
+        console.log('[FIREBASE] Returning message:', message);
         return {
           success: false, 
-          message: `Sorry, your new score is not a new personal best. Try again!`, 
+          message: message, 
           isHighScore: false
         };
       }
@@ -260,46 +339,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log(`[FIREBASE] New high score: ${score} beats previous ${bestScore.score}`);
       }
       
-      // Double check the company value
-      const companyToUse = userData?.company && userData.company.trim() !== '' ? 
-        userData.company : (await fetchUserData(currentUser.uid))?.company || '';
+      // CRITICAL: Always refresh user data before submission to get the latest company info
+      console.log('[FIREBASE] Refreshing user data before score submission...');
+      const freshUserData = await refreshUserData();
       
-      console.log('[FIREBASE] Company value being used:', companyToUse || 'No company set');
+      // Get the most up-to-date user data or use fallbacks
+      let finalDisplayName = freshUserData?.displayName || currentUser.displayName || 'Anonymous Player';
+      let finalPhotoURL = freshUserData?.photoURL || currentUser.photoURL || null;
+      let finalCompany = freshUserData?.company || 'Unknown Company';
       
-      // Submit score to leaderboard with user data
-      console.log('[FIREBASE] Submitting high score to Firebase:', {
+      // If we still don't have fresh data, try fetching directly
+      if (!freshUserData) {
+        console.log('[FIREBASE] No fresh userData, attempting direct fetch...');
+        const directFetchData = await fetchUserData(currentUser.uid);
+        if (directFetchData) {
+          finalDisplayName = directFetchData.displayName || finalDisplayName;
+          finalPhotoURL = directFetchData.photoURL || finalPhotoURL;
+          finalCompany = directFetchData.company || finalCompany;
+        }
+      }
+      
+      console.log('[FIREBASE] Final values being used for submission:', {
         userId: currentUser.uid,
         score,
-        displayName: userData.displayName || currentUser.displayName,
-        photoURL: userData.photoURL || currentUser.photoURL,
-        company: companyToUse || 'No company set'
+        displayName: finalDisplayName,
+        photoURL: finalPhotoURL,
+        company: finalCompany
       });
       
+      // Submit score to leaderboard with user data
       const result = await submitScore(
         currentUser.uid,
         score,
-        userData.displayName || currentUser.displayName,
-        userData.photoURL || currentUser.photoURL,
-        companyToUse || 'No company set' // Use our verified company value
+        finalDisplayName,
+        finalPhotoURL,
+        finalCompany
       );
       
       // If submitScore returns null, the score wasn't submitted (either not a high score or error)
       if (!result) {
-        // Check if it's because it wasn't a high score
-        if (bestScore && score <= bestScore.score) {
-          return {
-            success: false, 
-            message: `Sorry, your new score is not a new personal best. Try again!`, 
-            isHighScore: false
-          };
-        } else {
-          // Some other error happened
-          return {
-            success: false, 
-            message: 'Failed to submit score. Please try again.', 
-            isHighScore: false
-          };
-        }
+        // Some error happened during submission - we already checked if it was a high score above
+        logScoreRejection(currentUser.uid, score, 'submission_failed');
+        return {
+          success: false, 
+          message: 'Failed to submit score. Please try again.', 
+          isHighScore: false
+        };
       }
       
       // Get the previous best score for the success message
@@ -308,6 +393,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (bestScore) {
         message = `New high score! You beat your previous best of ${bestScore.score}!`;
       }
+      
+      // Log successful score submission
+      logScoreSubmission(currentUser.uid, score, {
+        isFirstScore: !bestScore,
+        previousBest: bestScore?.score || 0,
+        company: finalCompany
+      });
       
       return {
         success: true, 

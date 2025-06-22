@@ -34,7 +34,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
     if (currentUser) {
       setName(currentUser.displayName || '');
       if (userData?.company) {
-        setCompany(userData.company);
+        setCompany(String(userData.company));
       }
       if (userData?.marketingOptIn !== undefined) {
         setMarketingOptIn(userData.marketingOptIn);
@@ -133,6 +133,13 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
       console.log('[MockSignIn] Zero score detected. This is valid and will be submitted.');
     }
     
+    // Use the comprehensive validation function
+    const validation = validateUserSubmission(name.trim(), company.trim());
+    if (!validation.isValid) {
+      setError(validation.errorMessage || 'Please check your submission and try again');
+      return false;
+    }
+    
     return true;
   };
 
@@ -227,17 +234,12 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
           console.log('Marketing opt-in status updated successfully:', marketingOptIn);
         }
         
-        // Wait a moment to ensure Firestore updates
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Wait longer to ensure Firestore updates propagate
+        console.log('[MockSignIn] Waiting for Firestore updates to propagate...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Always call onSuccess regardless of whether it's a high score
-        // Suppress TypeScript error since we've already validated these values
-        // @ts-ignore - name and company are guaranteed non-null here
-        onSuccess(
-          (name || '').trim(), 
-          (company || '').trim(), 
-          marketingOptIn
-        );
+        // Always call onSuccess - name and company are guaranteed to be strings at this point
+        onSuccess(name.trim(), company.trim(), marketingOptIn);
         return;
       }
       
@@ -313,7 +315,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
         // Try with referrer policy
         const img2 = new Image();
         img2.referrerPolicy = 'no-referrer';
-        img2.src = currentUser.photoURL;
+        img2.src = currentUser.photoURL || '';
       };
       img.referrerPolicy = 'no-referrer';
       img.src = currentUser.photoURL;
@@ -365,7 +367,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
   // Show the company form if signed in
   if (currentUser && !formSubmitted) {
     return (
-      <div className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white" style={{ fontFamily: 'pixelmix, monospace' }}>
+      <div className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white custom-scrollbar" style={{ fontFamily: 'pixelmix, monospace', maxHeight: '80vh', overflowY: 'auto' }}>
         <h2 className="text-2xl font-bold mb-6 text-center">SUBMIT YOUR SCORE</h2>
         
         {score !== undefined && score !== null && !isNaN(score) && score >= 0 && (

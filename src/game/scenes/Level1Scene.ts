@@ -114,6 +114,11 @@ export class Level1Scene extends Phaser.Scene {
   private powerUpLever!: Phaser.GameObjects.Rectangle;
   private powerUpAvailable: boolean = false;
   private powerUpCountdownText!: Phaser.GameObjects.Text;
+  private powerUpProgress: number = 0; // Current progress towards next power-up
+  private powerUpRequirement: number = 10; // Edits needed for first power-up
+  private powerUpUsedCount: number = 0; // How many times power-up has been used
+  private powerUpProgressBar!: Phaser.GameObjects.Rectangle;
+  private powerUpProgressBackground!: Phaser.GameObjects.Rectangle;
   private conveyorBelt!: Phaser.GameObjects.Rectangle;
   private lastDirection: string = 'down';
   private lastMoving: boolean = false;
@@ -218,6 +223,9 @@ export class Level1Scene extends Phaser.Scene {
       this.carriedEdits = [];            // Clear carried edits
       this.powerUpActive = false;
       this.powerUpAvailable = false;
+      this.powerUpProgress = 0;          // Reset power-up progress
+      this.powerUpUsedCount = 0;         // Reset power-up usage count
+      this.powerUpRequirement = 10;      // Reset to initial requirement
       this.nextOrderDelay = 5000;        // Reset order delay
       this.orderSpeedMultiplier = 1.0;   // Reset speed multiplier
       this.conveyorSpeed = 0.5;          // Reset conveyor speed
@@ -273,8 +281,9 @@ export class Level1Scene extends Phaser.Scene {
       // Load player animations
       const directions = ['up', 'down', 'left', 'right'];
       directions.forEach(direction => {
-        // Load all 6 frames for each animation
-        for (let i = 1; i <= 6; i++) {
+        // Load all 4 frames for each animation (only 1-4 exist for idle down)
+        const maxFrames = (direction === 'down') ? 4 : 6; // Only 4 frames for down direction
+        for (let i = 1; i <= maxFrames; i++) {
           // Load idle animations with proper spaces in filenames
           const idleKey = `idle ${direction} ${i}`;
           this.load.image(idleKey, `game/Sprite Images/idle ${direction} ${i}.png`)
@@ -341,7 +350,7 @@ export class Level1Scene extends Phaser.Scene {
       this.load.image('button-pressed', 'game/Button/button pressed.png');
       this.load.image('button-active', 'game/Button/button-active.png');
       this.load.image('button active-flash', 'game/Button/button active-flash.png');
-      this.load.image('button-flash', 'game/Button/button-flash.png');
+      this.load.image('button-flash', 'game/Button/button-flash2.png');
       this.load.image('button-flash2', 'game/Button/button-flash2.png');
       
       // Create a pixel texture for particles
@@ -562,6 +571,17 @@ export class Level1Scene extends Phaser.Scene {
       
       // Initialize tutorial system for new players
       this.initializeTutorial();
+      
+      // Dispatch event to start session tracking now that gameplay has begun
+      try {
+        const gameplayEvent = new CustomEvent('gameplayStarted', {
+          detail: { timestamp: new Date().toISOString() }
+        });
+        window.dispatchEvent(gameplayEvent);
+        console.log('[Level1Scene] Dispatched gameplayStarted event for session tracking');
+      } catch (error) {
+        console.error('[Level1Scene] Error dispatching gameplayStarted event:', error);
+      }
     } catch (error) {
       console.error('Error in create method:', error);
     }
@@ -768,6 +788,16 @@ export class Level1Scene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 2
     }).setOrigin(0.5).setAlpha(0).setDepth(11);
+
+    // Create power-up progress bar background
+    this.powerUpProgressBackground = this.add.rectangle(x, y + 50, 60, 8, 0x333333);
+    this.powerUpProgressBackground.setDepth(9);
+    this.powerUpProgressBackground.setStrokeStyle(1, 0xffffff);
+
+    // Create power-up progress bar fill
+    this.powerUpProgressBar = this.add.rectangle(x - 30, y + 50, 0, 6, 0x00ff00);
+    this.powerUpProgressBar.setDepth(10);
+    this.powerUpProgressBar.setOrigin(0, 0.5);
     
     // Add button click handlers
     this.powerUpButtonSprite.on('pointerdown', this.handlePowerUpButtonClick, this);
@@ -1202,7 +1232,9 @@ export class Level1Scene extends Phaser.Scene {
       
       // Advance to the next frame
       this.currentAnimationFrame++;
-      if (this.currentAnimationFrame > 6) {
+      // Check max frames based on direction (down has only 4 frames)
+      const maxFrames = (this.lastDirection === 'down') ? 4 : 6;
+      if (this.currentAnimationFrame > maxFrames) {
         this.currentAnimationFrame = 1;
       }
       
@@ -1525,6 +1557,11 @@ export class Level1Scene extends Phaser.Scene {
       this.totalEditsApplied++;
       console.log(`Total edits applied: ${this.totalEditsApplied}, Last unlocked at: ${this.lastUnlockedAtEditCount}`);
       
+      // Update power-up progress with each individual edit (not just completed orders)
+      if (!this.powerUpActive && !this.powerUpAvailable) {
+        this.updatePowerUpProgressFromEdit();
+      }
+      
       // Unlock the first song after 2 edits
       if (this.totalEditsApplied === 2) {
         console.log('Unlocking first song after 2 edits');
@@ -1796,6 +1833,14 @@ export class Level1Scene extends Phaser.Scene {
     this.powerUpActive = false;
     this.powerUpTimer = 0;
     this.powerUpAvailable = false;
+    this.powerUpProgress = 0;
+    this.powerUpRequirement = 10; // Reset to initial requirement
+    this.powerUpUsedCount = 0; // Reset usage count
+    
+    // Reset progress bar
+    if (this.powerUpProgressBar) {
+      this.updatePowerUpProgressBar();
+    }
     
     // Hide the power-up ready text when game is reset
     if (this.powerUpReadyText) {
@@ -1885,11 +1930,8 @@ export class Level1Scene extends Phaser.Scene {
       repeat: -1
     });
     
-    // Only count manually completed orders (not created during power-up) towards power-up progress
-    // This ensures that power-ups only apply to new orders and players earn power-ups through manual edits
-    if (!order.createdDuringPowerUp && this.manualOrdersCompleted % 5 === 0 && !this.powerUpActive && !this.powerUpAvailable) {
-      this.makePowerUpAvailable();
-    }
+    // Power-up progress is now tracked per individual edit, not per completed order
+    // This change was made to provide more granular feedback to the player
   }
 
   // Update the order positions function to show comments
@@ -1956,9 +1998,6 @@ export class Level1Scene extends Phaser.Scene {
             this.lives--;
             this.failedOrders++;
             
-            // Penalize the player for an incomplete order
-            this.updateScore(-50);
-            
             // Update life indicators
             this.updateLivesDisplay();
             
@@ -2020,6 +2059,28 @@ export class Level1Scene extends Phaser.Scene {
 
   // Power-up methods
 
+  private cleanupPowerUpSprites() {
+    console.log('Cleaning up existing power-up sprites');
+    
+    // Clean up Hamish sprite
+    if (this.hamishSprite) {
+      this.hamishSprite.destroy();
+      this.hamishSprite = null;
+    }
+    
+    // Clean up Kiril sprite  
+    if (this.kirilSprite) {
+      this.kirilSprite.destroy();
+      this.kirilSprite = null;
+    }
+    
+    // Clean up OE Logo sprite
+    if (this.oeLogoSprite) {
+      this.oeLogoSprite.destroy();
+      this.oeLogoSprite = null;
+    }
+  }
+
   private deactivatePowerUp() {
     console.log('Deactivating power-up');
     
@@ -2033,9 +2094,18 @@ export class Level1Scene extends Phaser.Scene {
       this.powerUpReadyText.setVisible(false);
     }
     
-    // Reset the manual orders counter after power-up ends
+    // Implement exponential difficulty - each use makes it harder, but cap at 80 edits
+    this.powerUpUsedCount++;
+    const exponentialRequirement = Math.floor(10 * Math.pow(2, this.powerUpUsedCount));
+    this.powerUpRequirement = Math.min(exponentialRequirement, 80); // Cap at 80 edits max
+    this.powerUpProgress = 0; // Reset progress to 0 - no banking allowed
+    
+    // Update progress bar to show empty
+    this.updatePowerUpProgressBar();
+    
+    // Reset the manual orders counter after power-up ends - this prevents banking
     this.manualOrdersCompleted = 0;
-    console.log('Reset manual orders counter to 0 after power-up ended');
+    console.log(`Power-up ended. Next requirement: ${this.powerUpRequirement} orders (used ${this.powerUpUsedCount} times)`);
     
             // console.log('Debug sprite state before animations:');
         // console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
@@ -2096,6 +2166,9 @@ export class Level1Scene extends Phaser.Scene {
     console.log('Activating Power-Up!');
     
     try {
+      // Clean up any existing sprites first to prevent banking/duplicates
+      this.cleanupPowerUpSprites();
+      
       // Set button state
       this.powerUpActive = true;
       this.powerUpAvailable = false;
@@ -2449,6 +2522,61 @@ export class Level1Scene extends Phaser.Scene {
     }
   }
 
+  private updatePowerUpProgressFromEdit() {
+    this.powerUpProgress++;
+    console.log(`🔧 EDIT APPLIED - Power-up progress: ${this.powerUpProgress}/${this.powerUpRequirement} (from individual edit)`);
+    console.log(`🔧 Power-up states - Active: ${this.powerUpActive}, Available: ${this.powerUpAvailable}`);
+    
+    // Update progress bar with smooth animation
+    this.updatePowerUpProgressBar();
+    
+    // Check if power-up should become available
+    if (this.powerUpProgress >= this.powerUpRequirement) {
+      console.log(`🔧 POWER-UP READY! Progress reached requirement.`);
+      this.makePowerUpAvailable();
+    }
+  }
+
+  private updatePowerUpProgress() {
+    // This method is now deprecated - use updatePowerUpProgressFromEdit instead
+    this.updatePowerUpProgressFromEdit();
+  }
+
+  private updatePowerUpProgressBar() {
+    console.log(`📊 PROGRESS BAR UPDATE - Progress: ${this.powerUpProgress}/${this.powerUpRequirement}`);
+    console.log(`📊 Progress bar exists: ${!!this.powerUpProgressBar}`);
+    
+    if (!this.powerUpProgressBar) {
+      console.error(`❌ Progress bar not found! Cannot update.`);
+      return;
+    }
+    
+    const progressPercentage = Math.min(1, this.powerUpProgress / this.powerUpRequirement);
+    const maxWidth = 60;
+    const newWidth = progressPercentage * maxWidth;
+    
+    console.log(`📊 Percentage: ${Math.round(progressPercentage * 100)}%, Width: ${newWidth}/${maxWidth}`);
+    console.log(`📊 Current bar width: ${this.powerUpProgressBar.width}`);
+    
+    // Animate the progress bar fill
+    this.tweens.add({
+      targets: this.powerUpProgressBar,
+      width: newWidth,
+      duration: 300,
+      ease: 'Power2.out',
+      onStart: () => {
+        console.log(`📊 Progress bar animation started - target width: ${newWidth}`);
+      },
+      onUpdate: () => {
+        // Keep the progress bar green throughout
+        this.powerUpProgressBar.setFillStyle(0x00ff00); // Always green
+      },
+      onComplete: () => {
+        console.log(`📊 Progress bar animation completed - final width: ${this.powerUpProgressBar.width}`);
+      }
+    });
+  }
+
   private makePowerUpAvailable() {
     // Make power-up available to player
     this.powerUpAvailable = true;
@@ -2458,7 +2586,7 @@ export class Level1Scene extends Phaser.Scene {
     this.buttonFlashState = false;
     this.setButtonTexture('button-idle');
     
-    console.log("Power-up is now available!");
+    console.log(`Power-up is now available! (Used ${this.powerUpUsedCount} times before)`);
     
     // Create the circular text around the button (replacing the standard text)
     if (this.powerUpReadyText) {
@@ -2610,6 +2738,11 @@ export class Level1Scene extends Phaser.Scene {
             this.markEditAsApplied(order, editType);
             this.totalEditsApplied++;
             
+            // Update power-up progress with each auto-completed edit
+            if (!this.powerUpAvailable) {
+              this.updatePowerUpProgressFromEdit();
+            }
+            
             // Award 10 points for each auto-completed edit
             this.updateScore(10);
           }
@@ -2668,14 +2801,14 @@ export class Level1Scene extends Phaser.Scene {
         // With 2 stations, 70% chance of 1 edit, 30% chance of 2 edits
         editProbabilities = [0.7, 0.3];
       } else if (unlockedStations.length === 3) {
-        // With 3 stations: 50% for 1 edit, 30% for 2 edits, 20% for 3 edits
-        editProbabilities = [0.5, 0.3, 0.2];
+        // With 3 stations: NO MORE 1-edit orders, 60% for 2 edits, 40% for 3 edits
+        editProbabilities = [0.0, 0.6, 0.4];
       } else if (unlockedStations.length === 4) {
-        // With 4 stations: 40% for 1 edit, 30% for 2 edits, 20% for 3 edits, 10% for 4 edits
-        editProbabilities = [0.4, 0.3, 0.2, 0.1];
+        // With 4 stations: NO MORE 1-2 edit orders, 50% for 3 edits, 50% for 4 edits
+        editProbabilities = [0.0, 0.0, 0.5, 0.5];
       } else {
-        // With 5 stations: 30% for 1 edit, 25% for 2 edits, 25% for 3 edits, 15% for 4 edits, 5% for 5 edits
-        editProbabilities = [0.3, 0.25, 0.25, 0.15, 0.05];
+        // With 5 stations: NO MORE 1-2 edit orders, 40% for 3 edits, 35% for 4 edits, 25% for 5 edits
+        editProbabilities = [0.0, 0.0, 0.4, 0.35, 0.25];
       }
       
       // Determine number of edits using probability table

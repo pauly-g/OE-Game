@@ -18,9 +18,27 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from './config';
+import { validateScoreSubmission, logSecurityEvent, detectInjectionAttempt } from '../utils/validation';
 
 // Set this to true to force real Firebase data even in development mode
 const FORCE_REAL_DATA = true;
+
+// Simple cache for leaderboard data to reduce Firebase calls
+let leaderboardCache: {
+  topScores?: { data: LeaderboardEntry[], timestamp: number },
+  userRanks?: Map<string, { rank: number, timestamp: number }>
+} = {
+  userRanks: new Map()
+};
+
+const CACHE_DURATION = 30000; // 30 seconds cache
+
+// Function to clear cache when new scores are submitted
+const clearCache = () => {
+  console.log('[Leaderboard] Clearing cache after score submission');
+  leaderboardCache.topScores = undefined;
+  leaderboardCache.userRanks?.clear();
+};
 
 // Interface for leaderboard entry
 export interface LeaderboardEntry {
@@ -51,50 +69,74 @@ export const submitScore = async (
   photoURL: string | null,
   company: string | null
 ): Promise<string | null> => {
-  console.log('[FIREBASE Transaction] Attempting to submit score for user:', userId, 'Score:', score);
+  console.log('[FIREBASE Transaction] ===========================================');
+  console.log('[FIREBASE Transaction] Starting score submission process');
+  console.log('[FIREBASE Transaction] Input parameters:', {
+    userId,
+    score,
+    displayName,
+    photoURL: photoURL ? 'Has photo URL' : 'No photo URL',
+    company
+  });
 
-  // Validate score before starting transaction
-  if (isNaN(score) || !isFinite(score) || score < 0) {
-    console.error('[FIREBASE Transaction] Invalid score value:', score);
+  // SECURITY: Comprehensive input validation
+  const validationResult = validateScoreSubmission({
+    userId,
+    score,
+    displayName,
+    company
+  });
+
+  if (!validationResult.isValid) {
+    console.error('[SECURITY] Score submission validation failed:', validationResult.error);
+    logSecurityEvent('VALIDATION_FAILED', {
+      userId,
+      error: validationResult.error,
+      input: `score:${score}, company:${company}, displayName:${displayName}`
+    });
     return null;
   }
 
-  try {
-    // Make sure the leaderboard collection exists by writing a dummy doc if needed
-    const leaderboardCol = collection(db, 'leaderboard');
-    
-    // Check if the collection exists by trying to get any document
-    const checkQuery = query(leaderboardCol, limit(1));
-    const checkSnapshot = await getDocs(checkQuery);
-    
-    // If collection is empty or doesn't exist, create a placeholder document to ensure it exists
-    // This will be deleted or replaced by the real score if needed
-    if (checkSnapshot.empty) {
-      console.log('[FIREBASE Transaction] Leaderboard collection appears empty, creating placeholder document');
-      try {
-        const placeholderRef = doc(leaderboardCol);
-        await setDoc(placeholderRef, {
-          userId: 'placeholder',
-          score: -1,
-          displayName: 'System',
-          timestamp: serverTimestamp(),
-          placeholderDoc: true
-        });
-        console.log('[FIREBASE Transaction] Created placeholder document to ensure collection exists');
-      } catch (err) {
-        console.error('[FIREBASE Transaction] Error creating placeholder document:', err);
-        // Continue with transaction attempt even if this fails
-      }
+  // Use sanitized values from validation
+  const sanitizedData = validationResult.sanitizedData!;
+  const finalUserId = sanitizedData.userId;
+  const finalScore = sanitizedData.score;
+  const finalDisplayName = sanitizedData.displayName || 'Anonymous Player';
+  const finalCompany = sanitizedData.company || 'Unknown Company';
+
+  // SECURITY: Check for injection attempts in text fields
+  const textInputs = [displayName, company].filter(Boolean) as string[];
+  for (const input of textInputs) {
+    if (detectInjectionAttempt(input)) {
+      console.error('[SECURITY] Potential injection attempt detected');
+      logSecurityEvent('INJECTION_ATTEMPT', {
+        userId: finalUserId,
+        input
+      });
+      return null;
     }
+  }
+
+  console.log('[FIREBASE Transaction] Validated and sanitized values:', {
+    userId: finalUserId,
+    score: finalScore,
+    displayName: finalDisplayName,
+    company: finalCompany
+  });
+
+  try {
+    const leaderboardCol = collection(db, 'leaderboard');
+    console.log('[FIREBASE Transaction] Leaderboard collection reference created');
 
     // 1. Query OUTSIDE transaction to find the reference of the current best score document
     const userBestScoreQuery = query(
       leaderboardCol,
-      where('userId', '==', userId),
+      where('userId', '==', finalUserId),
       orderBy('score', 'desc'),
       limit(1)
     );
     
+    console.log('[FIREBASE Transaction] Querying for user\'s current best score...');
     const querySnapshot = await getDocs(userBestScoreQuery);
     let bestScoreDocRef: DocumentReference | null = null;
     
@@ -102,11 +144,13 @@ export const submitScore = async (
       const bestDoc = querySnapshot.docs[0];
       bestScoreDocRef = doc(db, 'leaderboard', bestDoc.id); // Get the DocumentReference
       console.log(`[FIREBASE Pre-Transaction] Found user's current best score doc ref (ID: ${bestScoreDocRef.id})`);
+      console.log(`[FIREBASE Pre-Transaction] Current best score: ${bestDoc.data().score}`);
     } else {
-      console.log(`[FIREBASE Pre-Transaction] No previous score found for user ${userId}.`);
+      console.log(`[FIREBASE Pre-Transaction] No previous score found for user ${finalUserId}.`);
     }
 
     // 2. Run the score submission within a transaction
+    console.log('[FIREBASE Transaction] Starting Firestore transaction...');
     const newDocId = await runTransaction(db, async (transaction) => {
       console.log('[FIREBASE Transaction] Transaction started.');
       
@@ -137,32 +181,35 @@ export const submitScore = async (
 
       // 4. Compare the new score with the current best read inside the transaction
       // Use strict inequality (>)
-      console.log(`[FIREBASE Transaction] Comparing new score ${score} with scoreToCheck ${scoreToCheck}`);
+      console.log(`[FIREBASE Transaction] Comparing new score ${finalScore} with scoreToCheck ${scoreToCheck}`);
       
       // If this is a first-time submission (scoreToCheck === -1) OR the new score is higher, accept it
-      if (scoreToCheck === -1 || score > scoreToCheck) {
+      if (scoreToCheck === -1 || finalScore > scoreToCheck) {
         // For first-time submissions, provide a clear log message
         if (scoreToCheck === -1) {
-          console.log(`[FIREBASE Transaction] First score submission for user. Accepting score: ${score}`);
+          console.log(`[FIREBASE Transaction] ✅ First score submission for user. Accepting score: ${finalScore}`);
         } else {
-          console.log(`[FIREBASE Transaction] New score ${score} IS strictly higher. Proceeding with write.`);
+          console.log(`[FIREBASE Transaction] ✅ New score ${finalScore} IS strictly higher than ${scoreToCheck}. Proceeding with write.`);
         }
         
         // 5. If higher, create the new score document *within the transaction*
         const newScoreRef = doc(leaderboardCol); // Generate a new doc ref for the new entry
-        transaction.set(newScoreRef, {
-          userId,
-          score, // Use the validated score
-          displayName,
+        const scoreData = {
+          userId: finalUserId,
+          score: finalScore, // Use the validated and sanitized score
+          displayName: finalDisplayName, // Use sanitized value
           photoURL,
-          company,
+          company: finalCompany, // Use sanitized value
           timestamp: serverTimestamp() // Use server timestamp
-        });
+        };
+        
+        console.log('[FIREBASE Transaction] Score data to be written:', scoreData);
+        transaction.set(newScoreRef, scoreData);
         console.log('[FIREBASE Transaction] New score document queued for write with ID:', newScoreRef.id);
         return newScoreRef.id; // Return the new document ID from the transaction
       } else {
         // 6. If not strictly higher, abort the transaction
-        console.log(`[FIREBASE Transaction] New score ${score} is NOT strictly higher than ${scoreToCheck}. Aborting submission.`);
+        console.log(`[FIREBASE Transaction] ❌ New score ${finalScore} is NOT strictly higher than ${scoreToCheck}. Aborting submission.`);
         // Returning null signals failure/abort due to not being a high score
         return null; 
       }
@@ -170,18 +217,37 @@ export const submitScore = async (
 
     // Transaction completed
     if (newDocId) {
-      console.log('[FIREBASE Transaction] Submission successful. New document ID:', newDocId);
+      console.log('[FIREBASE Transaction] ✅ SUBMISSION SUCCESSFUL! New document ID:', newDocId);
+      console.log('[FIREBASE Transaction] Score should now appear in leaderboard collection');
+      
+      // Clear cache after successful submission
+      clearCache();
+      
       return newDocId;
     } else {
       // This means the transaction callback returned null (score not high enough)
-      console.log('[FIREBASE Transaction] Submission aborted (score not strictly higher).');
+      console.log('[FIREBASE Transaction] ❌ Submission aborted (score not strictly higher).');
       return null;
     }
 
   } catch (error) {
     // This catches errors during the transaction execution itself
-    console.error('[FIREBASE Transaction] Error running score submission transaction:', error);
+    console.error('[FIREBASE Transaction] ❌ ERROR running score submission transaction:', error);
+    console.error('[FIREBASE Transaction] Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace'
+    });
+    
+    // Log security event for monitoring
+    logSecurityEvent('VALIDATION_FAILED', {
+      userId: finalUserId,
+      error: error instanceof Error ? error.message : 'Transaction failed'
+    });
+    
     return null;
+  } finally {
+    console.log('[FIREBASE Transaction] ===========================================');
   }
 };
 
@@ -297,6 +363,13 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
       return mockData.slice(0, topCount);
     }
     
+    // Check cache first
+    const now = Date.now();
+    if (leaderboardCache.topScores && (now - leaderboardCache.topScores.timestamp) < CACHE_DURATION) {
+      console.log('[Leaderboard] Using cached leaderboard data');
+      return leaderboardCache.topScores.data.slice(0, topCount);
+    }
+    
     console.log('[Leaderboard] Fetching real leaderboard data from Firebase');
     const q = query(
       collection(db, 'leaderboard'),
@@ -312,7 +385,7 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
       return [];
     }
     
-    return querySnapshot.docs.map(doc => {
+    const results = querySnapshot.docs.map(doc => {
       const data = doc.data();
       
       // Log the raw data to debug
@@ -352,6 +425,14 @@ export const getTopScores = async (topCount: number = 10): Promise<LeaderboardEn
         timestamp: timestamp
       };
     });
+    
+    // Cache the results
+    leaderboardCache.topScores = {
+      data: results,
+      timestamp: Date.now()
+    };
+    
+    return results;
   } catch (error) {
     console.error('Error getting top scores:', error);
     return [];
