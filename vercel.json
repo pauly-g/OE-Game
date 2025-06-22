@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/hubspot/contacts.js": {
+      "maxDuration": 10
+    },
+    "api/hubspot/contacts/search.js": {
+      "maxDuration": 10
+    },
+    "api/hubspot/contacts/[id].js": {
+      "maxDuration": 10
+    }
+  }
+} 

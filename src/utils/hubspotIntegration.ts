@@ -1,7 +1,7 @@
 // HubSpot API Configuration
 const HUBSPOT_ACCESS_TOKEN = import.meta.env.VITE_HUBSPOT_ACCESS_TOKEN;
 const HUBSPOT_PORTAL_ID = import.meta.env.VITE_HUBSPOT_PORTAL_ID;
-const PROXY_BASE_URL = 'http://localhost:3001';
+const PROXY_BASE_URL = import.meta.env.PROD ? '' : 'http://localhost:3001';
 
 // Types for contact data
 export interface GameContactData {
