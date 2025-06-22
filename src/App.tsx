@@ -43,6 +43,7 @@ import { AuthProvider, useAuth } from './firebase/AuthContext';
 import UserProfileCorner from './components/UserProfileCorner';
 import Toast from './components/Toast';
 import ScorePopup from './components/ScorePopup';
+import { startGameSession, handleMarketingConsent, handleGameCompletion, handleHighScore } from './utils/gameHubSpotIntegration';
 import './styles/main.css';
 
 // Keep track of unseen songs (maintained in memory only, no localStorage changes)
@@ -222,6 +223,9 @@ function AppContent() {
       gameDebugger.info('Initializing game with config', config);
       const newGame = new Phaser.Game(config);
       setGame(newGame);
+      
+      // Start HubSpot session tracking
+      startGameSession();
 
       // Override browser tab pause behavior
       const originalHidden = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
@@ -510,6 +514,17 @@ function AppContent() {
                 const result = await submitUserScore(score);
                 console.log('[App] High score submission result:', result);
                 
+                // Send high score data to HubSpot
+                if (result.success && currentUser?.email) {
+                  console.log('[App] Sending high score to HubSpot');
+                  handleHighScore(
+                    currentUser.email,
+                    score
+                  ).catch(error => {
+                    console.error('[App] Failed to send high score to HubSpot:', error);
+                  });
+                }
+                
                 // Don't show popup - leaderboard will handle all score messages
                 console.log('[App] Score submission completed, leaderboard will handle messaging');
                 
@@ -547,6 +562,18 @@ function AppContent() {
             } else {
               console.log('[App] Not a high score, creating failure event for leaderboard');
               console.log('[App] Current score:', score, 'Best score:', bestScore?.score);
+              
+              // Send game completion data to HubSpot (even if not high score)
+              if (currentUser?.email) {
+                console.log('[App] Sending game completion to HubSpot');
+                handleGameCompletion(
+                  currentUser.email,
+                  score,
+                  userData?.marketingOptIn || false
+                ).catch(error => {
+                  console.error('[App] Failed to send game completion to HubSpot:', error);
+                });
+              }
               
               // Only mark as submitted if we haven't already marked it
               if (!alreadySubmittedToFirebase) {
@@ -807,6 +834,20 @@ function AppContent() {
       if (scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)]) {
         console.log(`[App] Score ${score} already submitted, preventing duplicate submission`);
         return;
+      }
+      
+      // Send marketing consent to HubSpot if accepted
+      if (marketingOptInAccepted && currentUser?.email) {
+        console.log('[App] Sending marketing consent to HubSpot');
+        handleMarketingConsent(
+          currentUser.email,
+          name || currentUser.displayName?.split(' ')[0],
+          name ? name.split(' ').slice(1).join(' ') : currentUser.displayName?.split(' ').slice(1).join(' '),
+          company,
+          true
+        ).catch(error => {
+          console.error('[App] Failed to send marketing consent to HubSpot:', error);
+        });
       }
       
       // Submit the score now that user has signed in
