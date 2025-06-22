@@ -24,9 +24,9 @@ export async function handleMarketingConsent(
   try {
     console.log('Processing marketing consent for:', email);
 
-    // Calculate session duration
+    // Calculate session duration in fractional minutes for accurate formatting
     const sessionDuration = gameStartTime 
-      ? Math.round((new Date().getTime() - gameStartTime.getTime()) / 60000) // in minutes
+      ? (new Date().getTime() - gameStartTime.getTime()) / 60000 // in fractional minutes
       : undefined;
 
     const contactData: GameContactData = {
@@ -62,9 +62,9 @@ export async function handleGameCompletion(
   try {
     console.log('Processing game completion for:', email);
 
-    // Calculate session duration
+    // Calculate session duration in fractional minutes for accurate formatting
     const sessionDuration = gameStartTime 
-      ? Math.round((new Date().getTime() - gameStartTime.getTime()) / 60000) // in minutes
+      ? (new Date().getTime() - gameStartTime.getTime()) / 60000 // in fractional minutes
       : undefined;
 
     const contactData: GameContactData = {
@@ -94,18 +94,19 @@ export async function handleGameCompletion(
  */
 export async function handleHighScore(
   email: string,
-  newHighScore: number
+  newHighScore: number,
+  acceptsMarketing: boolean = false
 ): Promise<boolean> {
   try {
-    console.log('Processing high score for:', email, 'Score:', newHighScore);
+    console.log('Processing high score for:', email, 'Score:', newHighScore, 'Marketing consent:', acceptsMarketing);
 
     const sessionDuration = gameStartTime 
-      ? Math.round((new Date().getTime() - gameStartTime.getTime()) / 60000)
+      ? (new Date().getTime() - gameStartTime.getTime()) / 60000
       : undefined;
 
     const contactData: GameContactData = {
       email,
-      acceptsMarketing: false, // Don't change marketing consent, just update game data
+      acceptsMarketing,
       gameScore: newHighScore,
       sessionDuration
     };
@@ -137,7 +138,7 @@ export async function updateContactMarketingConsent(
  */
 export function getCurrentSessionDuration(): number | null {
   if (!gameStartTime) return null;
-  return Math.round((new Date().getTime() - gameStartTime.getTime()) / 60000);
+  return (new Date().getTime() - gameStartTime.getTime()) / 60000;
 }
 
 /**
@@ -146,4 +147,11 @@ export function getCurrentSessionDuration(): number | null {
 export function resetSession() {
   gameStartTime = null;
   console.log('Game session reset');
+}
+
+/**
+ * Check if a session is currently active
+ */
+export function isSessionActive(): boolean {
+  return gameStartTime !== null;
 } 

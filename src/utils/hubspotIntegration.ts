@@ -1,17 +1,7 @@
-import { Client } from '@hubspot/api-client';
-
 // HubSpot API Configuration
 const HUBSPOT_ACCESS_TOKEN = import.meta.env.VITE_HUBSPOT_ACCESS_TOKEN;
 const HUBSPOT_PORTAL_ID = import.meta.env.VITE_HUBSPOT_PORTAL_ID;
-
-// Initialize HubSpot client
-let hubspotClient: Client | null = null;
-
-if (HUBSPOT_ACCESS_TOKEN) {
-  hubspotClient = new Client({ accessToken: HUBSPOT_ACCESS_TOKEN });
-} else {
-  console.warn('HubSpot access token not found. HubSpot integration disabled.');
-}
+const PROXY_BASE_URL = 'http://localhost:3001';
 
 // Types for contact data
 export interface GameContactData {
@@ -43,11 +33,36 @@ export class HubSpotError extends Error {
 }
 
 /**
+ * Make authenticated request to HubSpot API via proxy server
+ */
+async function hubspotRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
+  const url = `${PROXY_BASE_URL}${endpoint}`;
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    ...options
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new HubSpotError(
+      `Proxy API error: ${errorData.error || response.statusText}`,
+      response.status
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Create or update a contact in HubSpot with game data and marketing consent
  */
 export async function createOrUpdateContact(contactData: GameContactData): Promise<boolean> {
-  if (!hubspotClient) {
-    console.warn('HubSpot client not initialized. Skipping contact update.');
+  if (!HUBSPOT_ACCESS_TOKEN) {
+    console.warn('HubSpot access token not found. HubSpot integration disabled.');
     return false;
   }
 
@@ -59,14 +74,20 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
       email: contactData.email,
       [CUSTOM_PROPERTIES.ACCEPTS_MARKETING]: contactData.acceptsMarketing.toString(),
       [CUSTOM_PROPERTIES.PLAYED_ORDER_EDITING_GAME]: 'true',
-      [CUSTOM_PROPERTIES.LAST_GAME_PLAY_DATE]: new Date().toISOString(),
+      [CUSTOM_PROPERTIES.LAST_GAME_PLAY_DATE]: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
     };
 
     // Add optional properties if provided
     if (contactData.firstName) properties.firstname = contactData.firstName;
     if (contactData.lastName) properties.lastname = contactData.lastName;
     if (contactData.company) properties.company = contactData.company;
-    if (contactData.sessionDuration !== undefined) properties[CUSTOM_PROPERTIES.GAME_SESSION_DURATION] = contactData.sessionDuration;
+    
+    // Add session duration if the property exists in HubSpot (convert minutes to seconds)
+    if (contactData.sessionDuration !== undefined) {
+      const durationInSeconds = Math.round(contactData.sessionDuration * 60);
+      properties[CUSTOM_PROPERTIES.GAME_SESSION_DURATION] = durationInSeconds;
+      console.log('Adding session duration:', durationInSeconds, 'seconds');
+    }
 
     // Try to find existing contact first
     const existingContact = await findContactByEmail(contactData.email);
@@ -85,9 +106,16 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
         }
       }
 
+      // Set first play date only if it's not already set
+      if (!existingContact.properties[CUSTOM_PROPERTIES.FIRST_GAME_PLAY_DATE]) {
+        properties[CUSTOM_PROPERTIES.FIRST_GAME_PLAY_DATE] = new Date().toISOString().split('T')[0];
+        console.log('Setting first game play date for existing contact');
+      }
+
       // Update the contact
-      await hubspotClient.crm.contacts.basicApi.update(existingContact.id, {
-        properties
+      await hubspotRequest(`/api/hubspot/contacts/${existingContact.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ properties })
       });
 
       console.log('Successfully updated HubSpot contact');
@@ -101,10 +129,11 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
       }
       
       // Set first play date for new contact
-      properties[CUSTOM_PROPERTIES.FIRST_GAME_PLAY_DATE] = new Date().toISOString();
+      properties[CUSTOM_PROPERTIES.FIRST_GAME_PLAY_DATE] = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
 
-      await hubspotClient.crm.contacts.basicApi.create({
-        properties
+      await hubspotRequest('/api/hubspot/contacts', {
+        method: 'POST',
+        body: JSON.stringify({ properties })
       });
 
       console.log('Successfully created HubSpot contact');
@@ -113,15 +142,6 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
     return true;
   } catch (error: any) {
     console.error('Error creating/updating HubSpot contact:', error);
-    
-    if (error.response) {
-      console.error('HubSpot API Error:', error.response.status, error.response.data);
-      throw new HubSpotError(
-        `HubSpot API error: ${error.response.data?.message || 'Unknown error'}`,
-        error.response.status
-      );
-    }
-    
     throw new HubSpotError(`Failed to update contact: ${error.message}`);
   }
 }
@@ -130,8 +150,6 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
  * Find a contact by email address
  */
 async function findContactByEmail(email: string): Promise<any | null> {
-  if (!hubspotClient) return null;
-
   try {
     const searchRequest = {
       filterGroups: [
@@ -139,7 +157,7 @@ async function findContactByEmail(email: string): Promise<any | null> {
           filters: [
             {
               propertyName: 'email',
-              operator: 'EQ' as any,
+              operator: 'EQ',
               value: email
             }
           ]
@@ -156,7 +174,10 @@ async function findContactByEmail(email: string): Promise<any | null> {
       ]
     };
 
-    const searchResult = await hubspotClient.crm.contacts.searchApi.doSearch(searchRequest);
+    const searchResult = await hubspotRequest('/api/hubspot/contacts/search', {
+      method: 'POST',
+      body: JSON.stringify(searchRequest)
+    });
     
     return searchResult.results && searchResult.results.length > 0 
       ? searchResult.results[0] 
@@ -171,8 +192,8 @@ async function findContactByEmail(email: string): Promise<any | null> {
  * Update marketing consent for an existing contact
  */
 export async function updateMarketingConsent(email: string, acceptsMarketing: boolean): Promise<boolean> {
-  if (!hubspotClient) {
-    console.warn('HubSpot client not initialized. Skipping marketing consent update.');
+  if (!HUBSPOT_ACCESS_TOKEN) {
+    console.warn('HubSpot access token not found. HubSpot integration disabled.');
     return false;
   }
 
@@ -184,10 +205,13 @@ export async function updateMarketingConsent(email: string, acceptsMarketing: bo
       return false;
     }
 
-    await hubspotClient.crm.contacts.basicApi.update(existingContact.id, {
-      properties: {
-        [CUSTOM_PROPERTIES.ACCEPTS_MARKETING]: acceptsMarketing.toString()
-      }
+    await hubspotRequest(`/api/hubspot/contacts/${existingContact.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        properties: {
+          [CUSTOM_PROPERTIES.ACCEPTS_MARKETING]: acceptsMarketing.toString()
+        }
+      })
     });
 
     console.log('Successfully updated marketing consent for:', email);
@@ -199,15 +223,56 @@ export async function updateMarketingConsent(email: string, acceptsMarketing: bo
 }
 
 /**
- * Detect device type from user agent
+ * Update a contact's high score
+ */
+export async function updateHighScore(email: string, newScore: number): Promise<boolean> {
+  if (!HUBSPOT_ACCESS_TOKEN) {
+    console.warn('HubSpot access token not found. HubSpot integration disabled.');
+    return false;
+  }
+
+  try {
+    const existingContact = await findContactByEmail(email);
+    
+    if (!existingContact) {
+      console.warn('Contact not found for high score update:', email);
+      return false;
+    }
+
+    // Only update if new score is higher
+    const currentHighScore = existingContact.properties[CUSTOM_PROPERTIES.GAME_HIGH_SCORE];
+    if (currentHighScore && newScore <= parseInt(currentHighScore)) {
+      console.log('New score is not higher than current high score, skipping update');
+      return true;
+    }
+
+    await hubspotRequest(`/api/hubspot/contacts/${existingContact.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        properties: {
+          [CUSTOM_PROPERTIES.GAME_HIGH_SCORE]: newScore,
+          [CUSTOM_PROPERTIES.LAST_GAME_PLAY_DATE]: new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+        }
+      })
+    });
+
+    console.log('Successfully updated high score for:', email);
+    return true;
+  } catch (error: any) {
+    console.error('Error updating high score:', error);
+    throw new HubSpotError(`Failed to update high score: ${error.message}`);
+  }
+}
+
+
+/**
+ * Get device type for tracking
  */
 export function getDeviceType(): string {
   const userAgent = navigator.userAgent.toLowerCase();
   
-  if (/mobile|android|iphone|ipad|phone/i.test(userAgent)) {
+  if (/mobile|android|iphone|ipad|phone|tablet/.test(userAgent)) {
     return 'Mobile';
-  } else if (/tablet|ipad/i.test(userAgent)) {
-    return 'Tablet';
   } else {
     return 'Desktop';
   }
@@ -218,15 +283,15 @@ export function getDeviceType(): string {
  */
 export function validateHubSpotConfig(): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
-
+  
   if (!HUBSPOT_ACCESS_TOKEN) {
-    errors.push('VITE_HUBSPOT_ACCESS_TOKEN environment variable is required');
+    errors.push('VITE_HUBSPOT_ACCESS_TOKEN is not set');
   }
-
+  
   if (!HUBSPOT_PORTAL_ID) {
-    errors.push('VITE_HUBSPOT_PORTAL_ID environment variable is required');
+    errors.push('VITE_HUBSPOT_PORTAL_ID is not set');
   }
-
+  
   return {
     isValid: errors.length === 0,
     errors
@@ -237,17 +302,11 @@ export function validateHubSpotConfig(): { isValid: boolean; errors: string[] } 
  * Test HubSpot connection
  */
 export async function testHubSpotConnection(): Promise<boolean> {
-  if (!hubspotClient) {
-    console.error('HubSpot client not initialized');
-    return false;
-  }
-
   try {
-    // Try to get account info to test connection
-    await hubspotClient.crm.contacts.basicApi.getPage(1);
+    await hubspotRequest('/api/hubspot/test');
     console.log('HubSpot connection test successful');
     return true;
-  } catch (error: any) {
+  } catch (error) {
     console.error('HubSpot connection test failed:', error);
     return false;
   }

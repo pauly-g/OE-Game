@@ -567,6 +567,17 @@ export class Level1Scene extends Phaser.Scene {
       
       // Initialize tutorial system for new players
       this.initializeTutorial();
+      
+      // Dispatch event to start session tracking now that gameplay has begun
+      try {
+        const gameplayEvent = new CustomEvent('gameplayStarted', {
+          detail: { timestamp: new Date().toISOString() }
+        });
+        window.dispatchEvent(gameplayEvent);
+        console.log('[Level1Scene] Dispatched gameplayStarted event for session tracking');
+      } catch (error) {
+        console.error('[Level1Scene] Error dispatching gameplayStarted event:', error);
+      }
     } catch (error) {
       console.error('Error in create method:', error);
     }

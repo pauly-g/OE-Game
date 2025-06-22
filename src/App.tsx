@@ -224,8 +224,8 @@ function AppContent() {
       const newGame = new Phaser.Game(config);
       setGame(newGame);
       
-      // Start HubSpot session tracking
-      startGameSession();
+      // Don't start session tracking here - wait for actual gameplay to begin
+      // startGameSession();
 
       // Override browser tab pause behavior
       const originalHidden = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
@@ -517,12 +517,22 @@ function AppContent() {
                 // Send high score data to HubSpot
                 if (result.success && currentUser?.email) {
                   console.log('[App] Sending high score to HubSpot');
+                  // Use pending marketing consent if available, otherwise fall back to userData
+                  const marketingConsent = (window as any).pendingMarketingConsent !== undefined 
+                    ? (window as any).pendingMarketingConsent 
+                    : userData?.marketingOptIn || false;
+                  console.log('[App] Using marketing consent:', marketingConsent);
+                  
                   handleHighScore(
                     currentUser.email,
-                    score
+                    score,
+                    marketingConsent
                   ).catch(error => {
                     console.error('[App] Failed to send high score to HubSpot:', error);
                   });
+                  
+                  // Clear the pending marketing consent after use
+                  (window as any).pendingMarketingConsent = undefined;
                 }
                 
                 // Don't show popup - leaderboard will handle all score messages
@@ -566,13 +576,22 @@ function AppContent() {
               // Send game completion data to HubSpot (even if not high score)
               if (currentUser?.email) {
                 console.log('[App] Sending game completion to HubSpot');
+                // Use pending marketing consent if available, otherwise fall back to userData
+                const marketingConsent = (window as any).pendingMarketingConsent !== undefined 
+                  ? (window as any).pendingMarketingConsent 
+                  : userData?.marketingOptIn || false;
+                console.log('[App] Using marketing consent for game completion:', marketingConsent);
+                
                 handleGameCompletion(
                   currentUser.email,
                   score,
-                  userData?.marketingOptIn || false
+                  marketingConsent
                 ).catch(error => {
                   console.error('[App] Failed to send game completion to HubSpot:', error);
                 });
+                
+                // Clear the pending marketing consent after use
+                (window as any).pendingMarketingConsent = undefined;
               }
               
               // Only mark as submitted if we haven't already marked it
@@ -824,11 +843,17 @@ function AppContent() {
     };
     
     // Handle user sign-in completion from leaderboard
-    const handleUserSignedIn = (event: Event) => {
+    // Handle actual game start for session tracking
+    const handleGameplayStart = (event: Event) => {
+      console.log('[App] Actual gameplay started - beginning session tracking');
+      startGameSession();
+    };
+
+    const handleUserSignedIn = async (event: Event) => {
       const customEvent = event as CustomEvent;
       const { score, name, company, marketingOptInAccepted } = customEvent.detail;
       
-      console.log('[App] User signed in from leaderboard, submitting score:', score);
+      console.log('[App] User signed in from leaderboard, submitting score:', score, 'Marketing consent:', marketingOptInAccepted);
       
       // Check if score was already submitted to prevent duplicate submissions
       if (scoreSubmittedRef.current[getScoreKey(score, currentUser?.uid)]) {
@@ -836,23 +861,38 @@ function AppContent() {
         return;
       }
       
-      // Send marketing consent to HubSpot if accepted
-      if (marketingOptInAccepted && currentUser?.email) {
-        console.log('[App] Sending marketing consent to HubSpot');
-        handleMarketingConsent(
-          currentUser.email,
-          name || currentUser.displayName?.split(' ')[0],
-          name ? name.split(' ').slice(1).join(' ') : currentUser.displayName?.split(' ').slice(1).join(' '),
-          company,
-          true
-        ).catch(error => {
-          console.error('[App] Failed to send marketing consent to HubSpot:', error);
-        });
-      }
+      // Store the marketing consent for use in score submission
+      (window as any).pendingMarketingConsent = marketingOptInAccepted;
       
-      // Submit the score now that user has signed in
-      if (score !== undefined) {
-        handleSubmitScore(score, true); // true = check if high score first
+      try {
+        // Send marketing consent to HubSpot if accepted and wait for completion
+        if (marketingOptInAccepted && currentUser?.email) {
+          console.log('[App] Sending marketing consent to HubSpot and waiting for completion...');
+          await handleMarketingConsent(
+            currentUser.email,
+            name || currentUser.displayName?.split(' ')[0],
+            name ? name.split(' ').slice(1).join(' ') : currentUser.displayName?.split(' ').slice(1).join(' '),
+            company,
+            true
+          );
+          console.log('[App] Marketing consent successfully sent to HubSpot');
+        }
+        
+        // Add a small delay to ensure Firebase user data is fully updated
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Submit the score now that user has signed in and marketing consent is processed
+        if (score !== undefined) {
+          console.log('[App] Now submitting score after marketing consent processing...');
+          handleSubmitScore(score, true); // true = check if high score first
+        }
+      } catch (error) {
+        console.error('[App] Error during user sign-in process:', error);
+        // Still try to submit the score even if marketing consent fails
+        if (score !== undefined) {
+          console.log('[App] Submitting score despite marketing consent error...');
+          handleSubmitScore(score, true);
+        }
       }
     };
 
@@ -860,12 +900,14 @@ function AppContent() {
     window.addEventListener('checkGameAuth', handleGameOverEvent);
     window.addEventListener('showGameLeaderboard', handleShowLeaderboard);
     window.addEventListener('userSignedIn', handleUserSignedIn);
+    window.addEventListener('gameplayStarted', handleGameplayStart);
     
     return () => {
       window.removeEventListener('authStatusCheck', handleAuthStatusCheck);
       window.removeEventListener('checkGameAuth', handleGameOverEvent);
       window.removeEventListener('showGameLeaderboard', handleShowLeaderboard);
       window.removeEventListener('userSignedIn', handleUserSignedIn);
+      window.removeEventListener('gameplayStarted', handleGameplayStart);
     };
   }, [handleGameOver, handleSubmitScore, setCurrentScore, setShowLeaderboard, currentUser, userData, setShowAuth]);
 
