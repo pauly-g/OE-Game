@@ -9,5 +9,15 @@
     "api/hubspot/contacts/[id].js": {
       "maxDuration": 10
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/intro.html",
+      "destination": "/intro.html"
+    },
+    {
+      "source": "/game.html", 
+      "destination": "/game.html"
+    }
+  ]
 } 
