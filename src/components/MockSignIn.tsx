@@ -367,7 +367,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
   // Show the company form if signed in
   if (currentUser && !formSubmitted) {
     return (
-      <div className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white" style={{ fontFamily: 'pixelmix, monospace' }}>
+      <div className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white custom-scrollbar" style={{ fontFamily: 'pixelmix, monospace', maxHeight: '80vh', overflowY: 'auto' }}>
         <h2 className="text-2xl font-bold mb-6 text-center">SUBMIT YOUR SCORE</h2>
         
         {score !== undefined && score !== null && !isNaN(score) && score >= 0 && (

@@ -278,8 +278,9 @@ export class Level1Scene extends Phaser.Scene {
       // Load player animations
       const directions = ['up', 'down', 'left', 'right'];
       directions.forEach(direction => {
-        // Load all 6 frames for each animation
-        for (let i = 1; i <= 6; i++) {
+        // Load all 4 frames for each animation (only 1-4 exist for idle down)
+        const maxFrames = (direction === 'down') ? 4 : 6; // Only 4 frames for down direction
+        for (let i = 1; i <= maxFrames; i++) {
           // Load idle animations with proper spaces in filenames
           const idleKey = `idle ${direction} ${i}`;
           this.load.image(idleKey, `game/Sprite Images/idle ${direction} ${i}.png`)
@@ -346,7 +347,7 @@ export class Level1Scene extends Phaser.Scene {
       this.load.image('button-pressed', 'game/Button/button pressed.png');
       this.load.image('button-active', 'game/Button/button-active.png');
       this.load.image('button active-flash', 'game/Button/button active-flash.png');
-      this.load.image('button-flash', 'game/Button/button-flash.png');
+      this.load.image('button-flash', 'game/Button/button-flash2.png');
       this.load.image('button-flash2', 'game/Button/button-flash2.png');
       
       // Create a pixel texture for particles
@@ -1228,7 +1229,9 @@ export class Level1Scene extends Phaser.Scene {
       
       // Advance to the next frame
       this.currentAnimationFrame++;
-      if (this.currentAnimationFrame > 6) {
+      // Check max frames based on direction (down has only 4 frames)
+      const maxFrames = (this.lastDirection === 'down') ? 4 : 6;
+      if (this.currentAnimationFrame > maxFrames) {
         this.currentAnimationFrame = 1;
       }
       
