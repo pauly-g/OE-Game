@@ -639,6 +639,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
             setLoading(false);
             
             console.log('[Leaderboard] Leaderboard data loaded successfully');
+            
+            // Check if there's a pending success message to show
+            if (scoreMessage && scoreMessageType === 'success' && !showScoreMessage) {
+              console.log('[Leaderboard] 🎬 Found pending success message after loading, showing it now');
+              console.log('[Leaderboard] Success message:', scoreMessage);
+              setShowScoreMessage(true);
+            }
           } catch (err) {
             console.error('[Leaderboard] Error loading leaderboard:', err);
             setError('Error loading leaderboard. Please try again.');
@@ -779,14 +786,28 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
                 }
             }, 30000);
             
-        } else if (e.detail && e.detail.success && isOpenRef.current) {
-            console.log('[Leaderboard] Refreshing leaderboard due to external score submission event');
-            fetchLeaderboardDataRef.current(e.detail.score); // Fetch using the submitted score
+        } else if (e.detail && e.detail.success) {
+            console.log('[Leaderboard] Processing success event, leaderboard open:', isOpenRef.current);
             
-            // Show success message in leaderboard style
-            setScoreMessage(`🎉 Congratulations! New high score: ${e.detail.score}!`);
+            // Always refresh leaderboard data for success events
+            if (isOpenRef.current) {
+                fetchLeaderboardDataRef.current(e.detail.score); // Fetch using the submitted score
+            }
+            
+            // Show success message regardless of whether leaderboard is open
+            const successMessage = `🎉 Congratulations! New high score: ${e.detail.score}!`;
+            console.log('[Leaderboard] Setting success message:', successMessage);
+            setScoreMessage(successMessage);
             setScoreMessageType('success');
-            setShowScoreMessage(true);
+            lastShownMessageRef.current = successMessage;
+            
+            // Show the message if leaderboard is open, otherwise it will show when opened
+            if (isOpenRef.current) {
+                console.log('[Leaderboard] Leaderboard is open, showing success message immediately');
+                setShowScoreMessage(true);
+            } else {
+                console.log('[Leaderboard] Leaderboard not open, message will show when opened');
+            }
         }
     };
 
