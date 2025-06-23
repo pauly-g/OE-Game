@@ -21,6 +21,7 @@
         height: 100vh;
         overflow: hidden;
         background-color: #1a1a1a;
+        font-family: 'Courier New', monospace;
       }
       #root {
         width: 100%;
@@ -81,9 +82,316 @@
         color: #fff;
         text-decoration: underline;
       }
+
+      /* HTML Loading Screen - Shows immediately before React loads */
+      .html-loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        font-family: 'Courier New', monospace;
+        color: white;
+        opacity: 1;
+        transition: opacity 0.5s ease-out;
+      }
+
+      .html-loading-screen.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .html-loading-content {
+        text-align: center;
+        max-width: 500px;
+        padding: 2rem;
+        animation: fadeInUp 0.8s ease-out;
+      }
+
+      .html-game-title h1 {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #00d4ff;
+        margin: 0 0 0.5rem 0;
+        text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        letter-spacing: 2px;
+        animation: glow 2s ease-in-out infinite alternate;
+      }
+
+      .html-game-title h2 {
+        font-size: 1.2rem;
+        color: #ffffff;
+        margin: 0 0 2rem 0;
+        opacity: 0.9;
+        letter-spacing: 1px;
+      }
+
+      .html-loading-progress {
+        margin: 2rem 0;
+      }
+
+      .html-progress-bar {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+        border: 1px solid rgba(0, 212, 255, 0.3);
+      }
+
+      .html-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #00d4ff 0%, #0099cc 100%);
+        border-radius: 4px;
+        width: 0%;
+        transition: width 0.3s ease;
+        box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      .html-progress-text {
+        color: #ffffff;
+        font-size: 0.9rem;
+        opacity: 0.8;
+      }
+
+      .html-loading-animation {
+        margin: 2rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+      }
+
+      .html-warehouse-icon {
+        font-size: 2rem;
+        animation: bounce 2s ease-in-out infinite;
+      }
+
+      .html-conveyor-belt {
+        position: relative;
+        width: 200px;
+        height: 20px;
+        background: linear-gradient(90deg, #333 0%, #555 50%, #333 100%);
+        border-radius: 10px;
+        overflow: hidden;
+        border: 2px solid #666;
+      }
+
+      .html-belt-item {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 1rem;
+        animation: moveRight 3s linear infinite;
+      }
+
+      .html-belt-item-1 { animation-delay: 0s; }
+      .html-belt-item-2 { animation-delay: 1s; }
+      .html-belt-item-3 { animation-delay: 2s; }
+
+      .html-loading-tips {
+        margin: 2rem 0;
+        padding: 1rem;
+        background: rgba(0, 212, 255, 0.1);
+        border: 1px solid rgba(0, 212, 255, 0.3);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-height: 60px;
+        animation: slideIn 0.5s ease-out;
+        opacity: 0;
+        animation-delay: 2s;
+        animation-fill-mode: forwards;
+      }
+
+      .html-tip-icon {
+        font-size: 1.5rem;
+        animation: twinkle 2s ease-in-out infinite;
+      }
+
+      .html-tip-text {
+        color: #ffffff;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        flex: 1;
+      }
+
+      .html-connection-status {
+        margin-top: 2rem;
+      }
+
+      .html-status-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: #ffffff;
+        opacity: 0.7;
+      }
+
+      .html-status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #00ff00;
+        animation: pulse 1s ease-in-out infinite;
+      }
+
+      /* Animations */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes glow {
+        from {
+          text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+        to {
+          text-shadow: 0 0 30px rgba(0, 212, 255, 0.8), 0 0 40px rgba(0, 212, 255, 0.3);
+        }
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+
+      @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+        40% { transform: translateY(-10px); }
+        60% { transform: translateY(-5px); }
+      }
+
+      @keyframes moveRight {
+        0% { left: -20px; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { left: 220px; opacity: 0; }
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateX(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      @keyframes twinkle {
+        0%, 100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.7;
+          transform: scale(1.1);
+        }
+      }
+
+      /* Mobile responsiveness */
+      @media (max-width: 768px) {
+        .html-loading-content {
+          padding: 1rem;
+          max-width: 90%;
+        }
+        
+        .html-game-title h1 {
+          font-size: 1.8rem;
+        }
+        
+        .html-game-title h2 {
+          font-size: 1rem;
+        }
+        
+        .html-conveyor-belt {
+          width: 150px;
+        }
+        
+        .html-loading-tips {
+          padding: 0.75rem;
+          font-size: 0.8rem;
+        }
+      }
+
+      /* Reduced motion support */
+      @media (prefers-reduced-motion: reduce) {
+        .html-loading-screen *,
+        .html-loading-screen *::before,
+        .html-loading-screen *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body>
+    <!-- HTML Loading Screen - Shows immediately before React loads -->
+    <div id="html-loading-screen" class="html-loading-screen">
+      <div class="html-loading-content">
+        <!-- Game Logo/Title -->
+        <div class="html-game-title">
+          <h1>Order Editing</h1>
+          <h2>The Game</h2>
+        </div>
+
+        <!-- Loading Progress -->
+        <div class="html-loading-progress">
+          <div class="html-progress-bar">
+            <div id="html-progress-fill" class="html-progress-fill"></div>
+          </div>
+          <div id="html-progress-text" class="html-progress-text">
+            0% - Initializing game...
+          </div>
+        </div>
+
+        <!-- Loading Animation -->
+        <div class="html-loading-animation">
+          <div class="html-warehouse-icon">📦</div>
+          <div class="html-conveyor-belt">
+            <div class="html-belt-item html-belt-item-1">📋</div>
+            <div class="html-belt-item html-belt-item-2">✏️</div>
+            <div class="html-belt-item html-belt-item-3">📋</div>
+          </div>
+        </div>
+
+        <!-- Tips Section -->
+        <div class="html-loading-tips">
+          <div class="html-tip-icon">💡</div>
+          <div class="html-tip-text">
+            Use arrow keys to move around the warehouse
+          </div>
+        </div>
+
+        <!-- Connection Status -->
+        <div class="html-connection-status">
+          <div class="html-status-indicator">
+            <div class="html-status-dot"></div>
+            <span>Loading game assets...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="root">
       <h1 class="game-title text-4xl font-bold text-white select-none">Super Order Editing</h1>
       <div id="game-container"></div>
@@ -93,6 +401,136 @@
     <script>
       // Set the flag to indicate that the game has started
       sessionStorage.setItem('gameStarted', 'true');
+      
+      // HTML Loading Screen Management
+      let htmlProgress = 0;
+      let htmlLoadingComplete = false;
+      const tips = [
+        "Use arrow keys to move around the warehouse",
+        "Press SPACE to grab and drop items", 
+        "Complete orders to unlock new radio stations",
+        "Each station has different music genres",
+        "Perfect edits give bonus points!",
+        "Don't let too many orders fail - you only have 3 lives",
+        "New stations unlock every 5 successful edits"
+      ];
+      let currentTipIndex = 0;
+      
+      // Update HTML loading progress
+      function updateHTMLProgress(progress, text) {
+        const progressFill = document.getElementById('html-progress-fill');
+        const progressText = document.getElementById('html-progress-text');
+        
+        if (progressFill) {
+          progressFill.style.width = progress + '%';
+        }
+        if (progressText) {
+          progressText.textContent = progress + '% - ' + (text || 'Loading...');
+        }
+      }
+      
+      // Cycle through tips
+      function cycleTips() {
+        const tipElement = document.querySelector('.html-tip-text');
+        if (tipElement && tips.length > 0) {
+          tipElement.textContent = tips[currentTipIndex];
+          currentTipIndex = (currentTipIndex + 1) % tips.length;
+        }
+      }
+      
+      // Hide HTML loading screen
+      function hideHTMLLoadingScreen() {
+        const loadingScreen = document.getElementById('html-loading-screen');
+        if (loadingScreen) {
+          loadingScreen.classList.add('hidden');
+          setTimeout(() => {
+            loadingScreen.style.display = 'none';
+          }, 500);
+        }
+      }
+      
+      // Simulate initial loading progress
+      function simulateProgress() {
+        const interval = setInterval(() => {
+          if (htmlLoadingComplete) {
+            clearInterval(interval);
+            return;
+          }
+          
+          htmlProgress += Math.random() * 10;
+          if (htmlProgress > 85) {
+            htmlProgress = 85; // Stop at 85% until React/Phaser is ready
+            clearInterval(interval);
+          }
+          
+          updateHTMLProgress(Math.round(htmlProgress), 'Loading game assets...');
+        }, 150);
+      }
+      
+      // Start tip cycling after 2 seconds
+      setTimeout(() => {
+        cycleTips();
+        setInterval(cycleTips, 3000);
+      }, 2000);
+      
+      // Start simulated progress immediately
+      simulateProgress();
+      
+      // Listen for React app ready signal
+      window.addEventListener('reactAppReady', () => {
+        console.log('[HTML Loading] React app is ready');
+        htmlProgress = 100;
+        updateHTMLProgress(100, 'Game ready!');
+        htmlLoadingComplete = true;
+        
+        setTimeout(() => {
+          hideHTMLLoadingScreen();
+        }, 500);
+      });
+      
+      // Listen for Phaser loading events from React
+      window.addEventListener('gameLoadProgress', (event) => {
+        const { progress, text } = event.detail;
+        const adjustedProgress = 85 + (progress * 15); // Scale from 85% to 100%
+        htmlProgress = adjustedProgress;
+        updateHTMLProgress(Math.round(adjustedProgress), text || 'Loading game assets...');
+      });
+      
+      window.addEventListener('gameLoadComplete', () => {
+        console.log('[HTML Loading] Game loading complete');
+        htmlProgress = 100;
+        updateHTMLProgress(100, 'Game ready!');
+        htmlLoadingComplete = true;
+        
+        setTimeout(() => {
+          hideHTMLLoadingScreen();
+        }, 800);
+      });
+      
+      // Fallback timeout - hide loading screen after 30 seconds regardless
+      setTimeout(() => {
+        if (!htmlLoadingComplete) {
+          console.log('[HTML Loading] Timeout reached, hiding loading screen');
+          hideHTMLLoadingScreen();
+        }
+      }, 30000);
+      
+      // Network error detection
+      let networkErrorShown = false;
+      setTimeout(() => {
+        if (htmlProgress < 50 && !networkErrorShown) {
+          networkErrorShown = true;
+          const statusIndicator = document.querySelector('.html-status-indicator span');
+          const statusDot = document.querySelector('.html-status-dot');
+          
+          if (statusIndicator) {
+            statusIndicator.textContent = 'Connection slow or blocked - Try refreshing or check network';
+          }
+          if (statusDot) {
+            statusDot.style.background = '#ff9500';
+          }
+        }
+      }, 15000);
     </script>
     
     <script type="module" src="./src/main.tsx"></script>

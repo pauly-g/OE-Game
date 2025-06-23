@@ -162,6 +162,11 @@ export class Level1Scene extends Phaser.Scene {
   private tutorialTargetOrder?: Order; // Track which order is being highlighted
   private isRestart: boolean = false; // Track if this is a restart vs new game
 
+  // Add constants for difficulty scaling
+  private readonly MAX_POWER_UPS: number = 3; // Maximum number of power-ups allowed
+  private readonly BASE_CONVEYOR_SPEED: number = 0.5; // Starting conveyor speed
+  private readonly SPEED_MULTIPLIER_PER_STATION: number = 1.15; // Gentler exponential multiplier per station unlock
+
   // Add a function to create confetti particle effect
   private createConfettiEffect(x: number, y: number) {
     // Create a particle emitter for the confetti effect
@@ -276,8 +281,39 @@ export class Level1Scene extends Phaser.Scene {
 
   preload() {
     console.log('Level1Scene preload started');
+    
+    // COMMENTED OUT: Set up loading progress tracking - causing issues
+    /*
+    this.load.on('progress', (value: number) => {
+      // Emit progress event for the loading screen
+      const progressEvent = new CustomEvent('gameLoadProgress', {
+        detail: { 
+          progress: value, 
+          text: `Loading assets... ${Math.round(value * 100)}%`
+        }
+      });
+      window.dispatchEvent(progressEvent);
+    });
+
+    this.load.on('complete', () => {
+      console.log('Level1Scene preload complete');
+      // Emit completion event for the loading screen
+      const completeEvent = new CustomEvent('gameLoadComplete');
+      window.dispatchEvent(completeEvent);
+    });
+    */
+
     try {
+      // COMMENTED OUT: Emit initial loading state
+      /*
+      const startEvent = new CustomEvent('gameLoadProgress', {
+        detail: { progress: 0, text: 'Initializing game assets...' }
+      });
+      window.dispatchEvent(startEvent);
+      */
+
       gameDebugger.info('Starting to load player animations');
+      
       // Load player animations
       const directions = ['up', 'down', 'left', 'right'];
       directions.forEach(direction => {
@@ -353,6 +389,10 @@ export class Level1Scene extends Phaser.Scene {
       this.load.image('button-flash', 'game/Button/button-flash2.png');
       this.load.image('button-flash2', 'game/Button/button-flash2.png');
       
+      // Load essential background music
+      this.load.audio('backgroundMusic', 'game/Music/BG-Music/The Warehouse.mp3');
+      this.load.audio('gameOverMusic', 'game/Music/BG-Music/Game Over.mp3');
+      
       // Create a pixel texture for particles
       this.textures.generate('pixel', {
         data: ['1'],
@@ -360,9 +400,16 @@ export class Level1Scene extends Phaser.Scene {
         pixelHeight: 2
       });
       
-      gameDebugger.info('Level1Scene preload completed');
+      gameDebugger.info('Level1Scene preload setup completed');
     } catch (error) {
       console.error('Error in preload:', error);
+      // COMMENTED OUT: Emit error event - causing loading issues
+      /*
+      const errorEvent = new CustomEvent('gameLoadProgress', {
+        detail: { progress: 0, text: 'Error loading game assets' }
+      });
+      window.dispatchEvent(errorEvent);
+      */
     }
   }
 
@@ -2094,18 +2141,70 @@ export class Level1Scene extends Phaser.Scene {
       this.powerUpReadyText.setVisible(false);
     }
     
-    // Implement exponential difficulty - each use makes it harder, but cap at 80 edits
+    // Increment power-up usage count
     this.powerUpUsedCount++;
-    const exponentialRequirement = Math.floor(10 * Math.pow(2, this.powerUpUsedCount));
-    this.powerUpRequirement = Math.min(exponentialRequirement, 80); // Cap at 80 edits max
-    this.powerUpProgress = 0; // Reset progress to 0 - no banking allowed
+    console.log(`Power-up ended. Used ${this.powerUpUsedCount}/${this.MAX_POWER_UPS} times`);
     
-    // Update progress bar to show empty
-    this.updatePowerUpProgressBar();
+    // Check if max power-ups reached - if so, hide the button permanently
+    if (this.powerUpUsedCount >= this.MAX_POWER_UPS) {
+      console.log('Maximum power-ups reached! Hiding button permanently.');
+      
+      // Hide all power-up related UI elements
+      if (this.powerUpButtonSprite) {
+        this.powerUpButtonSprite.setVisible(false);
+        this.powerUpButtonSprite.setActive(false);
+      }
+      if (this.powerUpProgressBackground) {
+        this.powerUpProgressBackground.setVisible(false);
+      }
+      if (this.powerUpProgressBar) {
+        this.powerUpProgressBar.setVisible(false);
+      }
+      if (this.powerUpCountdownText) {
+        this.powerUpCountdownText.setVisible(false);
+      }
+      
+      // Show a message that power-ups are exhausted
+      const exhaustedMessage = this.add.text(
+        this.cameras.main.width / 2,
+        100,
+        'Power-ups Exhausted!',
+        {
+          fontSize: '24px',
+          color: '#ff0000',
+          stroke: '#000000',
+          strokeThickness: 3,
+          fontStyle: 'bold'
+        }
+      ).setOrigin(0.5).setDepth(100);
+      
+      // Fade out the message after 3 seconds
+      this.tweens.add({
+        targets: exhaustedMessage,
+        alpha: 0,
+        y: exhaustedMessage.y - 50,
+        duration: 3000,
+        onComplete: () => exhaustedMessage.destroy()
+      });
+      
+      // Reset progress to prevent further accumulation
+      this.powerUpProgress = 0;
+      this.powerUpAvailable = false;
+      
+    } else {
+      // Still have power-ups left - implement exponential difficulty
+      const exponentialRequirement = Math.floor(10 * Math.pow(2, this.powerUpUsedCount));
+      this.powerUpRequirement = Math.min(exponentialRequirement, 80); // Cap at 80 edits max
+      this.powerUpProgress = 0; // Reset progress to 0 - no banking allowed
+      
+      // Update progress bar to show empty
+      this.updatePowerUpProgressBar();
+      
+      console.log(`Next power-up requirement: ${this.powerUpRequirement} orders`);
+    }
     
     // Reset the manual orders counter after power-up ends - this prevents banking
     this.manualOrdersCompleted = 0;
-    console.log(`Power-up ended. Next requirement: ${this.powerUpRequirement} orders (used ${this.powerUpUsedCount} times)`);
     
             // console.log('Debug sprite state before animations:');
         // console.log(`Hamish exists: ${!!this.hamishSprite}, active: ${this.hamishSprite?.active}`);
@@ -2523,6 +2622,12 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private updatePowerUpProgressFromEdit() {
+    // Don't accumulate progress if max power-ups already used
+    if (this.powerUpUsedCount >= this.MAX_POWER_UPS) {
+      console.log(`🔧 EDIT APPLIED - Max power-ups (${this.MAX_POWER_UPS}) already used, no progress accumulated`);
+      return;
+    }
+    
     this.powerUpProgress++;
     console.log(`🔧 EDIT APPLIED - Power-up progress: ${this.powerUpProgress}/${this.powerUpRequirement} (from individual edit)`);
     console.log(`🔧 Power-up states - Active: ${this.powerUpActive}, Available: ${this.powerUpAvailable}`);
@@ -2578,6 +2683,12 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private makePowerUpAvailable() {
+    // Don't make power-up available if max usage reached
+    if (this.powerUpUsedCount >= this.MAX_POWER_UPS) {
+      console.log(`Power-up not made available - max usage (${this.MAX_POWER_UPS}) reached`);
+      return;
+    }
+    
     // Make power-up available to player
     this.powerUpAvailable = true;
     
@@ -3050,6 +3161,13 @@ export class Level1Scene extends Phaser.Scene {
     // Force immediate display update
     this.verifyStationVisibility();
     
+    // EXPONENTIAL DIFFICULTY: Increase conveyor belt speed with each station unlock
+    const unlockedStationsCount = this.stations.filter(station => station.isUnlocked).length;
+    const newSpeed = this.BASE_CONVEYOR_SPEED * Math.pow(this.SPEED_MULTIPLIER_PER_STATION, unlockedStationsCount - 1);
+    this.conveyorSpeed = Math.min(newSpeed, this.maxConveyorSpeed); // Cap at max speed
+    
+    console.log(`Station ${unlockedCount + 1} unlocked! Conveyor speed increased to: ${this.conveyorSpeed.toFixed(2)} (${unlockedStationsCount} stations total)`);
+    
     // Update the station tracker to unlock the corresponding music track
     // Add logs and error handling
     try {
@@ -3197,6 +3315,12 @@ export class Level1Scene extends Phaser.Scene {
   }
 
   private handlePowerUpButtonClick() {
+    // Check if max power-ups already used
+    if (this.powerUpUsedCount >= this.MAX_POWER_UPS) {
+      this.showPowerUpWarning('No power-ups remaining!');
+      return;
+    }
+    
     // Only allow pressing the button if a power-up is available
     if (!this.powerUpAvailable || this.powerUpActive) {
       // Show warning if power-up is not available

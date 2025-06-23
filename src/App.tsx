@@ -38,6 +38,7 @@ import Radio from './components/Radio';
 import RadioButton from './components/RadioButton';
 import SongNotification from './components/SongNotification';
 import Leaderboard from './components/Leaderboard';
+import LoadingScreen from './components/LoadingScreen';
 import { tracks } from './data/musicData';
 import { AuthProvider, useAuth } from './firebase/AuthContext';
 import UserProfileCorner from './components/UserProfileCorner';
@@ -67,6 +68,7 @@ function AppContent() {
   const [showDebug, setShowDebug] = useState(false);
   const [game, setGame] = useState<Phaser.Game | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
+  const [isGameLoading, setIsGameLoading] = useState(true);
   const [errorLogs, setErrorLogs] = useState<Array<{level: string, message: string, timestamp?: Date, data?: any}>>([]);
   const [showRadio, setShowRadio] = useState(false);
   const [radioWiggle, setRadioWiggle] = useState(false);
@@ -1012,10 +1014,25 @@ function AppContent() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-start p-4">
-      {/* Mobile Orientation Notice - shows on mobile portrait mode */}
-      <MobileOrientationNotice />
+  // Handle loading screen completion
+  const handleLoadingComplete = () => {
+    setIsGameLoading(false);
+  };
+
+  // Signal to HTML loading screen that React is ready
+  useEffect(() => {
+    // Dispatch event to let HTML loading screen know React has loaded
+    const reactReadyEvent = new CustomEvent('reactAppReady');
+    window.dispatchEvent(reactReadyEvent);
+    
+    // Since we have HTML loading screen, disable React loading screen initially
+    setIsGameLoading(false);
+  }, []);
+
+      return (
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-start p-4">
+        {/* Mobile Orientation Notice - shows on mobile portrait mode */}
+        <MobileOrientationNotice />
       
       <div className="w-full max-w-6xl flex justify-center items-center mb-4 relative">
         {!isMobileDevice() && (
@@ -1046,9 +1063,12 @@ function AppContent() {
       
       {/* Game container at full size regardless of radio player status */}
       <div id="game-container" className="w-full max-w-6xl aspect-video bg-gray-800 rounded-lg shadow-lg overflow-hidden relative">
-        {!game && (
+        {!game && !isGameLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+              <p className="text-white opacity-70">Starting game...</p>
+            </div>
           </div>
         )}
         
