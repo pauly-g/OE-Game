@@ -254,8 +254,8 @@ export class GameOverScene extends Phaser.Scene {
       // Make the container interactive
       leaderboardContainer.setInteractive(new Phaser.Geom.Rectangle(-200, -30, 400, 60), Phaser.Geom.Rectangle.Contains);
       
-      // Set up click handler for the container
-      leaderboardContainer.on('pointerdown', () => {
+      // Set up click handler for the container - add mobile touch support
+      const handleLeaderboardClick = () => {
         gameDebugger.info('Leaderboard button clicked');
         
         // Simple click feedback (slight scale down)
@@ -286,7 +286,11 @@ export class GameOverScene extends Phaser.Scene {
             signBackground.setFillStyle(0x4A3629);
           }
         }, 200);
-      });
+      };
+      
+      // Add both pointer and touch event handlers for better mobile support
+      leaderboardContainer.on('pointerdown', handleLeaderboardClick);
+      leaderboardContainer.on('pointerup', handleLeaderboardClick); // Additional mobile support
       
       // Simple hover effects - brighter feedback
       leaderboardContainer.on('pointerover', () => {
@@ -423,32 +427,40 @@ export class GameOverScene extends Phaser.Scene {
         console.error('[GameOverScene] Audio error:', e);
       });
       
-      // Only play if radio isn't playing
-      if (!this.isRadioPlaying) {
-        console.log('[GameOverScene] Playing game over music with HTML Audio');
-        const playPromise = this.gameOverMusic.play();
-        
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              console.log('[GameOverScene] Successfully started playback');
-            })
-            .catch(err => {
-              console.error('[GameOverScene] Error playing audio:', err);
-              
-              // Try one more time with user interaction
-              console.log('[GameOverScene] Adding one-time click handler to play audio');
-              const clickHandler = () => {
-                if (this.gameOverMusic) {
-                  this.gameOverMusic.play().catch(console.error);
-                }
-                document.removeEventListener('click', clickHandler);
-              };
-              document.addEventListener('click', clickHandler);
-            });
-        }
+      // For mobile devices, attempt to play immediately but handle rejection gracefully
+      const playPromise = this.gameOverMusic.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log('[GameOverScene] Playing game over music with HTML Audio');
+          })
+          .catch((error) => {
+            console.log('[GameOverScene] Auto-play prevented (likely mobile), will try on user interaction:', error);
+            
+            // Set up one-time event listener for user interaction to enable audio
+            const enableAudioOnTouch = () => {
+              if (this.gameOverMusic && this.scene.isActive()) {
+                console.log('[GameOverScene] Attempting to play game over music after user interaction');
+                this.gameOverMusic.play()
+                  .then(() => {
+                    console.log('[GameOverScene] Game over music started after user interaction');
+                  })
+                  .catch((err) => {
+                    console.error('[GameOverScene] Failed to play game over music even after user interaction:', err);
+                  });
+              }
+              // Remove the event listener after first use
+              window.removeEventListener('pointerdown', enableAudioOnTouch);
+              window.removeEventListener('touchstart', enableAudioOnTouch);
+            };
+            
+            // Listen for any user interaction to enable audio
+            window.addEventListener('pointerdown', enableAudioOnTouch, { once: true });
+            window.addEventListener('touchstart', enableAudioOnTouch, { once: true });
+          });
       } else {
-        console.log('[GameOverScene] Not playing music because radio is already playing');
+        console.log('[GameOverScene] Play promise not supported, audio may not work on this browser');
       }
     } catch (error) {
       console.error('[GameOverScene] Error in playGameOverMusic:', error);

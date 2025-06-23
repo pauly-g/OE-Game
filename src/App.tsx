@@ -1069,7 +1069,7 @@ function AppContent() {
       </div>
 
       {/* Button row - hide desktop instructions on mobile, center radio button */}
-      <div className={`mt-4 flex gap-2 ${isMobileDevice() ? 'justify-center' : ''}`}>
+      <div className={`mt-4 flex gap-2 ${isMobileDevice() ? 'justify-center w-full px-2' : ''}`}>
         {!isMobileDevice() && (
           <div className="bg-[rgba(23,29,40,0.9)] rounded-[30px] px-4 py-2 flex items-center gap-6 font-pixel text-sm">
             <div className="flex items-center gap-2">
@@ -1112,12 +1112,14 @@ function AppContent() {
           </div>
         )}
         
-        <RadioButton 
-          onClick={toggleRadio} 
-          showRadio={showRadio} 
-          wiggle={radioWiggle}
-          newSongCount={newSongCount}
-        />
+        <div className={`${isMobileDevice() ? 'w-full flex justify-center' : ''}`}>
+          <RadioButton 
+            onClick={toggleRadio} 
+            showRadio={showRadio} 
+            wiggle={radioWiggle}
+            newSongCount={newSongCount}
+          />
+        </div>
         
         {showDebug && (
           <button

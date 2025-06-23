@@ -28,11 +28,23 @@ const RadioButton: React.FC<RadioButtonProps> = ({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg border-2 border-indigo-500 transition-colors font-pixel text-sm flex items-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] ${isWiggling ? 'animate-wiggle' : ''} relative`}
+      className={`px-2 py-2 sm:px-4 sm:py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg border-2 border-indigo-500 transition-colors font-pixel text-xs sm:text-sm flex items-center gap-1 sm:gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] ${isWiggling ? 'animate-wiggle' : ''} relative min-w-0 whitespace-nowrap min-h-[44px] max-w-full`}
       aria-label={showRadio ? "Close Radio" : "Open Radio"}
       title={showRadio ? "Close Radio" : "Open Radio"}
     >
-      {showRadio ? 'Close Radio' : 'Order Editing Radio'}
+      <span className="truncate block w-full text-center leading-tight">
+        {showRadio ? (
+          <span className="block">
+            <span className="sm:hidden">Close</span>
+            <span className="hidden sm:inline">Close Radio</span>
+          </span>
+        ) : (
+          <span className="block">
+            <span className="sm:hidden text-[10px] leading-tight">OE Radio</span>
+            <span className="hidden sm:inline">Order Editing Radio</span>
+          </span>
+        )}
+      </span>
       
       {/* Badge for new songs */}
       {newSongCount > 0 && !showRadio && (

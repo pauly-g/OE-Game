@@ -1380,6 +1380,69 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     }
   }, []);
 
+  // Add mobile audio initialization
+  useEffect(() => {
+    // Check if we're on a mobile device and need user interaction for audio
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile && !globalAudio) {
+      console.log('[Radio] Mobile device detected, setting up audio initialization');
+      
+      // Set up one-time event listener for user interaction to initialize audio
+      const initializeAudioOnTouch = () => {
+        if (!globalAudio) {
+          console.log('[Radio] Initializing audio after user interaction on mobile');
+          globalAudio = new Audio();
+          globalAudio.volume = 0.7;
+          globalAudio.crossOrigin = 'anonymous';
+          
+          // Try to play a silent audio to unlock audio context
+          globalAudio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjuU2fLNeSsFJHfH8N2QQAoUXrTp66hVFApGn+Dy';
+          
+          const playPromise = globalAudio.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                console.log('[Radio] Audio context unlocked on mobile');
+                globalAudio?.pause();
+                globalAudio!.currentTime = 0;
+              })
+              .catch((error) => {
+                console.log('[Radio] Audio unlock attempt failed, will retry on next interaction:', error);
+              });
+          }
+        }
+        
+        // Remove the event listeners after first use
+        window.removeEventListener('pointerdown', initializeAudioOnTouch);
+        window.removeEventListener('touchstart', initializeAudioOnTouch);
+        window.removeEventListener('click', initializeAudioOnTouch);
+      };
+      
+      // Listen for any user interaction to initialize audio
+      window.addEventListener('pointerdown', initializeAudioOnTouch, { once: true });
+      window.addEventListener('touchstart', initializeAudioOnTouch, { once: true });
+      window.addEventListener('click', initializeAudioOnTouch, { once: true });
+      
+      // Cleanup function
+      return () => {
+        window.removeEventListener('pointerdown', initializeAudioOnTouch);
+        window.removeEventListener('touchstart', initializeAudioOnTouch);
+        window.removeEventListener('click', initializeAudioOnTouch);
+      };
+    }
+  }, []);
+
+  // Initialize global audio if not already created
+  useEffect(() => {
+    if (!globalAudio) {
+      console.log('[Radio] Creating initial audio element');
+      globalAudio = new Audio();
+      globalAudio.volume = 0.7;
+      globalAudio.crossOrigin = 'anonymous';
+    }
+  }, []);
+
   return (
     <div className={`radio-player ${isOpen ? 'open' : ''}`}>
       <div className="radio-content">

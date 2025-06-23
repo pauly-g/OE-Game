@@ -27,7 +27,12 @@
         width: 100%;
         max-width: 1200px;
         margin: 0 auto;
-        padding: 2rem;
+        padding: 1rem;
+        box-sizing: border-box;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
       
       .scene {
@@ -36,6 +41,8 @@
         min-height: 300px;
         opacity: 0;
         transition: opacity 1s ease;
+        width: 100%;
+        box-sizing: border-box;
       }
       
       .scene.visible {
@@ -47,6 +54,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        padding: 0.5rem;
+        box-sizing: border-box;
       }
       
       .scene-image img {
@@ -57,6 +66,8 @@
         background-color: #fff;
         box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
         transform: rotate(-2deg);
+        object-fit: contain;
+        box-sizing: border-box;
       }
       
       .scene2 .scene-image img {
@@ -71,11 +82,15 @@
         padding: 1.5rem;
         line-height: 1.8;
         font-size: 1rem;
+        box-sizing: border-box;
+        word-wrap: break-word;
       }
       
       .scene-text p {
         margin: 0;
         min-height: 7em;
+        word-wrap: break-word;
+        hyphens: auto;
       }
       
       .scene1 {
@@ -100,6 +115,8 @@
         margin-top: 3rem;
         opacity: 0;
         transition: opacity 1s ease;
+        padding: 1rem;
+        box-sizing: border-box;
       }
       
       .enter-button-container.visible {
@@ -162,17 +179,90 @@
         margin-left: 0.5rem;
       }
       
+      /* Mobile optimizations */
       @media (max-width: 768px) {
+        .intro-container {
+          padding: 0.5rem;
+        }
+        
         .scene {
           flex-direction: column !important;
+          margin-bottom: 2rem;
+          min-height: auto;
         }
         
         .scene-image, .scene-text {
           width: 100%;
+          flex: none;
+        }
+        
+        .scene-image {
+          padding: 0.25rem;
+        }
+        
+        .scene-image img {
+          max-height: 250px;
+          padding: 10px 10px 30px 10px;
         }
         
         .scene-text {
-          margin-top: 1.5rem;
+          margin-top: 1rem;
+          padding: 1rem;
+          font-size: 0.8rem;
+          line-height: 1.6;
+        }
+        
+        .scene-text p {
+          min-height: auto;
+        }
+        
+        .enter-button {
+          font-size: 1rem;
+          padding: 0.8rem 1.5rem;
+        }
+        
+        .sound-toggle {
+          font-size: 0.5rem;
+          padding: 0.4rem;
+          top: 0.5rem;
+          right: 0.5rem;
+        }
+      }
+      
+      /* Extra small screens (iPhone SE and similar) */
+      @media (max-width: 375px) {
+        .intro-container {
+          padding: 0.25rem;
+        }
+        
+        .scene {
+          margin-bottom: 1.5rem;
+        }
+        
+        .scene-image img {
+          max-height: 200px;
+          padding: 8px 8px 20px 8px;
+        }
+        
+        .scene-text {
+          padding: 0.5rem;
+          font-size: 0.7rem;
+          line-height: 1.5;
+        }
+        
+        .enter-button {
+          font-size: 0.9rem;
+          padding: 0.7rem 1.2rem;
+        }
+        
+        .enter-button-container {
+          margin-top: 2rem;
+          padding: 0.5rem;
+        }
+        
+        .sound-toggle {
+          font-size: 0.4rem;
+          padding: 0.3rem;
         }
       }
     </style>
