@@ -4,6 +4,9 @@
 .thin-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(75, 85, 99, 0.4) rgba(17, 24, 39, 0.1);
+  /* Mobile scrolling enhancements */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Thin scrollbar - Chrome, Edge, and Safari */
@@ -37,6 +40,9 @@
 .thin-scrollbar-dark {
   scrollbar-width: thin;
   scrollbar-color: rgba(156, 163, 175, 0.3) rgba(0, 0, 0, 0.2);
+  /* Mobile scrolling enhancements */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .thin-scrollbar-dark::-webkit-scrollbar {
@@ -79,6 +85,32 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Mobile scrolling enhancements */
+.custom-scrollbar {
+  /* Enable momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+  /* Prevent bounce effect on mobile */
+  overscroll-behavior: contain;
+}
+
+/* Mobile-specific scrollbar adjustments */
+@media (max-width: 768px) {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px; /* Slightly thinner on mobile */
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.4); /* More visible on mobile */
+  }
+  
+  /* Hide scrollbar on very small screens but keep functionality */
+  @media (max-width: 480px) {
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 3px;
+    }
+  }
 }
 
 /* Leaderboard styles */
@@ -171,23 +203,19 @@
 
 .close-button {
   background: none;
-  border: 2px solid #34ebcf;
+  border: none;
+  font-size: 2rem;
   color: #34ebcf;
-  font-size: 1.25rem;
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
+  padding: 0.5rem;
   transition: all 0.2s ease;
-  margin-left: 1rem;
+  text-shadow: 0 0 5px rgba(52, 235, 207, 0.5);
 }
 
 .close-button:hover {
-  color: #111827;
-  background-color: #34ebcf;
-  box-shadow: 0 0 10px rgba(52, 235, 207, 0.7);
+  color: #42d6ff;
+  text-shadow: 0 0 10px rgba(66, 214, 255, 0.7);
+  transform: scale(1.1);
 }
 
 /* Scores table styles */
@@ -377,4 +405,25 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #2563eb;
+}
+
+/* BASIC MOBILE SCROLLING FIX - SIMPLEST APPROACH */
+@media screen and (max-width: 768px) {
+  /* Force scrolling on ALL elements that might need it */
+  * {
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  /* Specifically target leaderboard elements */
+  .leaderboard-container {
+    overflow: auto !important;
+    height: 100vh !important;
+    position: relative !important;
+  }
+  
+  /* Sign-in form scrolling */
+  .custom-scrollbar {
+    overflow: auto !important;
+    max-height: 90vh !important;
+  }
 } 

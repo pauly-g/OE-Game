@@ -3,6 +3,8 @@ import { getTopScores, getUserScoreRank, getScoresAroundUser, LeaderboardEntry }
 import { useAuth, UserData } from '../firebase/AuthContext';
 import MockSignIn from './MockSignIn';
 import '../styles/customScrollbar.css';
+import { isMobileDevice } from '../utils/mobileDetection';
+import { useMobileScrolling } from '../hooks/useMobileScrolling';
 
 // Isolated Score Message Overlay Component to prevent render loops
 const ScoreMessageOverlay: React.FC<{
@@ -84,14 +86,11 @@ const goldenShimmerStyle = `
     margin: 0 auto;
   }
   
-  .in-game-frame {
-    margin: 0 auto;
-    width: 100%;
-    height: 90%;
-    top: 5%;
-    left: 0;
-    right: 0;
-    position: absolute;
+  .leaderboard-container.in-game-frame {
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    height: 100%;
   }
   
   .leaderboard-header {
@@ -168,7 +167,7 @@ const goldenShimmerStyle = `
   }
   
   .scores-table th, .scores-table td {
-    padding: 8px 16px;
+    padding: 6px 8px;
     border: none;
     text-align: left;
   }
@@ -491,6 +490,25 @@ const goldenShimmerStyle = `
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
+
+  .in-game-frame {
+    margin: 0 auto;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    right: 0;
+    position: absolute;
+  }
+
+  .leaderboard-container.in-game-frame .leaderboard-header {
+    padding: 20px 20px 16px 20px;
+    margin-bottom: 0;
+  }
+  
+  .leaderboard-container.in-game-frame .leaderboard-section {
+    padding: 0 20px 24px 20px;
+  }
 `;
 
 const Leaderboard: React.FC<LeaderboardProps> = ({ 
@@ -527,6 +545,71 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   
   // Add ref to prevent showing the same message multiple times
   const lastShownMessageRef = useRef<string>('');
+  
+  // Mobile detection state
+  const [isMobile, setIsMobile] = useState(false);
+  const [testScrollTop, setTestScrollTop] = useState(0);
+  
+  // Mobile scrolling hook for the main leaderboard container
+  const containerHeight = inGameFrame ? window.innerHeight * 0.8 : 500;
+  const mobileScrolling = useMobileScrolling(containerHeight);
+  const contentRef = useRef<HTMLDivElement>(null);
+  
+  // Manual touch scrolling for test
+  const handleTestTouchStart = useRef<number>(0);
+  const handleTestTouchMove = (e: React.TouchEvent) => {
+    if (!isMobile) return;
+    
+    const touch = e.touches[0];
+    const deltaY = handleTestTouchStart.current - touch.clientY;
+    const newScrollTop = Math.max(0, Math.min(200, testScrollTop + deltaY));
+    setTestScrollTop(newScrollTop);
+    handleTestTouchStart.current = touch.clientY;
+  };
+  
+  const handleTestTouchStartCapture = (e: React.TouchEvent) => {
+    handleTestTouchStart.current = e.touches[0].clientY;
+  };
+  
+  // Check mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = isMobileDevice();
+      setIsMobile(mobile);
+      console.log('Mobile detection check:', { 
+        isMobileDevice: mobile, 
+        innerWidth: window.innerWidth,
+        userAgent: navigator.userAgent.substring(0, 100)
+      });
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Update content height for mobile scrolling
+  useEffect(() => {
+    if (contentRef.current && mobileScrolling.isMobile) {
+      const updateContentHeight = () => {
+        if (contentRef.current) {
+          mobileScrolling.setContentHeight(contentRef.current.scrollHeight);
+        }
+      };
+      
+      // Update height after content changes
+      updateContentHeight();
+      
+      // Use ResizeObserver to detect content changes
+      const resizeObserver = new ResizeObserver(updateContentHeight);
+      resizeObserver.observe(contentRef.current);
+      
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }
+  }, [topScores, nearbyScores, loading, error, showSignIn, mobileScrolling.isMobile]);
 
   // Authentication context
   const { 
@@ -538,8 +621,6 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
     getUserBestScore,
     updateMarketingOptIn
   } = useAuth();
-
-
 
   // Function to fetch all leaderboard data, using a specific score for rank/nearby
   const fetchLeaderboardData = useCallback(async (scoreForRank?: number) => {
@@ -606,6 +687,40 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   useEffect(() => {
     fetchLeaderboardDataRef.current = fetchLeaderboardData;
   }, [fetchLeaderboardData]);
+
+  // Manage body class for mobile scrolling
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('leaderboard-open');
+      
+      // Simple mobile fix - just allow body scrolling
+      if (window.innerWidth <= 768) {
+        console.log('Mobile detected - enabling body scrolling');
+        document.body.style.overflow = 'auto';
+        document.body.style.position = 'static';
+        document.body.style.height = 'auto';
+      }
+    } else {
+      document.body.classList.remove('leaderboard-open');
+      
+      // Reset body styles when closed
+      if (window.innerWidth <= 768) {
+        document.body.style.overflow = 'hidden';
+        document.body.style.height = '';
+        document.body.style.position = '';
+      }
+    }
+    
+    // Cleanup when component unmounts
+    return () => {
+      document.body.classList.remove('leaderboard-open');
+      if (window.innerWidth <= 768) {
+        document.body.style.overflow = 'hidden';
+        document.body.style.height = '';
+        document.body.style.position = '';
+      }
+    };
+  }, [isOpen]);
 
   // Centralized Logic Handler: Runs when the component opens with a score
   useEffect(() => {
@@ -861,8 +976,6 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
     }
   };
 
-
-
   // Close the leaderboard and re-enable game inputs
   const handleClose = () => {
     // Create and dispatch custom event to re-enable game inputs
@@ -901,8 +1014,6 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
     lastShownMessageRef.current = '';
     // Don't clear lastProcessedEventId here - we want to remember processed events
   }, []);
-
-
 
   // Reset component state when receiving a new score or when component is closed
   useEffect(() => {
@@ -1188,65 +1299,78 @@ const Leaderboard: React.FC<LeaderboardProps> = ({
   };
 
   return (
-    <div className={`leaderboard-container ${inGameFrame ? 'in-game-frame' : ''} custom-scrollbar`}>
-      <div className="leaderboard-header">
-        <h2>GLOBAL LEADERBOARD</h2>
-        <div className="leaderboard-controls">
-          <button 
-            className="refresh-button" 
-            onClick={() => fetchLeaderboardData(userScore)}
-            disabled={loading}
-            aria-label="Refresh leaderboard"
-          >
-            {loading ? (
-              <span className="loading-spinner-small"></span>
-            ) : (
-              '↻'
-            )}
-          </button>
-          <button 
-            className="close-button" 
-            onClick={handleClose}
-            aria-label="Close leaderboard"
-          >
-            ×
-          </button>
+    <div 
+      className={`leaderboard-container ${inGameFrame ? 'in-game-frame' : ''} custom-scrollbar`}
+      style={{
+        height: mobileScrolling.isMobile ? `${containerHeight}px` : 'auto',
+        overflow: mobileScrolling.isMobile ? 'hidden' : 'auto'
+      }}
+      {...(mobileScrolling.isMobile ? mobileScrolling.touchHandlers : {})}
+    >
+      <div 
+        ref={contentRef}
+        style={{
+          transform: mobileScrolling.isMobile ? `translateY(-${mobileScrolling.scrollTop}px)` : 'none',
+          minHeight: '100%'
+        }}
+      >
+        <div className="leaderboard-header">
+          <h2>GLOBAL LEADERBOARD</h2>
+          <div className="leaderboard-controls">
+            <button 
+              className="refresh-button" 
+              onClick={() => fetchLeaderboardData(userScore)}
+              disabled={loading}
+              aria-label="Refresh leaderboard"
+            >
+              {loading ? (
+                <span className="loading-spinner-small"></span>
+              ) : (
+                '↻'
+              )}
+            </button>
+            <button 
+              className="close-button" 
+              onClick={handleClose}
+              aria-label="Close leaderboard"
+            >
+              ×
+            </button>
+          </div>
         </div>
-      </div>
-      
-      {/* Show sign-in form if user needs to authenticate */}
-      {showSignIn ? (
-        <MockSignIn 
-          onSuccess={handleMockSignIn} 
-          onClose={handleClose}
-          score={userScore || 0}
+        
+        {/* Show sign-in form if user needs to authenticate */}
+        {showSignIn ? (
+          <MockSignIn 
+            onSuccess={handleMockSignIn} 
+            onClose={handleClose}
+            score={userScore || 0}
+          />
+        ) : (
+          // Show the main leaderboard content
+          renderLeaderboardContent()
+        )}
+
+        {/* Score message overlay - ISOLATED RENDERING */}
+        <ScoreMessageOverlay 
+          show={showScoreMessage}
+          message={scoreMessage}
+          onDismiss={dismissScoreMessage}
         />
-      ) : (
-        // Show the main leaderboard content
-        renderLeaderboardContent()
-      )}
 
-
-
-      {/* Score message overlay - ISOLATED RENDERING */}
-      <ScoreMessageOverlay 
-        show={showScoreMessage}
-        message={scoreMessage}
-        onDismiss={dismissScoreMessage}
-      />
-
-      {/* Show error as overlay */}
-      {showLeaderboardAfterError && (
-        <div className="error-container">
-          <div className="error-message">{error}</div>
-          <button 
-            className="retry-button" 
-            onClick={dismissErrorAndShowLeaderboard}
-          >
-            Try Again
-          </button>
-        </div>
-      )}
+        {/* Show error as overlay */}
+        {showLeaderboardAfterError && (
+          <div className="error-container">
+            <div className="error-message">{error}</div>
+            <button 
+              className="retry-button" 
+              onClick={dismissErrorAndShowLeaderboard}
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,0 +1,98 @@
+/* Mobile Game Over Controls */
+.mobile-gameover-controls {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  pointer-events: auto;
+}
+
+.mobile-restart-btn {
+  background: linear-gradient(145deg, #ff6b6b, #e63946);
+  border: 3px solid #ff7f7f;
+  border-radius: 12px;
+  color: white;
+  padding: 16px 24px;
+  font-family: 'Press Start 2P', 'pixelmix', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.mobile-restart-btn span {
+  font-size: 20px;
+  display: block;
+}
+
+.mobile-restart-btn div {
+  font-size: 8px;
+  text-align: center;
+  line-height: 1.2;
+  letter-spacing: 1px;
+}
+
+.mobile-restart-btn:active {
+  background: linear-gradient(145deg, #e63946, #d32f2f);
+  border-color: #ff5252;
+  transform: translateX(-50%) scale(0.95);
+  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    transform: translateX(-50%) scale(1);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
+  50% { 
+    transform: translateX(-50%) scale(1.05);
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .mobile-gameover-controls {
+    bottom: 15px;
+  }
+  
+  .mobile-restart-btn {
+    padding: 14px 20px;
+    font-size: 8px;
+  }
+  
+  .mobile-restart-btn span {
+    font-size: 18px;
+  }
+  
+  .mobile-restart-btn div {
+    font-size: 7px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .mobile-gameover-controls {
+    bottom: 10px;
+  }
+  
+  .mobile-restart-btn {
+    padding: 12px 18px;
+    font-size: 7px;
+  }
+  
+  .mobile-restart-btn span {
+    font-size: 16px;
+  }
+  
+  .mobile-restart-btn div {
+    font-size: 6px;
+  }
+} 

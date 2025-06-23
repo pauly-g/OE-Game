@@ -43,7 +43,10 @@ import { AuthProvider, useAuth } from './firebase/AuthContext';
 import UserProfileCorner from './components/UserProfileCorner';
 import Toast from './components/Toast';
 import ScorePopup from './components/ScorePopup';
+import { MobileControls } from './components/MobileControls';
+import { MobileOrientationNotice } from './components/MobileOrientationNotice';
 import { startGameSession, handleMarketingConsent, handleGameCompletion, handleHighScore } from './utils/gameHubSpotIntegration';
+import { isMobileDevice } from './utils/mobileDetection';
 import './styles/main.css';
 
 // Keep track of unseen songs (maintained in memory only, no localStorage changes)
@@ -1011,9 +1014,14 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-start p-4">
+      {/* Mobile Orientation Notice - shows on mobile portrait mode */}
+      <MobileOrientationNotice />
+      
       <div className="w-full max-w-6xl flex justify-center items-center mb-4 relative">
-        <h1 className="text-3xl font-bold tracking-widest text-blue-400 arcade-font text-center">Order Editing: The Game</h1>
-        <div className="absolute right-0 top-0">
+        {!isMobileDevice() && (
+          <h1 className="text-3xl font-bold tracking-widest text-blue-400 arcade-font text-center">Order Editing: The Game</h1>
+        )}
+        <div className={`absolute ${isMobileDevice() ? 'right-0 top-0 z-50' : 'right-0 top-0'}`}>
           <UserProfileCorner />
         </div>
       </div>
@@ -1055,47 +1063,54 @@ function AppContent() {
             />
           </div>
         )}
+        
+        {/* Mobile Controls - only visible on mobile devices */}
+        <MobileControls isVisible={game !== null && !showLeaderboard} />
       </div>
 
-      {/* Button row */}
-      <div className="mt-4 flex gap-2">
-        <div className="bg-[rgba(23,29,40,0.9)] rounded-[30px] px-4 py-2 flex items-center gap-6 font-pixel text-sm">
-          <div className="flex items-center gap-2">
-            <span>Move</span>
-            <div className="flex gap-1">
-              <div className="w-5 h-5 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 5L5 12H19L12 5Z" fill="white"/>
-                </svg>
+      {/* Button row - hide desktop instructions on mobile, center radio button */}
+      <div className={`mt-4 flex gap-2 ${isMobileDevice() ? 'justify-center' : ''}`}>
+        {!isMobileDevice() && (
+          <div className="bg-[rgba(23,29,40,0.9)] rounded-[30px] px-4 py-2 flex items-center gap-6 font-pixel text-sm">
+            <div className="flex items-center gap-2">
+              <span>Move</span>
+              <div className="flex gap-1">
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 5L5 12H19L12 5Z" fill="white"/>
+                  </svg>
+                </div>
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 19L5 12H19L12 19Z" fill="white"/>
+                  </svg>
+                </div>
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M5 12L12 5L12 19L5 12Z" fill="white"/>
+                  </svg>
+                </div>
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 12L12 5L12 19L19 12Z" fill="white"/>
+                  </svg>
+                </div>
               </div>
-              <div className="w-5 h-5 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 19L5 12H19L12 19Z" fill="white"/>
-                </svg>
-              </div>
-              <div className="w-5 h-5 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M5 12L12 5L12 19L5 12Z" fill="white"/>
-                </svg>
-              </div>
-              <div className="w-5 h-5 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M19 12L12 5L12 19L19 12Z" fill="white"/>
-                </svg>
+            </div>
+            <div className="h-6 w-[1px] bg-white/20"></div>
+            <div className="flex items-center gap-2">
+              <span>Grab/Edit</span>
+              <div 
+                className="relative min-w-[44px] h-6 bg-white/15 border-2 border-white/80 rounded-md cursor-pointer flex items-center justify-center px-2"
+                onClick={() => {
+                  setShowInstructions(!showInstructions);
+                }}
+              >
+                <div className="text-xs text-white">SPACE</div>
               </div>
             </div>
           </div>
-          <div className="h-6 w-[1px] bg-white/20"></div>
-          <div className="flex items-center gap-2">
-            <span>Grab/Edit</span>
-            <div 
-              className="relative min-w-[44px] h-6 bg-white/15 border-2 border-white/80 rounded-md cursor-pointer flex items-center justify-center px-2"
-              onClick={() => setShowInstructions(!showInstructions)}
-            >
-              <div className="text-xs text-white">SPACE</div>
-            </div>
-          </div>
-        </div>
+        )}
         
         <RadioButton 
           onClick={toggleRadio} 

@@ -769,6 +769,22 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       }
     };
     
+    // Handle mobile radio controls
+    const handleMobileRadioToggle = () => {
+      console.log('[Radio] Mobile radio toggle event received');
+      togglePlay();
+    };
+    
+    const handleMobileRadioNext = () => {
+      console.log('[Radio] Mobile radio next event received');
+      nextTrack();
+    };
+    
+    const handleMobileRadioPrev = () => {
+      console.log('[Radio] Mobile radio prev event received');
+      prevTrack();
+    };
+
     // Register all event listeners
     window.addEventListener('stationUnlocked', handleStationUnlock);
     window.addEventListener('storage', handleStorageChange);
@@ -777,6 +793,9 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
     window.addEventListener('gameRestartWithStations', handleGameRestartWithStations);
     window.addEventListener('stopMusic', handleStopMusic);
     window.addEventListener('isRadioPlaying', handleIsRadioPlaying);
+    window.addEventListener('mobileRadioToggle', handleMobileRadioToggle);
+    window.addEventListener('mobileRadioNext', handleMobileRadioNext);
+    window.addEventListener('mobileRadioPrev', handleMobileRadioPrev);
 
     // Clean up listeners on unmount
     return () => {
@@ -787,6 +806,9 @@ export const Radio = forwardRef<RadioHandle, RadioProps>(({ isOpen, onClose, aut
       window.removeEventListener('gameRestartWithStations', handleGameRestartWithStations);
       window.removeEventListener('stopMusic', handleStopMusic);
       window.removeEventListener('isRadioPlaying', handleIsRadioPlaying);
+      window.removeEventListener('mobileRadioToggle', handleMobileRadioToggle);
+      window.removeEventListener('mobileRadioNext', handleMobileRadioNext);
+      window.removeEventListener('mobileRadioPrev', handleMobileRadioPrev);
     };
   }, [showPlaylist, isOpen, isPlaying]);
 

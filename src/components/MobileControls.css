@@ -1,0 +1,320 @@
+/* Mobile Controls Styling */
+.mobile-controls-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  pointer-events: none; /* Allow clicks through to game */
+  font-family: 'Press Start 2P', 'pixelmix', monospace;
+}
+
+.mobile-controls-overlay > * {
+  pointer-events: auto; /* Re-enable clicks on control elements */
+}
+
+/* Left side movement controls */
+.mobile-controls-left {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.direction-pad {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.d-pad-center {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.d-pad-btn {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  font-family: 'Arial', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
+}
+
+.d-pad-btn:active,
+.d-pad-btn.active {
+  background: linear-gradient(145deg, #4a9eff, #2171d9);
+  border-color: #5ba0ff;
+}
+
+.d-pad-up {
+  top: 0;
+  left: calc(50% - 25px);
+}
+
+.d-pad-down {
+  bottom: 0;
+  left: calc(50% - 25px);
+}
+
+.d-pad-left {
+  left: 0;
+  top: calc(50% - 25px);
+}
+
+.d-pad-right {
+  right: 0;
+  top: calc(50% - 25px);
+}
+
+/* Right side action controls */
+.mobile-controls-right {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-btn {
+  width: 140px;
+  height: 70px;
+  background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1.1;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.action-btn span {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.action-btn small {
+  font-size: 10px;
+  opacity: 0.8;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.action-btn:active,
+.action-btn.active {
+  background: linear-gradient(145deg, #ff6b6b, #e63946);
+  border-color: #ff7f7f;
+}
+
+.pickup-btn:active,
+.pickup-btn.active {
+  background: linear-gradient(145deg, #4ecdc4, #26a69a);
+  border-color: #4ecdc4;
+}
+
+.powerup-btn:active,
+.powerup-btn.active {
+  background: linear-gradient(145deg, #ffe66d, #f9c74f);
+  border-color: #ffe66d;
+  color: #333;
+}
+
+/* Top center radio controls */
+.mobile-controls-top {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.radio-controls {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 8px;
+  border-radius: 8px;
+  border: 2px solid #333;
+}
+
+.radio-btn {
+  width: 40px;
+  height: 32px;
+  background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+  border: 2px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all 0.1s ease;
+  font-family: inherit;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radio-btn:active {
+  background: linear-gradient(145deg, #9c88ff, #7c6aef);
+  border-color: #9c88ff;
+}
+
+.radio-toggle:active {
+  background: linear-gradient(145deg, #ff9f43, #ff8c00);
+  border-color: #ff9f43;
+}
+
+/* Control labels */
+.control-label {
+  font-size: 6px;
+  color: #aaa;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+.radio-label {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+/* Debug controls (hidden by default) */
+.mobile-controls-debug {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  display: flex;
+  gap: 8px;
+}
+
+.debug-btn {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+  border: 2px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.debug-btn:active {
+  background: linear-gradient(145deg, #666, #444);
+}
+
+/* Responsive adjustments - keep large buttons on mobile */
+@media (max-width: 480px) {
+  .mobile-controls-left,
+  .mobile-controls-right {
+    bottom: 10px;
+  }
+  
+  .mobile-controls-left {
+    left: 10px;
+  }
+  
+  .mobile-controls-right {
+    right: 10px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .mobile-controls-top {
+    top: 5px;
+  }
+  
+  .mobile-controls-left,
+  .mobile-controls-right {
+    bottom: 5px;
+  }
+  
+  .mobile-controls-left {
+    left: 10px;
+  }
+  
+  .mobile-controls-right {
+    right: 10px;
+  }
+  
+  .radio-controls {
+    padding: 4px;
+  }
+  
+  .radio-btn {
+    width: 32px;
+    height: 24px;
+    font-size: 9px;
+  }
+  
+  .control-label {
+    font-size: 5px;
+  }
+}
+
+/* Landscape mobile specific optimizations */
+@media (orientation: landscape) and (max-width: 896px) {
+  .mobile-controls-overlay {
+    /* Ensure controls don't interfere with game area */
+  }
+  
+  .mobile-controls-top {
+    top: 8px;
+  }
+  
+  .radio-controls {
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+  }
+} 

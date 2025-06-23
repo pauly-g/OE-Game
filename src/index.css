@@ -68,3 +68,10 @@ body {
 .mini-player .mini-track-info {
   font-family: 'Press Start 2P', monospace;
 }
+
+/* MOBILE SCROLLING FIX - Allow body scrolling on mobile */
+@media screen and (max-width: 768px) {
+  body {
+    overflow: auto !important;
+  }
+}

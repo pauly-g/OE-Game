@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { validateUserSubmission, containsProfanity } from '../utils/profanityFilter';
 import { useAuth } from '../firebase/AuthContext';
 import googleLogo from '/google-logo.png';
+import { isMobileDevice } from '../utils/mobileDetection';
+import { useMobileScrolling } from '../hooks/useMobileScrolling';
 
 // Create a global testing function to test the profanity filter from the browser console
 if (typeof window !== 'undefined') {
@@ -28,6 +30,10 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
   const [error, setError] = useState<string>('');
   const [marketingOptIn, setMarketingOptIn] = useState(true);
   const [formSubmitted, setFormSubmitted] = useState(false);
+  
+  // Mobile scrolling hook for the form container - use smaller container height for more scroll room
+  const mobileScrolling = useMobileScrolling(window.innerHeight * 0.7);
+  const formContentRef = useRef<HTMLDivElement>(null);
 
   // If user is already signed in, pre-fill name and company if available
   useEffect(() => {
@@ -201,6 +207,28 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
     });
   }, [currentUser, name, company, formSubmitted]);
 
+  // Update content height for mobile scrolling
+  useEffect(() => {
+    if (formContentRef.current && mobileScrolling.isMobile) {
+      const updateContentHeight = () => {
+        if (formContentRef.current) {
+          mobileScrolling.setContentHeight(formContentRef.current.scrollHeight);
+        }
+      };
+      
+      // Update height after content changes
+      updateContentHeight();
+      
+      // Use ResizeObserver to detect content changes
+      const resizeObserver = new ResizeObserver(updateContentHeight);
+      resizeObserver.observe(formContentRef.current);
+      
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }
+  }, [currentUser, formSubmitted, error, mobileScrolling.isMobile]);
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -367,7 +395,23 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
   // Show the company form if signed in
   if (currentUser && !formSubmitted) {
     return (
-      <div className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white custom-scrollbar" style={{ fontFamily: 'pixelmix, monospace', maxHeight: '80vh', overflowY: 'auto' }}>
+      <div 
+        className="w-full max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-lg text-white custom-scrollbar" 
+        style={{ 
+          fontFamily: 'pixelmix, monospace', 
+          height: mobileScrolling.isMobile ? `${window.innerHeight * 0.95}px` : 'auto',
+          maxHeight: mobileScrolling.isMobile ? 'none' : '80vh', 
+          overflow: mobileScrolling.isMobile ? 'hidden' : 'auto'
+        }}
+        {...(mobileScrolling.isMobile ? mobileScrolling.touchHandlers : {})}
+      >
+        <div 
+          ref={formContentRef}
+          style={{
+            transform: mobileScrolling.isMobile ? `translateY(-${mobileScrolling.scrollTop}px)` : 'none',
+            minHeight: '100%'
+          }}
+        >
         <h2 className="text-2xl font-bold mb-6 text-center">SUBMIT YOUR SCORE</h2>
         
         {score !== undefined && score !== null && !isNaN(score) && score >= 0 && (
@@ -486,6 +530,7 @@ const MockSignIn: React.FC<MockSignInProps> = ({ onSuccess, onClose, score, show
             </button>
           </div>
         </form>
+        </div>
       </div>
     );
   }

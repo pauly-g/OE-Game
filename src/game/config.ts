@@ -28,8 +28,8 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     width: 1280,
     height: 720,
     min: {
-      width: 1024,
-      height: 576
+      width: 320,  // Allow mobile devices (was 1024)
+      height: 240  // Allow mobile devices (was 576)
     },
     max: {
       width: 1920,

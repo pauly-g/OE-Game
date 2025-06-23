@@ -1,0 +1,115 @@
+/* Mobile Orientation Notice */
+.mobile-orientation-notice {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Press Start 2P', 'pixelmix', monospace;
+  color: white;
+  padding: 20px;
+}
+
+.orientation-content {
+  text-align: center;
+  max-width: 300px;
+  background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+  border: 3px solid #4a9eff;
+  border-radius: 12px;
+  padding: 30px 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.phone-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
+  animation: rotatePhone 2s ease-in-out infinite;
+}
+
+@keyframes rotatePhone {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+}
+
+.orientation-content h3 {
+  font-size: 14px;
+  color: #4a9eff;
+  margin: 0 0 15px 0;
+  line-height: 1.4;
+}
+
+.orientation-content p {
+  font-size: 10px;
+  line-height: 1.6;
+  margin: 0 0 20px 0;
+  color: #ccc;
+}
+
+.rotation-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 25px;
+  color: #ffe66d;
+}
+
+.arrow {
+  font-size: 24px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.rotation-hint span {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.continue-anyway-btn {
+  background: linear-gradient(145deg, #666, #444);
+  border: 2px solid #888;
+  color: white;
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+  margin-top: 10px;
+}
+
+.continue-anyway-btn:hover {
+  background: linear-gradient(145deg, #777, #555);
+  border-color: #999;
+  transform: translateY(-2px);
+}
+
+.continue-anyway-btn:active {
+  transform: translateY(0);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Hide on landscape orientation */
+@media (orientation: landscape) {
+  .mobile-orientation-notice {
+    display: none;
+  }
+} 
