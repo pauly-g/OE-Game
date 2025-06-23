@@ -165,7 +165,7 @@ export class Level1Scene extends Phaser.Scene {
   // Add constants for difficulty scaling
   private readonly MAX_POWER_UPS: number = 3; // Maximum number of power-ups allowed
   private readonly BASE_CONVEYOR_SPEED: number = 0.5; // Starting conveyor speed
-  private readonly SPEED_MULTIPLIER_PER_STATION: number = 1.15; // Gentler exponential multiplier per station unlock
+  private readonly SPEED_MULTIPLIER_PER_STATION: number = 1.08; // Even gentler exponential multiplier per station unlock
 
   // Add a function to create confetti particle effect
   private createConfettiEffect(x: number, y: number) {
