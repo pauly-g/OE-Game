@@ -77,11 +77,6 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
       [CUSTOM_PROPERTIES.LAST_GAME_PLAY_DATE]: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
     };
 
-    // Add optional properties if provided
-    if (contactData.firstName) properties.firstname = contactData.firstName;
-    if (contactData.lastName) properties.lastname = contactData.lastName;
-    if (contactData.company) properties.company = contactData.company;
-    
     // Add session duration if the property exists in HubSpot (convert minutes to seconds)
     if (contactData.sessionDuration !== undefined) {
       const durationInSeconds = Math.round(contactData.sessionDuration * 60);
@@ -95,6 +90,9 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
     if (existingContact) {
       // Update existing contact
       console.log('Updating existing contact:', existingContact.id);
+      
+      // Only update company if provided (never update firstName/lastName to prevent duplication)
+      if (contactData.company) properties.company = contactData.company;
       
       // Preserve high score (only update if new score is higher)
       if (contactData.gameScore !== undefined) {
@@ -122,6 +120,11 @@ export async function createOrUpdateContact(contactData: GameContactData): Promi
     } else {
       // Create new contact
       console.log('Creating new contact');
+      
+      // Add optional properties if provided (only when creating new contact)
+      if (contactData.firstName) properties.firstname = contactData.firstName;
+      if (contactData.lastName) properties.lastname = contactData.lastName;
+      if (contactData.company) properties.company = contactData.company;
       
       // Set high score for new contact
       if (contactData.gameScore !== undefined) {

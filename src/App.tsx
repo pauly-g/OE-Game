@@ -894,7 +894,7 @@ function AppContent() {
           await handleMarketingConsent(
             currentUser.email,
             name || currentUser.displayName?.split(' ')[0],
-            name ? name.split(' ').slice(1).join(' ') : currentUser.displayName?.split(' ').slice(1).join(' '),
+            name ? name.split(' ')[1] : currentUser.displayName?.split(' ')[1],
             company,
             true
           );
