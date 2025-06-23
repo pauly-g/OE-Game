@@ -251,8 +251,17 @@ export class GameOverScene extends Phaser.Scene {
       // Give the container a slight glow to make it stand out
       leaderboardContainer.setDepth(1);
       
-      // Make the container interactive
-      leaderboardContainer.setInteractive(new Phaser.Geom.Rectangle(-200, -30, 400, 60), Phaser.Geom.Rectangle.Contains);
+      // Make the container interactive - expand touch area for mobile devices
+      const isMobile = /iPhone|iPad|iPod|Android|webOS|BlackBerry|Windows Phone/i.test(navigator.userAgent);
+      const touchAreaWidth = isMobile ? 500 : 400;  // Expand width by 100px on mobile
+      const touchAreaHeight = isMobile ? 100 : 60;  // Expand height by 40px on mobile
+      const touchAreaX = isMobile ? -250 : -200;    // Adjust X position to center larger area
+      const touchAreaY = isMobile ? -50 : -30;      // Adjust Y position to center larger area
+      
+      leaderboardContainer.setInteractive(
+        new Phaser.Geom.Rectangle(touchAreaX, touchAreaY, touchAreaWidth, touchAreaHeight), 
+        Phaser.Geom.Rectangle.Contains
+      );
       
       // Set up click handler for the container - add mobile touch support
       const handleLeaderboardClick = () => {
